@@ -63,9 +63,9 @@ function readBody(request) {
   });
 }
 
-function requireAccess(request) {
+function requireAccess(body) {
   const expected = process.env.NNI_ACCESS_CODE || "NNI-DEMO-2026";
-  const accessCode = request.headers["x-nni-access-code"];
+  const accessCode = String(body.accessCode || "").replace(/[^\x20-\x7E]/g, "").trim();
   return accessCode && accessCode === expected;
 }
 
@@ -113,12 +113,13 @@ async function handleApi(request, response) {
   }
 
   if (request.url === "/api/chat" && request.method === "POST") {
-    if (!requireAccess(request)) {
+    const body = await readBody(request);
+
+    if (!requireAccess(body)) {
       sendJson(response, 401, { error: "Unauthorized" });
       return;
     }
 
-    const body = await readBody(request);
     const prompt = String(body.prompt || "").trim();
     const provider = String(body.provider || "openai");
     const system = String(body.system || "").trim();

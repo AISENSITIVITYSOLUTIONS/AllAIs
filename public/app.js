@@ -4,6 +4,7 @@ const state = {
 };
 
 const $ = (selector) => document.querySelector(selector);
+const cleanAccessCode = (value) => String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
 
 const elements = {
   providerList: $("#providerList"),
@@ -84,7 +85,7 @@ async function loadProviders() {
 }
 
 async function login() {
-  const accessCode = elements.accessCodeInput.value.trim();
+  const accessCode = cleanAccessCode(elements.accessCodeInput.value);
   const response = await fetch("/api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -125,11 +126,14 @@ async function sendPrompt(event) {
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-nni-access-code": state.accessCode
-      },
-      body: JSON.stringify({ provider, prompt, system, temperature })
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        accessCode: cleanAccessCode(state.accessCode),
+        provider,
+        prompt,
+        system,
+        temperature
+      })
     });
 
     const data = await response.json();
@@ -165,6 +169,7 @@ function bindEvents() {
 async function init() {
   bindEvents();
   await loadProviders();
+  state.accessCode = cleanAccessCode(state.accessCode);
   elements.accessCodeInput.value = state.accessCode;
   setSessionState(Boolean(state.accessCode), state.accessCode ? "Codigo guardado localmente" : "Sesion no iniciada");
 }

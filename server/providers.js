@@ -11,6 +11,10 @@ function buildMessages({ system, prompt }) {
   return messages;
 }
 
+function cleanSecret(value) {
+  return String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+}
+
 async function postJson(url, { headers, body }) {
   const response = await fetch(url, {
     method: "POST",
@@ -38,7 +42,7 @@ async function postJson(url, { headers, body }) {
 }
 
 async function callOpenAI({ prompt, system, temperature }) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = cleanSecret(process.env.OPENAI_API_KEY);
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
   const data = await postJson(OPENAI_CHAT_ENDPOINT, {
@@ -58,7 +62,7 @@ async function callOpenAI({ prompt, system, temperature }) {
 }
 
 async function callAnthropic({ prompt, system, temperature }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = cleanSecret(process.env.ANTHROPIC_API_KEY);
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
 
   const data = await postJson(ANTHROPIC_ENDPOINT, {
@@ -83,7 +87,7 @@ async function callAnthropic({ prompt, system, temperature }) {
 }
 
 async function callGemini({ prompt, system, temperature }) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
 
   const model = process.env.GEMINI_MODEL || "gemini-1.5-pro";
@@ -103,6 +107,7 @@ async function callGemini({ prompt, system, temperature }) {
 }
 
 async function callOpenAICompatible(endpoint, apiKey, model, { prompt, system, temperature }) {
+  apiKey = cleanSecret(apiKey);
   if (!apiKey) throw new Error("Provider API key is not configured.");
 
   const data = await postJson(endpoint, {

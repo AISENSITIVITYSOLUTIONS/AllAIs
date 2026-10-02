@@ -155,7 +155,13 @@ Para una version comercial con API keys protegidas, no conviene publicar solo ar
 - Firebase Hosting + backend externo.
 - Vercel, Render o Railway con backend Node.
 
-La decision final corresponde a la tarea de preparacion de Firebase.
+Este repositorio ya incluye una preparacion inicial para Firebase Hosting + Cloud Functions. Consulta:
+
+```text
+docs/FIREBASE_HOSTING.md
+```
+
+No ejecutes deploy sin revisar primero proyecto, costos, secretos y variables privadas.
 
 ## Roadmap comercial
 

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AllAIs | NNI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">
+            <img src="/assets/nni-logo.svg" alt="NNI" />
+          </div>
+          <div>
+            <strong>AllAIs</strong>
+            <span>NNI – Neural Network Initiative</span>
+          </div>
+        </div>
+
+        <button class="new-chat" id="newChatButton"><span>+</span> Nueva consulta</button>
+
+        <section class="panel">
+          <p class="panel-label">Acceso</p>
+          <div class="login-box" id="loginBox">
+            <input id="accessCodeInput" type="password" placeholder="Código de acceso" autocomplete="off" />
+            <button id="loginButton">Entrar</button>
+          </div>
+          <p class="session-state" id="sessionState">Sesión no iniciada</p>
+        </section>
+
+        <section class="panel">
+          <p class="panel-label">Modelos conectables</p>
+          <div class="provider-list" id="providerList"></div>
+        </section>
+
+        <section class="panel quiet">
+          <p class="panel-label">Plataforma</p>
+          <p>Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.</p>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AllAIs · NNI AI Gateway</p>
+            <h1>Interfaz multimodelo para profesionales que saben usar la IA</h1>
+          </div>
+        </header>
+
+        <section class="hero">
+          <div>
+            <span class="status-pill">Multimodel AI Workspace</span>
+            <h2>¿Con qué modelo quieres trabajar hoy?</h2>
+            <p class="hero-copy">
+              Selecciona el modo, elige el proveedor de IA y escribe una instrucción clara. AllAIs mantiene las claves privadas en el servidor.
+            </p>
+          </div>
+        </section>
+
+        <form class="prompt-workbench" id="promptForm">
+          <div class="prompt-heading">
+            <span class="section-kicker">Prompt Studio</span>
+            <h2>Escribe el prompt y dirige la respuesta.</h2>
+          </div>
+
+          <div class="prompt-toolbar">
+            <label>
+              Modelo
+              <select id="providerSelect" aria-label="Proveedor de IA"></select>
+            </label>
+            <label>
+              Modo de trabajo
+              <select id="modeSelect" aria-label="Modo de trabajo">
+                <option value="market">Ingeniería de mercados</option>
+                <option value="research">Investigación aplicada</option>
+                <option value="education">Educación y formación</option>
+                <option value="security">Inteligencia estratégica</option>
+                <option value="general">General</option>
+              </select>
+            </label>
+          </div>
+
+          <textarea id="promptInput" rows="7" placeholder="Escribe aquí tu prompt profesional..."></textarea>
+
+          <div class="composer-footer">
+            <div class="tuning">
+              <label>
+                Temperatura
+                <input id="temperatureInput" type="range" min="0" max="1.2" step="0.1" value="0.4" />
+              </label>
+              <span id="temperatureValue">0.4</span>
+            </div>
+            <button type="submit" id="sendButton">Enviar</button>
+          </div>
+        </form>
+
+        <section class="chat-card">
+          <div class="conversation" id="conversation">
+            <article class="message assistant">
+              <div class="avatar">N</div>
+              <div class="bubble">
+                <strong>NNI Assistant</strong>
+                <p>Elige un modelo, escribe una instrucción y ejecuta una consulta. Para producción, conecta Firebase Auth y una base de datos de consumo.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

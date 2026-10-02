@@ -1,0 +1,13 @@
+{
+  "name": "allais",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AllAIs by NNI: professional multi-provider AI interface with server-side API routing.",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

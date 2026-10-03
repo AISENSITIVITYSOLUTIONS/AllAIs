@@ -19,7 +19,7 @@ OPENAI_MODEL=gpt-4.1-mini
 
 # Anthropic / Claude
 ANTHROPIC_API_KEY=tu_clave_de_anthropic
-ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+ANTHROPIC_MODEL=claude-3-5-haiku-20241022
 
 # Google Gemini
 GEMINI_API_KEY=tu_clave_de_gemini

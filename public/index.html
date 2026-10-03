@@ -22,94 +22,117 @@
         <button class="new-chat" id="newChatButton"><span>+</span> Nueva consulta</button>
 
         <section class="panel">
-          <p class="panel-label">Acceso</p>
+          <p class="panel-label" id="accessPanelLabel">Acceso</p>
           <div class="login-box" id="loginBox">
-            <input id="accessCodeInput" type="password" placeholder="Código de acceso" autocomplete="off" />
+            <div class="password-field">
+              <input id="accessCodeInput" type="password" placeholder="Código de acceso" autocomplete="off" />
+              <button type="button" class="password-toggle" id="toggleAccessVisibility" aria-label="Mostrar código">👁</button>
+            </div>
             <button id="loginButton">Entrar</button>
           </div>
           <p class="session-state" id="sessionState">Sesión no iniciada</p>
         </section>
 
         <section class="panel">
-          <p class="panel-label">Modelos conectables</p>
+          <p class="panel-label" id="providersPanelLabel">Modelos conectables</p>
           <div class="provider-list" id="providerList"></div>
         </section>
 
         <section class="panel quiet">
-          <p class="panel-label">Plataforma</p>
-          <p>Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.</p>
+          <p class="panel-label" id="platformPanelLabel">Plataforma</p>
+          <p id="platformDescription">Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.</p>
         </section>
       </aside>
 
       <main class="workspace">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">AllAIs · NNI AI Gateway</p>
-            <h1>Interfaz multimodelo para profesionales que saben usar la IA</h1>
-          </div>
-        </header>
+        <div class="language-switch" aria-label="Idioma">
+          <button type="button" class="language-button" data-lang="en" aria-label="English">
+            <img class="flag-icon" src="/assets/flag-uk.png" alt="" aria-hidden="true" />
+            <span>EN</span>
+          </button>
+          <button type="button" class="language-button active" data-lang="es" aria-label="Español">
+            <img class="flag-icon" src="/assets/flag-mx.png" alt="" aria-hidden="true" />
+            <span>ES</span>
+          </button>
+          <button type="button" class="language-button" data-lang="fr" aria-label="Français">
+            <img class="flag-icon" src="/assets/flag-fr.png" alt="" aria-hidden="true" />
+            <span>FR</span>
+          </button>
+        </div>
 
         <section class="hero">
           <div>
-            <span class="status-pill">Multimodel AI Workspace</span>
-            <h2>¿Con qué modelo quieres trabajar hoy?</h2>
-            <p class="hero-copy">
-              Selecciona el modo, elige el proveedor de IA y escribe una instrucción clara. AllAIs mantiene las claves privadas en el servidor.
-            </p>
+            <h2 id="heroTitle">¿Qué quieres hacer?</h2>
           </div>
         </section>
 
         <form class="prompt-workbench" id="promptForm">
-          <div class="prompt-heading">
-            <span class="section-kicker">Prompt Studio</span>
-            <h2>Escribe el prompt y dirige la respuesta.</h2>
+          <div class="task-grid" id="taskGrid" aria-label="Tipo de tarea">
+            <button type="button" class="task-card active" data-task="write">
+              <strong>Escribir</strong>
+            </button>
+            <button type="button" class="task-card" data-task="learn">
+              <strong>Aprender</strong>
+            </button>
+            <button type="button" class="task-card" data-task="research">
+              <strong>Investigar</strong>
+            </button>
+            <button type="button" class="task-card" data-task="analyze">
+              <strong>Analizar</strong>
+            </button>
+            <button type="button" class="task-card" data-task="summarize">
+              <strong>Resumir</strong>
+            </button>
+            <button type="button" class="task-card" data-task="strategy">
+              <strong>Crear estrategia</strong>
+            </button>
+            <button type="button" class="task-card" data-task="code">
+              <strong>Programar</strong>
+            </button>
+            <button type="button" class="task-card" data-task="other">
+              <strong>Otro</strong>
+            </button>
           </div>
 
-          <div class="prompt-toolbar">
-            <label>
-              Modelo
-              <select id="providerSelect" aria-label="Proveedor de IA"></select>
-            </label>
-            <label>
-              Modo de trabajo
-              <select id="modeSelect" aria-label="Modo de trabajo">
-                <option value="market">Ingeniería de mercados</option>
-                <option value="research">Investigación aplicada</option>
-                <option value="education">Educación y formación</option>
-                <option value="security">Inteligencia estratégica</option>
-                <option value="general">General</option>
-              </select>
-            </label>
-          </div>
-
-          <textarea id="promptInput" rows="7" placeholder="Escribe aquí tu prompt profesional..."></textarea>
+          <textarea id="promptInput" rows="7" placeholder="Cuéntame qué necesitas hacer. Ejemplo: Necesito escribirle un mensaje a mi jefe para pedirle una reunión..."></textarea>
 
           <div class="composer-footer">
-            <div class="tuning">
-              <label>
-                Temperatura
-                <input id="temperatureInput" type="range" min="0" max="1.2" step="0.1" value="0.4" />
-              </label>
-              <span id="temperatureValue">0.4</span>
-            </div>
-            <button type="submit" id="sendButton">Enviar</button>
+            <details class="advanced-options">
+              <summary id="advancedSummary">Opciones avanzadas</summary>
+              <div class="advanced-grid">
+                <label>
+                  <span id="providerLabel">Modelo recomendado</span>
+                  <select id="providerSelect" aria-label="Proveedor de IA"></select>
+                </label>
+                <label>
+                  <span id="modeLabel">Modo técnico</span>
+                  <select id="modeSelect" aria-label="Modo de trabajo">
+                    <option value="market">Ingeniería de mercados</option>
+                    <option value="research">Investigación aplicada</option>
+                    <option value="education">Educación y formación</option>
+                    <option value="security">Inteligencia estratégica</option>
+                    <option value="general">General</option>
+                  </select>
+                </label>
+                <label>
+                  <span id="temperatureLabel">Temperatura</span>
+                  <span class="range-row">
+                    <input id="temperatureInput" type="range" min="0" max="1.2" step="0.1" value="0.4" />
+                    <span id="temperatureValue">0.4</span>
+                  </span>
+                </label>
+              </div>
+            </details>
+            <button type="submit" id="sendButton">Continuar</button>
           </div>
         </form>
 
         <section class="chat-card">
-          <div class="conversation" id="conversation">
-            <article class="message assistant">
-              <div class="avatar">N</div>
-              <div class="bubble">
-                <strong>NNI Assistant</strong>
-                <p>Elige un modelo, escribe una instrucción y ejecuta una consulta. Para producción, conecta Firebase Auth y una base de datos de consumo.</p>
-              </div>
-            </article>
-          </div>
+          <div class="conversation" id="conversation"></div>
         </section>
       </main>
     </div>
 
-    <script src="/app.js?v=5"></script>
+    <script src="/app.js?v=8"></script>
   </body>
 </html>

@@ -174,10 +174,44 @@ textarea {
   gap: 8px;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 48px;
+}
+
+.login-box .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  background: transparent;
+  color: var(--muted-strong);
+  border: 0;
+  box-shadow: none;
+}
+
+.login-box .password-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-50%);
+  box-shadow: none;
+}
+
+.login-box.authenticated .password-field {
+  display: none;
+}
+
 .login-box input,
 .topbar select,
 .prompt-workbench textarea,
-.guided-options select,
 .advanced-grid select {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -203,7 +237,6 @@ textarea {
 .login-box input:focus,
 .topbar select:focus,
 .prompt-workbench textarea:focus,
-.guided-options select:focus,
 .advanced-grid select:focus {
   border-color: rgba(143, 183, 255, 0.78);
   box-shadow: 0 0 0 3px rgba(143, 183, 255, 0.13);
@@ -249,14 +282,56 @@ textarea {
 }
 
 .workspace {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto minmax(220px, 1fr);
-  padding: 30px clamp(20px, 4vw, 60px);
+  padding: 72px clamp(20px, 4vw, 60px) 30px;
   gap: 20px;
   min-width: 0;
   background:
     radial-gradient(circle at 62% 16%, rgba(143, 183, 255, 0.09), transparent 28rem),
     linear-gradient(180deg, rgba(13, 15, 18, 0.84), var(--bg-deep));
+}
+
+.language-switch {
+  position: absolute;
+  top: 22px;
+  right: clamp(20px, 4vw, 60px);
+  display: inline-flex;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(12px);
+}
+
+.language-button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 8px 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.flag-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.25));
+}
+
+.language-button:hover,
+.language-button.active {
+  background: rgba(143, 183, 255, 0.14);
+  color: var(--ink);
 }
 
 .topbar {
@@ -296,7 +371,6 @@ h2 {
 }
 
 .prompt-toolbar select,
-.guided-options select,
 .advanced-grid select {
   min-height: 46px;
   color: var(--ink);
@@ -382,7 +456,6 @@ h2 {
 }
 
 .prompt-toolbar,
-.guided-options,
 .advanced-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(210px, 1fr));
@@ -390,7 +463,6 @@ h2 {
 }
 
 .prompt-toolbar label,
-.guided-options label,
 .advanced-grid label {
   display: grid;
   gap: 7px;
@@ -400,7 +472,6 @@ h2 {
 }
 
 .prompt-toolbar select,
-.guided-options select,
 .advanced-grid select,
 .prompt-workbench textarea {
   border: 1px solid var(--line-strong);
@@ -411,16 +482,16 @@ h2 {
 .task-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .prompt-workbench .task-card {
   appearance: none;
-  text-align: left;
+  text-align: center;
   display: grid;
-  gap: 6px;
-  min-height: 98px;
-  padding: 13px;
+  place-items: center;
+  min-height: 48px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
@@ -442,13 +513,8 @@ h2 {
 }
 
 .task-card strong {
-  font-size: 14px;
-}
-
-.task-card span {
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 13.5px;
+  line-height: 1.2;
 }
 
 .prompt-workbench textarea {
@@ -621,7 +687,12 @@ h2 {
   }
 
   .workspace {
-    padding: 18px;
+    padding: 76px 18px 18px;
+  }
+
+  .language-switch {
+    left: 18px;
+    right: auto;
   }
 
   .topbar {
@@ -637,7 +708,6 @@ h2 {
     grid-template-columns: 1fr;
   }
 
-  .guided-options,
   .advanced-grid {
     grid-template-columns: 1fr;
   }

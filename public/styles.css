@@ -763,13 +763,25 @@ h2 {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.58);
+  color: #cfe3ff;
   cursor: pointer;
-  opacity: 0.72;
+  opacity: 1;
   transition:
     background 150ms ease,
     color 150ms ease,
     opacity 150ms ease;
+}
+
+.message.user .copy-message {
+  color: #d8eaff;
+  background: rgba(5, 18, 38, 0.28);
+  border: 1px solid rgba(210, 231, 255, 0.24);
+}
+
+.message.user .copy-message:hover,
+.message.user .copy-message:focus-visible {
+  color: #ffffff;
+  background: rgba(5, 18, 38, 0.52);
 }
 
 .copy-message svg {

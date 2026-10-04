@@ -3,7 +3,8 @@ const state = {
   language: localStorage.getItem("nni_language") || "es",
   providers: [],
   selectedTask: "write",
-  selectedProvider: "openai"
+  selectedProvider: "openai",
+  history: []
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -506,7 +507,9 @@ function addMessage(role, content, meta = "") {
   const copyButton = document.createElement("button");
   copyButton.type = "button";
   copyButton.className = "copy-message";
-  copyButton.setAttribute("aria-label", "Copiar mensaje");
+  const copyLabel = role === "user" ? "Copiar prompt" : "Copiar respuesta";
+  copyButton.setAttribute("aria-label", copyLabel);
+  copyButton.setAttribute("title", copyLabel);
   copyButton.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="9" y="9" width="10" height="10" rx="2" />
@@ -517,10 +520,12 @@ function addMessage(role, content, meta = "") {
     try {
       await copyTextToClipboard(content);
       copyButton.classList.add("copied");
-      copyButton.setAttribute("aria-label", "Mensaje copiado");
+      copyButton.setAttribute("aria-label", "Copiado");
+      copyButton.setAttribute("title", "Copiado");
       window.setTimeout(() => {
         copyButton.classList.remove("copied");
-        copyButton.setAttribute("aria-label", "Copiar mensaje");
+        copyButton.setAttribute("aria-label", copyLabel);
+        copyButton.setAttribute("title", copyLabel);
       }, 1200);
     } catch {
       copyButton.classList.add("copy-error");
@@ -539,6 +544,12 @@ function addMessage(role, content, meta = "") {
   article.append(avatar, bubble);
   elements.conversation.append(article);
   elements.conversation.scrollTop = elements.conversation.scrollHeight;
+}
+
+function appendHistory(role, content) {
+  state.history.push({ role, content: String(content || "") });
+  // Bound request size while retaining complete recent turns.
+  if (state.history.length > 30) state.history = state.history.slice(-30);
 }
 
 function syncProviderCards() {
@@ -639,6 +650,7 @@ async function sendPrompt(event) {
   const enrichedPrompt = `${copy.taskPrefix}: ${taskLabel}\n\n${copy.objectivePrefix}:\n${prompt}`;
 
   addMessage("user", prompt, taskLabel);
+  appendHistory("user", enrichedPrompt);
   elements.promptInput.value = "";
   resizePromptInput();
   elements.sendButton.disabled = true;
@@ -652,6 +664,7 @@ async function sendPrompt(event) {
         accessCode: cleanAccessCode(state.accessCode),
         provider,
         prompt: enrichedPrompt,
+        history: state.history.slice(0, -1),
         system,
         temperature
       })
@@ -660,9 +673,12 @@ async function sendPrompt(event) {
     const data = await readApiJson(response);
     if (!response.ok) throw new Error(data.error || "No se pudo completar la consulta.");
 
-    addMessage("assistant", data.answer || copy.emptyAnswer, `${providerName} · ${data.model || copy.providerFallback}`);
+    const answer = data.answer || copy.emptyAnswer;
+    addMessage("assistant", answer, `${providerName} · ${data.model || copy.providerFallback}`);
+    appendHistory("assistant", answer);
   } catch (error) {
     addMessage("assistant", error.message, copy.error);
+    state.history.pop();
   } finally {
     elements.sendButton.disabled = false;
     elements.sendButton.textContent = copy.send;
@@ -671,6 +687,7 @@ async function sendPrompt(event) {
 }
 
 function resetChat() {
+  state.history = [];
   elements.conversation.innerHTML = "";
   updateTaskUI("write");
 }

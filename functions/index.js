@@ -10,7 +10,8 @@ const runtimeOptions = {
     "GEMINI_API_KEY",
     "DEEPSEEK_API_KEY",
     "QWEN_API_KEY",
-    "QWEN_BASE_URL"
+    "QWEN_BASE_URL",
+    "QWEN_MODEL"
   ]
 };
 
@@ -87,3 +88,5 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 // force qwen redeploy 2026-10-04
 
 // force qwen turbo model 2026-10-04
+
+// force qwen flash model 2026-10-04

@@ -461,6 +461,34 @@ function logout() {
   setSessionState(false, copy.signedOut);
 }
 
+function drawAttentionToAccess() {
+  elements.loginBox.classList.remove("needs-attention");
+  void elements.loginBox.offsetWidth;
+  elements.loginBox.classList.add("needs-attention");
+  elements.accessCodeInput.focus({ preventScroll: false });
+  elements.loginBox.scrollIntoView({ block: "center", behavior: "smooth" });
+  window.setTimeout(() => {
+    elements.loginBox.classList.remove("needs-attention");
+  }, 1600);
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
 function addMessage(role, content, meta = "") {
   const article = document.createElement("article");
   article.className = `message ${role}`;
@@ -475,12 +503,38 @@ function addMessage(role, content, meta = "") {
   const paragraph = document.createElement("p");
   paragraph.textContent = content;
 
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "copy-message";
+  copyButton.setAttribute("aria-label", "Copiar mensaje");
+  copyButton.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="9" y="9" width="10" height="10" rx="2" />
+      <rect x="5" y="5" width="10" height="10" rx="2" />
+    </svg>
+  `;
+  copyButton.addEventListener("click", async () => {
+    try {
+      await copyTextToClipboard(content);
+      copyButton.classList.add("copied");
+      copyButton.setAttribute("aria-label", "Mensaje copiado");
+      window.setTimeout(() => {
+        copyButton.classList.remove("copied");
+        copyButton.setAttribute("aria-label", "Copiar mensaje");
+      }, 1200);
+    } catch {
+      copyButton.classList.add("copy-error");
+      window.setTimeout(() => copyButton.classList.remove("copy-error"), 1200);
+    }
+  });
+
   if (role === "assistant") {
     const strong = document.createElement("strong");
     strong.textContent = meta || "NNI Assistant";
     bubble.append(strong);
   }
 
+  bubble.append(copyButton);
   bubble.append(paragraph);
   article.append(avatar, bubble);
   elements.conversation.append(article);
@@ -570,6 +624,7 @@ async function sendPrompt(event) {
   if (!prompt) return;
   if (!state.accessCode) {
     setSessionState(false, translations[state.language].needAccess);
+    drawAttentionToAccess();
     return;
   }
 

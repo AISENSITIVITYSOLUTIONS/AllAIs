@@ -9,7 +9,7 @@ const runtimeOptions = {
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "DEEPSEEK_API_KEY",
-    "QWEN_API_KEY"
+    "QWEN_API_KEY",`r`n    "QWEN_BASE_URL",`r`n    "QWEN_BASE_URL",`r`n    "QWEN_BASE_URL"
   ]
 };
 
@@ -76,3 +76,6 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     sendJson(response, 500, { error: error.message || "Unexpected server error." });
   }
 });
+
+
+

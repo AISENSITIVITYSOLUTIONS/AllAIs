@@ -2,7 +2,8 @@ const state = {
   accessCode: "",
   language: localStorage.getItem("nni_language") || "es",
   providers: [],
-  selectedTask: "write"
+  selectedTask: "write",
+  selectedProvider: "openai"
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -10,13 +11,9 @@ const cleanAccessCode = (value) => String(value || "").replace(/[^\x20-\x7E]/g, 
 
 const elements = {
   providerList: $("#providerList"),
-  providerSelect: $("#providerSelect"),
-  modeSelect: $("#modeSelect"),
   taskGrid: $("#taskGrid"),
   promptForm: $("#promptForm"),
   promptInput: $("#promptInput"),
-  temperatureInput: $("#temperatureInput"),
-  temperatureValue: $("#temperatureValue"),
   conversation: $("#conversation"),
   loginButton: $("#loginButton"),
   loginBox: $("#loginBox"),
@@ -31,10 +28,7 @@ const elements = {
   platformPanelLabel: $("#platformPanelLabel"),
   platformDescription: $("#platformDescription"),
   heroTitle: $("#heroTitle"),
-  advancedSummary: $("#advancedSummary"),
-  providerLabel: $("#providerLabel"),
-  modeLabel: $("#modeLabel"),
-  temperatureLabel: $("#temperatureLabel")
+  selectedProviderNote: $("#selectedProviderNote")
 };
 
 const taskConfig = {
@@ -66,7 +60,7 @@ const taskConfig = {
 
 const translations = {
   es: {
-    newChat: "Nueva consulta",
+    newChat: "Nuevo Chat",
     access: "Acceso",
     accessPlaceholder: "Código de acceso",
     showCode: "Mostrar código",
@@ -82,13 +76,8 @@ const translations = {
     platform: "Plataforma",
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
     heroTitle: "¿Qué quieres hacer?",
-    advanced: "Opciones avanzadas",
-    provider: "Modelo recomendado",
-    mode: "Modo técnico",
-    temperature: "Temperatura",
     send: "Continuar",
     processing: "Procesando...",
-    userPrompt: "Tu prompt",
     error: "Error de conexion",
     emptyAnswer: "Sin respuesta.",
     providerFallback: "modelo",
@@ -175,7 +164,7 @@ const translations = {
     }
   },
   en: {
-    newChat: "New request",
+    newChat: "New chat",
     access: "Access",
     accessPlaceholder: "Access code",
     showCode: "Show code",
@@ -191,13 +180,8 @@ const translations = {
     platform: "Platform",
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
     heroTitle: "What do you want to do?",
-    advanced: "Advanced options",
-    provider: "Recommended model",
-    mode: "Technical mode",
-    temperature: "Temperature",
     send: "Continue",
     processing: "Processing...",
-    userPrompt: "Your prompt",
     error: "Connection error",
     emptyAnswer: "No response.",
     providerFallback: "model",
@@ -284,7 +268,7 @@ const translations = {
     }
   },
   fr: {
-    newChat: "Nouvelle demande",
+    newChat: "Nouveau chat",
     access: "Accès",
     accessPlaceholder: "Code d'accès",
     showCode: "Afficher le code",
@@ -300,13 +284,8 @@ const translations = {
     platform: "Plateforme",
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
     heroTitle: "Que voulez-vous faire ?",
-    advanced: "Options avancées",
-    provider: "Modèle recommandé",
-    mode: "Mode technique",
-    temperature: "Température",
     send: "Continuer",
     processing: "Traitement...",
-    userPrompt: "Votre demande",
     error: "Erreur de connexion",
     emptyAnswer: "Aucune réponse.",
     providerFallback: "modèle",
@@ -422,23 +401,12 @@ function updateTaskUI(taskId) {
   });
 
   elements.promptInput.placeholder = task.placeholder;
-  elements.modeSelect.value = config.mode;
+  resizePromptInput();
 }
 
 function setSessionState(ok, message) {
   elements.sessionState.textContent = message;
   elements.sessionState.className = ok ? "session-state success" : "session-state error";
-}
-
-function renderSelect(select, options, selectedValue) {
-  select.innerHTML = "";
-  for (const [value, label] of Object.entries(options)) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    select.append(option);
-  }
-  select.value = selectedValue;
 }
 
 function setLanguage(language) {
@@ -447,17 +415,22 @@ function setLanguage(language) {
 
   const copy = translations[state.language];
   document.documentElement.lang = state.language;
-  elements.newChatButton.innerHTML = `<span>+</span> ${copy.newChat}`;
+  elements.newChatButton.innerHTML = `
+    <span class="new-chat-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" role="img">
+        <path d="M5 19h11.5" />
+        <path d="M5 19V7.5A2.5 2.5 0 0 1 7.5 5H14" />
+        <path d="M9.2 14.8 18.4 5.6a1.7 1.7 0 0 1 2.4 2.4l-9.2 9.2-3.1.7.7-3.1Z" />
+      </svg>
+    </span>
+    ${copy.newChat}
+  `;
   elements.accessPanelLabel.textContent = copy.access;
   elements.providersPanelLabel.textContent = copy.providers;
   elements.platformPanelLabel.textContent = copy.platform;
   elements.platformDescription.textContent = copy.platformDescription;
   elements.heroTitle.textContent = copy.heroTitle;
   elements.accessCodeInput.placeholder = copy.accessPlaceholder;
-  elements.advancedSummary.textContent = copy.advanced;
-  elements.providerLabel.textContent = copy.provider;
-  elements.modeLabel.textContent = copy.mode;
-  elements.temperatureLabel.textContent = copy.temperature;
   elements.sendButton.textContent = copy.send;
   elements.loginButton.textContent = state.accessCode ? copy.exit : copy.enter;
   elements.toggleAccessVisibility.setAttribute(
@@ -465,8 +438,8 @@ function setLanguage(language) {
     elements.accessCodeInput.type === "password" ? copy.showCode : copy.hideCode
   );
 
-  renderSelect(elements.modeSelect, copy.modes, elements.modeSelect.value || "general");
   updateTaskUI(state.selectedTask);
+  syncProviderCards();
 
   elements.languageButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.lang === state.language);
@@ -499,37 +472,67 @@ function addMessage(role, content, meta = "") {
   const bubble = document.createElement("div");
   bubble.className = "bubble";
 
-  const strong = document.createElement("strong");
-  strong.textContent = role === "user" ? translations[state.language].userPrompt : meta || "NNI Assistant";
-
   const paragraph = document.createElement("p");
   paragraph.textContent = content;
 
-  bubble.append(strong, paragraph);
+  if (role === "assistant") {
+    const strong = document.createElement("strong");
+    strong.textContent = meta || "NNI Assistant";
+    bubble.append(strong);
+  }
+
+  bubble.append(paragraph);
   article.append(avatar, bubble);
   elements.conversation.append(article);
   elements.conversation.scrollTop = elements.conversation.scrollHeight;
 }
 
+function syncProviderCards() {
+  document.querySelectorAll(".provider-card").forEach((card) => {
+    card.classList.toggle("active", card.dataset.provider === state.selectedProvider);
+  });
+  const provider = state.providers.find((item) => item.id === state.selectedProvider);
+  if (elements.selectedProviderNote) {
+    elements.selectedProviderNote.textContent = provider?.name || "";
+  }
+}
+
+function resizePromptInput() {
+  const maxHeight = Math.min(300, Math.round(window.innerHeight * 0.42));
+  elements.promptInput.style.height = "auto";
+  elements.promptInput.style.height = `${Math.min(elements.promptInput.scrollHeight, maxHeight)}px`;
+  elements.promptInput.style.overflowY = elements.promptInput.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+async function readApiJson(response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const preview = text.trim().slice(0, 80);
+    throw new Error(`La API no devolvio JSON. Respuesta recibida: ${preview || response.statusText}`);
+  }
+}
+
 async function loadProviders() {
   const response = await fetch("/api/providers");
-  const data = await response.json();
-  state.providers = data.providers || [];
+  const data = await readApiJson(response);
+  state.providers = (data.providers || []).filter((provider) => provider.id !== "qwen");
 
   elements.providerList.innerHTML = "";
-  elements.providerSelect.innerHTML = "";
 
   for (const provider of state.providers) {
-    const option = document.createElement("option");
-    option.value = provider.id;
-    option.textContent = provider.name;
-    elements.providerSelect.append(option);
-
     const card = document.createElement("div");
     card.className = "provider-card";
+    card.dataset.provider = provider.id;
     card.innerHTML = `<strong>${provider.name}</strong><span>${provider.description}</span>`;
     elements.providerList.append(card);
   }
+
+  if (!state.providers.some((provider) => provider.id === state.selectedProvider)) {
+    state.selectedProvider = state.providers[0]?.id || "openai";
+  }
+  syncProviderCards();
 }
 
 async function login() {
@@ -546,7 +549,7 @@ async function login() {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ accessCode })
   });
-  const data = await response.json();
+  const data = await readApiJson(response);
 
   if (!response.ok || !data.ok) {
     setSessionState(false, copy.invalidCode);
@@ -571,16 +574,18 @@ async function sendPrompt(event) {
   }
 
   const copy = translations[state.language];
-  const provider = elements.providerSelect.value;
-  const providerName = elements.providerSelect.options[elements.providerSelect.selectedIndex]?.textContent;
-  const temperature = Number(elements.temperatureInput.value);
+  const provider = state.selectedProvider;
+  const providerName = state.providers.find((item) => item.id === provider)?.name || copy.providerFallback;
+  const temperature = 0.4;
   const taskLabel = copy.tasks[state.selectedTask]?.label || copy.tasks.other.label;
-  const systemBase = systemPrompts[elements.modeSelect.value] || systemPrompts.general;
+  const taskMode = taskConfig[state.selectedTask]?.mode || "general";
+  const systemBase = systemPrompts[taskMode] || systemPrompts.general;
   const system = `${systemBase} La tarea del usuario es: ${taskLabel}.`;
   const enrichedPrompt = `${copy.taskPrefix}: ${taskLabel}\n\n${copy.objectivePrefix}:\n${prompt}`;
 
   addMessage("user", prompt, taskLabel);
   elements.promptInput.value = "";
+  resizePromptInput();
   elements.sendButton.disabled = true;
   elements.sendButton.textContent = copy.processing;
 
@@ -597,7 +602,7 @@ async function sendPrompt(event) {
       })
     });
 
-    const data = await response.json();
+    const data = await readApiJson(response);
     if (!response.ok) throw new Error(data.error || "No se pudo completar la consulta.");
 
     addMessage("assistant", data.answer || copy.emptyAnswer, `${providerName} · ${data.model || copy.providerFallback}`);
@@ -606,6 +611,7 @@ async function sendPrompt(event) {
   } finally {
     elements.sendButton.disabled = false;
     elements.sendButton.textContent = copy.send;
+    elements.promptForm.scrollIntoView({ block: "end", behavior: "smooth" });
   }
 }
 
@@ -624,7 +630,19 @@ function bindEvents() {
     elements.toggleAccessVisibility.setAttribute("aria-label", isPassword ? copy.hideCode : copy.showCode);
   });
   elements.promptForm.addEventListener("submit", sendPrompt);
+  elements.promptInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    elements.promptForm.requestSubmit();
+  });
+  elements.promptInput.addEventListener("input", resizePromptInput);
   elements.newChatButton.addEventListener("click", resetChat);
+  elements.providerList.addEventListener("click", (event) => {
+    const card = event.target.closest(".provider-card");
+    if (!card) return;
+    state.selectedProvider = card.dataset.provider;
+    syncProviderCards();
+  });
   elements.languageButtons.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
   });
@@ -632,9 +650,6 @@ function bindEvents() {
     const button = event.target.closest(".task-card");
     if (!button) return;
     updateTaskUI(button.dataset.task);
-  });
-  elements.temperatureInput.addEventListener("input", () => {
-    elements.temperatureValue.textContent = elements.temperatureInput.value;
   });
 }
 
@@ -646,6 +661,7 @@ async function init() {
   await loadProviders();
   setLanguage(state.language);
   updateTaskUI(state.selectedTask);
+  resizePromptInput();
   setSessionState(false, translations[state.language].signedOut);
 }
 

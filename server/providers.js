@@ -2,6 +2,7 @@ const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_MODELS_ENDPOINT = "https://api.anthropic.com/v1/models";
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 const QWEN_ENDPOINT = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
 
@@ -99,6 +100,66 @@ function chooseAnthropicModel(models, preferredModel) {
   return ids[0] || "";
 }
 
+function normalizeGeminiModelName(model) {
+  return String(model || "").replace(/^models\//, "");
+}
+
+function isTextGeminiModel(modelName) {
+  return !/(tts|audio|image|imagen|video|embedding|embed|aqa|vision)/i.test(modelName);
+}
+
+function listGeminiCandidateModels(models, preferredModel) {
+  const preferred = normalizeGeminiModelName(preferredModel);
+  const available = uniqueValues(models
+    .filter((model) => Array.isArray(model?.supportedGenerationMethods)
+      ? model.supportedGenerationMethods.includes("generateContent")
+      : true)
+    .map((model) => normalizeGeminiModelName(model?.name || model?.id))
+    .filter(Boolean)
+    .filter(isTextGeminiModel));
+
+  const candidates = [];
+  if (preferred && isTextGeminiModel(preferred) && available.includes(preferred)) candidates.push(preferred);
+
+  const priorityPatterns = [
+    /gemini-3\.8.*flash-lite/i,
+    /gemini-3\.8.*flash/i,
+    /gemini-3\..*flash-lite/i,
+    /gemini-3\..*flash/i,
+    /gemini-2\.5.*flash-lite/i,
+    /gemini-2\.5.*flash/i,
+    /gemini-2\.0.*flash/i,
+    /gemini-1\.5.*flash/i,
+    /gemini/i
+  ];
+
+  for (const pattern of priorityPatterns) {
+    candidates.push(...available.filter((id) => pattern.test(id)));
+  }
+
+  candidates.push(...available);
+  return uniqueValues(candidates);
+}
+
+function extractSuggestedGeminiModel(message) {
+  const match = String(message || "").match(/models\/([A-Za-z0-9_.-]+)/);
+  return normalizeGeminiModelName(match?.[1] || "");
+}
+
+function isTemporaryGeminiError(error) {
+  return /\b(429|503)\b|high demand|unavailable|overloaded|rate limit|quota/i.test(String(error?.message || ""));
+}
+
+async function generateGeminiContent(apiKey, model, { prompt, system, temperature }) {
+  const userText = system ? `${system}\n\n${prompt}` : prompt;
+  return postJson(`${GEMINI_ENDPOINT_BASE}/${model}:generateContent?key=${apiKey}`, {
+    body: {
+      contents: [{ role: "user", parts: [{ text: userText }] }],
+      generationConfig: { temperature }
+    }
+  });
+}
+
 async function callOpenAI({ prompt, system, temperature }) {
   const apiKey = cleanSecret(process.env.OPENAI_API_KEY);
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
@@ -166,14 +227,46 @@ async function callGemini({ prompt, system, temperature }) {
   const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
 
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-pro";
-  const data = await postJson(`${GEMINI_ENDPOINT_BASE}/${model}:generateContent?key=${apiKey}`, {
-    body: {
-      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature }
+  const preferredModel = cleanModel(process.env.GEMINI_MODEL);
+  let candidates = preferredModel ? [normalizeGeminiModelName(preferredModel)] : [];
+
+  try {
+    const available = await getJson(`${GEMINI_MODELS_ENDPOINT}?key=${apiKey}`, { headers: {} });
+    const availableModels = Array.isArray(available?.models) ? available.models : [];
+    candidates = listGeminiCandidateModels(availableModels, preferredModel);
+  } catch (error) {
+    if (!candidates.length) {
+      throw new Error(`Gemini models could not be loaded: ${error.message}`);
     }
-  });
+  }
+
+  if (!candidates.length) {
+    throw new Error("Gemini API error: no Gemini model with generateContent is available for this API key.");
+  }
+
+  let data;
+  let model = "";
+  let lastError;
+  for (let index = 0; index < candidates.length; index += 1) {
+    model = candidates[index];
+    try {
+      data = await generateGeminiContent(apiKey, model, { prompt, system, temperature });
+      break;
+    } catch (error) {
+      lastError = error;
+      const suggestedModel = extractSuggestedGeminiModel(error.message);
+      if (suggestedModel && isTextGeminiModel(suggestedModel) && !candidates.includes(suggestedModel)) {
+        candidates.splice(index + 1, 0, suggestedModel);
+      }
+      if (!isTemporaryGeminiError(error) && !suggestedModel) {
+        throw error;
+      }
+    }
+  }
+
+  if (!data) {
+    throw lastError || new Error("Gemini API error: all Gemini fallback models failed.");
+  }
 
   return {
     text: data.candidates?.[0]?.content?.parts?.map((part) => part.text).join("\n") || "",

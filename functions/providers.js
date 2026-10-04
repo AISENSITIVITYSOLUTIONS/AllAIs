@@ -261,7 +261,7 @@ const providers = {
       callOpenAICompatible(
         buildChatEndpoint(process.env.QWEN_BASE_URL || QWEN_DEFAULT_BASE_URL),
         process.env.QWEN_API_KEY,
-        cleanModel(process.env.QWEN_MODEL, "qwen-plus"),
+        cleanModel(process.env.QWEN_MODEL, "qwen-turbo"),
         payload,
         { enable_thinking: false }
       )

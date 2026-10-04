@@ -85,3 +85,5 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 // qwen secret refresh
 
 // force qwen redeploy 2026-10-04
+
+// force qwen turbo model 2026-10-04

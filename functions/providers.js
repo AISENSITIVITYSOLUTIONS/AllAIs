@@ -4,7 +4,7 @@ const ANTHROPIC_MODELS_ENDPOINT = "https://api.anthropic.com/v1/models";
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
-const QWEN_ENDPOINT = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
+const QWEN_DEFAULT_BASE_URL = "https://ws-cxspccc12vzxj16l.us-east-1.maas.aliyuncs.com/compatible-mode/v1";
 
 function buildMessages({ system, prompt }) {
   const messages = [];
@@ -19,6 +19,10 @@ function cleanSecret(value) {
 
 function cleanModel(value) {
   return String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+}
+
+function buildChatEndpoint(baseUrl) {
+  return `${String(baseUrl || "").replace(/\/+$/, "")}/chat/completions`;
 }
 
 function uniqueValues(values) {
@@ -275,7 +279,7 @@ async function callGemini({ prompt, system, temperature }) {
   };
 }
 
-async function callOpenAICompatible(endpoint, apiKey, model, { prompt, system, temperature }) {
+async function callOpenAICompatible(endpoint, apiKey, model, { prompt, system, temperature }, extraBody = {}) {
   apiKey = cleanSecret(apiKey);
   if (!apiKey) throw new Error("Provider API key is not configured.");
 
@@ -284,7 +288,8 @@ async function callOpenAICompatible(endpoint, apiKey, model, { prompt, system, t
     body: {
       model,
       messages: buildMessages({ system, prompt }),
-      temperature
+      temperature,
+      ...extraBody
     }
   });
 
@@ -327,10 +332,11 @@ const providerCatalog = {
     description: "Modelo asiático competitivo para flujos multilingües y operación económica.",
     call: (payload) =>
       callOpenAICompatible(
-        QWEN_ENDPOINT,
+        buildChatEndpoint(process.env.QWEN_BASE_URL || QWEN_DEFAULT_BASE_URL),
         process.env.QWEN_API_KEY,
-        process.env.QWEN_MODEL || "qwen-plus",
-        payload
+        process.env.QWEN_MODEL || "qwen3.8-flash",
+        payload,
+        { enable_thinking: false }
       )
   },
   happyhorse: {
@@ -357,4 +363,3 @@ async function callProvider(providerId, payload) {
 }
 
 module.exports = { listProviders, callProvider };
-

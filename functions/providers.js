@@ -1,15 +1,16 @@
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_MODELS_ENDPOINT = "https://api.anthropic.com/v1/models";
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_ENDPOINT_BASE =
+  "https://generativelanguage.googleapis.com/v1beta/models";
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 
 const QWEN_DEFAULT_BASE_URL =
   "https://ws-cxspccc12vzxj16l.us-east-1.maas.aliyuncs.com/compatible-mode/v1";
 
 function cleanSecret(value) {
-  return String(value || "").trim();
+  return String(value || "")
+    .replace(/^\uFEFF/, "")
+    .trim();
 }
 
 function cleanModel(value, fallback) {
@@ -117,7 +118,10 @@ async function callAnthropic(payload) {
     throw new Error("Falta configurar la API key de Claude.");
   }
 
-  const model = cleanModel(process.env.ANTHROPIC_MODEL, "claude-3-5-sonnet-latest");
+  const model = cleanModel(
+    process.env.ANTHROPIC_MODEL,
+    "claude-3-5-sonnet-latest"
+  );
 
   const response = await fetch(ANTHROPIC_ENDPOINT, {
     method: "POST",
@@ -264,12 +268,26 @@ const providers = {
   }
 };
 
+function listProviders() {
+  return Object.entries(providers).map(([id, provider]) => ({
+    id,
+    name: provider.name,
+    description: provider.description
+  }));
+}
+
 function getProvider(providerId) {
   return providers[providerId] || providers.openai;
 }
 
+async function callProvider(providerId, payload) {
+  const provider = getProvider(providerId);
+  return provider.call(payload);
+}
+
 module.exports = {
-  providers,
+  listProviders,
+  callProvider,
   getProvider,
   buildChatEndpoint
 };

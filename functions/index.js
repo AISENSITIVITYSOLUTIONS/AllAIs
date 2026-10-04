@@ -9,7 +9,8 @@ const runtimeOptions = {
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "DEEPSEEK_API_KEY",
-    "QWEN_API_KEY",`r`n    "QWEN_BASE_URL",`r`n    "QWEN_BASE_URL",`r`n    "QWEN_BASE_URL"
+    "QWEN_API_KEY",
+    "QWEN_BASE_URL"
   ]
 };
 

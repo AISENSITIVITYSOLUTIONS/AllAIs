@@ -111,6 +111,106 @@ async function callOpenAICompatible(
   };
 }
 
+async function callQwenStreaming(payload) {
+  const apiKey = cleanSecret(process.env.QWEN_API_KEY);
+
+  if (!apiKey) {
+    throw new Error("Falta configurar la API key de Qwen.");
+  }
+
+  const model = cleanModel(process.env.QWEN_MODEL, "qwen-flash-2025-07-28");
+  const endpoint = buildChatEndpoint(
+    process.env.QWEN_BASE_URL || QWEN_DEFAULT_BASE_URL
+  );
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      messages: buildMessages(payload),
+      temperature: 0.7,
+      max_tokens: 1200,
+      stream: true,
+      extra_body: {
+        enable_thinking: true
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+  }
+
+  if (!response.body) {
+    throw new Error("Qwen no devolvió un stream válido.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+
+  let buffer = "";
+  let answer = "";
+  let reasoning = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (!line || !line.startsWith("data:")) {
+        continue;
+      }
+
+      const data = line.replace(/^data:\s*/, "");
+
+      if (data === "[DONE]") {
+        continue;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch (error) {
+        continue;
+      }
+
+      const delta = parsed.choices?.[0]?.delta || {};
+
+      if (delta.reasoning_content) {
+        reasoning += delta.reasoning_content;
+      }
+
+      if (delta.content) {
+        answer += delta.content;
+      }
+    }
+  }
+
+  return {
+    text: answer || reasoning || "Sin respuesta.",
+    raw: {
+      model,
+      reasoning,
+      answer
+    }
+  };
+}
+
 async function callAnthropic(payload) {
   const apiKey = cleanSecret(process.env.ANTHROPIC_API_KEY);
 
@@ -257,14 +357,7 @@ const providers = {
     name: "Qwen",
     description:
       "Modelo asiático competitivo para flujos multilingües y operación económica.",
-    call: (payload) =>
-      callOpenAICompatible(
-        buildChatEndpoint(process.env.QWEN_BASE_URL || QWEN_DEFAULT_BASE_URL),
-        process.env.QWEN_API_KEY,
-        cleanModel(process.env.QWEN_MODEL, "qwen-flash"),
-        payload,
-        { enable_thinking: false }
-      )
+    call: callQwenStreaming
   }
 };
 

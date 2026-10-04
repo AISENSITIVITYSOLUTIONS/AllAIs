@@ -90,3 +90,5 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 // force qwen turbo model 2026-10-04
 
 // force qwen flash model 2026-10-04
+
+// force qwen streaming 2026-10-04

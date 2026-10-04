@@ -4,362 +4,272 @@ const ANTHROPIC_MODELS_ENDPOINT = "https://api.anthropic.com/v1/models";
 const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
-const QWEN_DEFAULT_BASE_URL = "https://ws-cxspccc12vzxj16l.us-east-1.maas.aliyuncs.com/compatible-mode/v1";
 
-function buildMessages({ system, prompt }) {
-  const messages = [];
-  if (system) messages.push({ role: "system", content: system });
-  messages.push({ role: "user", content: prompt });
-  return messages;
-}
+const QWEN_DEFAULT_BASE_URL =
+  "https://ws-cxspccc12vzxj16l.us-east-1.maas.aliyuncs.com/compatible-mode/v1";
 
 function cleanSecret(value) {
-  return String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+  return String(value || "").trim();
 }
 
-function cleanModel(value) {
-  return String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+function cleanModel(value, fallback) {
+  return String(value || fallback || "").trim();
+}
+
+function buildMessages(payload) {
+  const language = payload.language || "es";
+  const mode = payload.mode || "general";
+  const prompt = payload.prompt || "";
+
+  return [
+    {
+      role: "system",
+      content: `Responde en idioma ${language}. Modo de trabajo: ${mode}. Sé claro, útil y profesional.`
+    },
+    {
+      role: "user",
+      content: prompt
+    }
+  ];
 }
 
 function buildChatEndpoint(baseUrl) {
-  return `${String(baseUrl || "").replace(/\/+$/, "")}/chat/completions`;
+  let value = String(baseUrl || "")
+    .replace(/^\uFEFF/, "")
+    .trim();
+
+  const markdownUrl = value.match(/\((https?:\/\/[^)]+)\)/);
+  if (markdownUrl) {
+    value = markdownUrl[1];
+  }
+
+  const bracketUrl = value.match(/\[(https?:\/\/[^\]]+)\]/);
+  if (bracketUrl) {
+    value = bracketUrl[1];
+  }
+
+  return `${value.replace(/\/+$/, "")}/chat/completions`;
 }
 
-function uniqueValues(values) {
-  return values.filter((value, index) => value && values.indexOf(value) === index);
+async function parseResponse(response) {
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${response.status} ${response.statusText}: ${text}`);
+  }
+
+  if (!response.ok) {
+    const message =
+      data.error?.message ||
+      data.message ||
+      data.detail ||
+      JSON.stringify(data);
+
+    throw new Error(`${response.status} ${response.statusText}: ${message}`);
+  }
+
+  return data;
 }
 
-async function postJson(url, { headers, body }) {
-  const response = await fetch(url, {
+async function callOpenAICompatible(
+  endpoint,
+  apiKey,
+  model,
+  payload,
+  extraBody = {}
+) {
+  const cleanApiKey = cleanSecret(apiKey);
+
+  if (!cleanApiKey) {
+    throw new Error("Falta configurar la API key del proveedor seleccionado.");
+  }
+
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      ...headers
+      Authorization: `Bearer ${cleanApiKey}`,
+      "Content-Type": "application/json"
     },
-    body: JSON.stringify(body)
-  });
-
-  const text = await response.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { raw: text };
-  }
-
-  if (!response.ok) {
-    const detail = data?.error?.message || data?.message || text || response.statusText;
-    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
-  }
-
-  return data;
-}
-
-async function getJson(url, { headers }) {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "content-type": "application/json",
-      ...headers
-    }
-  });
-
-  const text = await response.text();
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { raw: text };
-  }
-
-  if (!response.ok) {
-    const detail = data?.error?.message || data?.message || text || response.statusText;
-    throw new Error(`${response.status} ${response.statusText}: ${detail}`);
-  }
-
-  return data;
-}
-
-function chooseAnthropicModel(models, preferredModel) {
-  const ids = models
-    .map((model) => model?.id || model?.name)
-    .filter(Boolean);
-
-  if (preferredModel && ids.includes(preferredModel)) {
-    return preferredModel;
-  }
-
-  const priorities = [
-    /sonnet/i,
-    /haiku/i,
-    /opus/i,
-    /claude/i
-  ];
-
-  for (const priority of priorities) {
-    const match = ids.find((id) => priority.test(id));
-    if (match) return match;
-  }
-
-  return ids[0] || "";
-}
-
-function normalizeGeminiModelName(model) {
-  return String(model || "").replace(/^models\//, "");
-}
-
-function isTextGeminiModel(modelName) {
-  return !/(tts|audio|image|imagen|video|embedding|embed|aqa|vision)/i.test(modelName);
-}
-
-function listGeminiCandidateModels(models, preferredModel) {
-  const preferred = normalizeGeminiModelName(preferredModel);
-  const available = uniqueValues(models
-    .filter((model) => Array.isArray(model?.supportedGenerationMethods)
-      ? model.supportedGenerationMethods.includes("generateContent")
-      : true)
-    .map((model) => normalizeGeminiModelName(model?.name || model?.id))
-    .filter(Boolean)
-    .filter(isTextGeminiModel));
-
-  const candidates = [];
-  if (preferred && isTextGeminiModel(preferred) && available.includes(preferred)) candidates.push(preferred);
-
-  const priorityPatterns = [
-    /gemini-3\.8.*flash-lite/i,
-    /gemini-3\.8.*flash/i,
-    /gemini-3\..*flash-lite/i,
-    /gemini-3\..*flash/i,
-    /gemini-2\.5.*flash-lite/i,
-    /gemini-2\.5.*flash/i,
-    /gemini-2\.0.*flash/i,
-    /gemini-1\.5.*flash/i,
-    /gemini/i
-  ];
-
-  for (const pattern of priorityPatterns) {
-    candidates.push(...available.filter((id) => pattern.test(id)));
-  }
-
-  candidates.push(...available);
-  return uniqueValues(candidates);
-}
-
-function extractSuggestedGeminiModel(message) {
-  const match = String(message || "").match(/models\/([A-Za-z0-9_.-]+)/);
-  return normalizeGeminiModelName(match?.[1] || "");
-}
-
-function isTemporaryGeminiError(error) {
-  return /\b(429|503)\b|high demand|unavailable|overloaded|rate limit|quota/i.test(String(error?.message || ""));
-}
-
-async function generateGeminiContent(apiKey, model, { prompt, system, temperature }) {
-  const userText = system ? `${system}\n\n${prompt}` : prompt;
-  return postJson(`${GEMINI_ENDPOINT_BASE}/${model}:generateContent?key=${apiKey}`, {
-    body: {
-      contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: { temperature }
-    }
-  });
-}
-
-async function callOpenAI({ prompt, system, temperature }) {
-  const apiKey = cleanSecret(process.env.OPENAI_API_KEY);
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
-
-  const data = await postJson(OPENAI_CHAT_ENDPOINT, {
-    headers: { authorization: `Bearer ${apiKey}` },
-    body: {
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      messages: buildMessages({ system, prompt }),
-      temperature
-    }
-  });
-
-  return {
-    text: data.choices?.[0]?.message?.content || "",
-    usage: data.usage || null,
-    rawModel: data.model
-  };
-}
-
-async function callAnthropic({ prompt, system, temperature }) {
-  const apiKey = cleanSecret(process.env.ANTHROPIC_API_KEY);
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
-
-  const headers = {
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01"
-  };
-
-  const preferredModel = cleanModel(process.env.ANTHROPIC_MODEL);
-  let model = preferredModel;
-
-  try {
-    const available = await getJson(ANTHROPIC_MODELS_ENDPOINT, { headers });
-    const availableModels = Array.isArray(available?.data) ? available.data : [];
-    model = chooseAnthropicModel(availableModels, preferredModel);
-  } catch (error) {
-    if (!model) {
-      throw new Error(`Claude models could not be loaded: ${error.message}`);
-    }
-  }
-
-  if (!model) {
-    throw new Error("Claude API error: no Anthropic model is available for this API key.");
-  }
-
-  const data = await postJson(ANTHROPIC_ENDPOINT, {
-    headers,
-    body: {
+    body: JSON.stringify({
       model,
-      max_tokens: 1600,
-      system: system || undefined,
-      messages: [{ role: "user", content: prompt }]
-    }
-  });
-
-  return {
-    text: data.content?.map((item) => item.text).filter(Boolean).join("\n") || "",
-    usage: data.usage || null,
-    rawModel: data.model || model
-  };
-}
-
-async function callGemini({ prompt, system, temperature }) {
-  const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
-
-  const preferredModel = cleanModel(process.env.GEMINI_MODEL);
-  let candidates = preferredModel ? [normalizeGeminiModelName(preferredModel)] : [];
-
-  try {
-    const available = await getJson(`${GEMINI_MODELS_ENDPOINT}?key=${apiKey}`, { headers: {} });
-    const availableModels = Array.isArray(available?.models) ? available.models : [];
-    candidates = listGeminiCandidateModels(availableModels, preferredModel);
-  } catch (error) {
-    if (!candidates.length) {
-      throw new Error(`Gemini models could not be loaded: ${error.message}`);
-    }
-  }
-
-  if (!candidates.length) {
-    throw new Error("Gemini API error: no Gemini model with generateContent is available for this API key.");
-  }
-
-  let data;
-  let model = "";
-  let lastError;
-  for (let index = 0; index < candidates.length; index += 1) {
-    model = candidates[index];
-    try {
-      data = await generateGeminiContent(apiKey, model, { prompt, system, temperature });
-      break;
-    } catch (error) {
-      lastError = error;
-      const suggestedModel = extractSuggestedGeminiModel(error.message);
-      if (suggestedModel && isTextGeminiModel(suggestedModel) && !candidates.includes(suggestedModel)) {
-        candidates.splice(index + 1, 0, suggestedModel);
-      }
-      if (!isTemporaryGeminiError(error) && !suggestedModel) {
-        throw error;
-      }
-    }
-  }
-
-  if (!data) {
-    throw lastError || new Error("Gemini API error: all Gemini fallback models failed.");
-  }
-
-  return {
-    text: data.candidates?.[0]?.content?.parts?.map((part) => part.text).join("\n") || "",
-    usage: data.usageMetadata || null,
-    rawModel: model
-  };
-}
-
-async function callOpenAICompatible(endpoint, apiKey, model, { prompt, system, temperature }, extraBody = {}) {
-  apiKey = cleanSecret(apiKey);
-  if (!apiKey) throw new Error("Provider API key is not configured.");
-
-  const data = await postJson(endpoint, {
-    headers: { authorization: `Bearer ${apiKey}` },
-    body: {
-      model,
-      messages: buildMessages({ system, prompt }),
-      temperature,
+      messages: buildMessages(payload),
+      temperature: 0.7,
+      max_tokens: 1200,
       ...extraBody
-    }
+    })
   });
 
+  const data = await parseResponse(response);
+
   return {
-    text: data.choices?.[0]?.message?.content || "",
-    usage: data.usage || null,
-    rawModel: data.model || model
+    text: data.choices?.[0]?.message?.content || "Sin respuesta.",
+    raw: data
   };
 }
 
-const providerCatalog = {
+async function callAnthropic(payload) {
+  const apiKey = cleanSecret(process.env.ANTHROPIC_API_KEY);
+
+  if (!apiKey) {
+    throw new Error("Falta configurar la API key de Claude.");
+  }
+
+  const model = cleanModel(process.env.ANTHROPIC_MODEL, "claude-3-5-sonnet-latest");
+
+  const response = await fetch(ANTHROPIC_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1200,
+      temperature: 0.7,
+      system: `Responde en idioma ${payload.language || "es"}. Modo de trabajo: ${
+        payload.mode || "general"
+      }. Sé claro, útil y profesional.`,
+      messages: [
+        {
+          role: "user",
+          content: payload.prompt || ""
+        }
+      ]
+    })
+  });
+
+  const data = await parseResponse(response);
+
+  return {
+    text:
+      data.content
+        ?.map((item) => item.text)
+        .filter(Boolean)
+        .join("\n") || "Sin respuesta.",
+    raw: data
+  };
+}
+
+async function callGemini(payload) {
+  const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
+
+  if (!apiKey) {
+    throw new Error("Falta configurar la API key de Gemini.");
+  }
+
+  const model = cleanModel(process.env.GEMINI_MODEL, "gemini-3.8-flash");
+  const endpoint = `${GEMINI_ENDPOINT_BASE}/${model}:generateContent?key=${apiKey}`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [
+          {
+            text: `Responde en idioma ${payload.language || "es"}. Modo de trabajo: ${
+              payload.mode || "general"
+            }. Sé claro, útil y profesional.`
+          }
+        ]
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: payload.prompt || ""
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1200
+      }
+    })
+  });
+
+  const data = await parseResponse(response);
+
+  return {
+    text:
+      data.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text)
+        .filter(Boolean)
+        .join("\n") || "Sin respuesta.",
+    raw: data
+  };
+}
+
+const providers = {
   openai: {
     name: "ChatGPT / OpenAI",
-    description: "Uso general, redacción, análisis, síntesis, código y asistentes robustos.",
-    call: callOpenAI
+    description:
+      "Uso general, redacción, análisis, síntesis, código y asistentes robustos.",
+    call: (payload) =>
+      callOpenAICompatible(
+        OPENAI_CHAT_ENDPOINT,
+        process.env.OPENAI_API_KEY,
+        cleanModel(process.env.OPENAI_MODEL, "gpt-4o-mini"),
+        payload
+      )
   },
+
   claude: {
     name: "Claude",
-    description: "Lectura larga, razonamiento editorial, análisis fino y escritura sobria.",
+    description:
+      "Lectura larga, razonamiento editorial, análisis fino y escritura sobria.",
     call: callAnthropic
   },
+
   gemini: {
     name: "Gemini",
-    description: "Integración con ecosistema Google, análisis amplio y trabajo multimodal.",
+    description:
+      "Modelo de Google para razonamiento general, síntesis y tareas multimodales.",
     call: callGemini
   },
+
   deepseek: {
     name: "DeepSeek",
-    description: "Costo competitivo para tareas de razonamiento, código y producción masiva.",
+    description:
+      "Modelo eficiente para programación, razonamiento técnico y análisis estructurado.",
     call: (payload) =>
       callOpenAICompatible(
         DEEPSEEK_ENDPOINT,
         process.env.DEEPSEEK_API_KEY,
-        process.env.DEEPSEEK_MODEL || "deepseek-chat",
+        cleanModel(process.env.DEEPSEEK_MODEL, "deepseek-chat"),
         payload
       )
   },
+
   qwen: {
     name: "Qwen",
-    description: "Modelo asiático competitivo para flujos multilingües y operación económica.",
+    description:
+      "Modelo asiático competitivo para flujos multilingües y operación económica.",
     call: (payload) =>
       callOpenAICompatible(
         buildChatEndpoint(process.env.QWEN_BASE_URL || QWEN_DEFAULT_BASE_URL),
         process.env.QWEN_API_KEY,
-        process.env.QWEN_MODEL || "qwen3.8-flash",
+        cleanModel(process.env.QWEN_MODEL, "qwen3.8-flash"),
         payload,
         { enable_thinking: false }
       )
-  },
-  happyhorse: {
-    name: "Happy Horse",
-    description: "Proveedor externo configurable. Agrega endpoint y contrato cuando tengas documentación.",
-    call: async () => {
-      throw new Error("Happy Horse requiere documentación de API: endpoint, headers y formato de respuesta.");
-    }
   }
 };
 
-function listProviders() {
-  return Object.entries(providerCatalog).map(([id, provider]) => ({
-    id,
-    name: provider.name,
-    description: provider.description
-  }));
+function getProvider(providerId) {
+  return providers[providerId] || providers.openai;
 }
 
-async function callProvider(providerId, payload) {
-  const provider = providerCatalog[providerId];
-  if (!provider) throw new Error(`Unsupported provider: ${providerId}`);
-  return provider.call(payload);
-}
-
-module.exports = { listProviders, callProvider };
+module.exports = {
+  providers,
+  getProvider,
+  buildChatEndpoint
+};

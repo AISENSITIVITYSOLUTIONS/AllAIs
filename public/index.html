@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AllAIs | NNI</title>
-    <link rel="stylesheet" href="/styles.css?v=25" />
+    <link rel="stylesheet" href="/styles.css?v=29" />
   </head>
   <body>
     <div class="app-shell">
@@ -117,7 +117,21 @@
             <span id="webSearchLabel">Buscar en la web</span>
           </label>
 
-          <textarea id="promptInput" rows="1" placeholder="Cuéntame qué necesitas hacer. Ejemplo: Necesito escribirle un mensaje a mi jefe para pedirle una reunión..."></textarea>
+          <div class="composer-input-row">
+            <div class="attachment-control">
+              <button type="button" class="attach-button" id="attachButton" data-tooltip="Add files and more" aria-label="Add files and more" aria-haspopup="menu" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+              <div class="attachment-menu" id="attachmentMenu" role="menu" hidden>
+                <button type="button" role="menuitem" data-attachment-kind="file"></button>
+                <button type="button" role="menuitem" data-attachment-kind="image"></button>
+                <button type="button" role="menuitem" data-attachment-kind="video"></button>
+              </div>
+              <input id="attachmentInput" type="file" hidden multiple />
+            </div>
+            <textarea id="promptInput" rows="1" placeholder="Cuéntame qué necesitas hacer. Ejemplo: Necesito escribirle un mensaje a mi jefe para pedirle una reunión..."></textarea>
+          </div>
+          <div class="attachment-list" id="attachmentList" aria-live="polite" hidden></div>
 
           <div class="composer-footer">
             <span class="selected-provider-note" id="selectedProviderNote">ChatGPT / OpenAI</span>
@@ -128,6 +142,6 @@
       </main>
     </div>
 
-    <script src="/app.js?v=25"></script>
+    <script src="/app.js?v=29"></script>
   </body>
 </html>

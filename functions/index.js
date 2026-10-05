@@ -81,6 +81,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       const system = String(request.body?.system || "").trim();
       const temperature = Math.min(Math.max(Number(request.body?.temperature ?? 0.4), 0), 1.2);
       const history = Array.isArray(request.body?.history) ? request.body.history.slice(-30) : [];
+      const attachments = Array.isArray(request.body?.attachments) ? request.body.attachments : [];
       const webSearch = request.body?.webSearch === true;
       const documentRequest = request.body?.documentRequest === true;
       const documentTransform = request.body?.documentTransform === true;
@@ -91,7 +92,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       const startedAt = Date.now();
-      const result = await callProvider(provider, { prompt, system, temperature, history, documentRequest, documentTransform, webSearch });
+      const result = await callProvider(provider, { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments });
 
       sendJson(response, 200, {
         provider,

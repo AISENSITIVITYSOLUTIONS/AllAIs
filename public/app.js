@@ -4,7 +4,9 @@ const state = {
   providers: [],
   selectedTask: "write",
   selectedProvider: "openai",
-  history: []
+  history: [],
+  attachments: [],
+  pendingAttachmentKind: "file"
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -18,6 +20,10 @@ const elements = {
   taskGrid: $("#taskGrid"),
   promptForm: $("#promptForm"),
   promptInput: $("#promptInput"),
+  attachButton: $("#attachButton"),
+  attachmentMenu: $("#attachmentMenu"),
+  attachmentInput: $("#attachmentInput"),
+  attachmentList: $("#attachmentList"),
   conversation: $("#conversation"),
   webSearchToggle: $("#webSearchToggle"),
   webSearchLabel: $("#webSearchLabel"),
@@ -87,6 +93,19 @@ const translations = {
     webSearch: "Buscar en la web",
     exportWord: "Word",
     exportPdf: "PDF",
+    showMore: "Mostrar más",
+    showLess: "Mostrar menos",
+    returnToComposer: "Ir al cuadro de escritura",
+    addFiles: "Agregar archivos",
+    addImages: "Agregar imágenes",
+    addVideos: "Agregar videos",
+    analyzeAttachments: "Analiza los archivos adjuntos.",
+    attachmentTooLarge: "El archivo supera el límite permitido de 4 MB.",
+    attachmentReadError: "No se pudo leer el archivo. Prueba con otro formato.",
+    attachmentTextTooLong: "El texto del archivo supera el límite de 200,000 caracteres. Divide el archivo e inténtalo otra vez.",
+    unsupportedAttachment: "Este formato no está habilitado para el modelo seleccionado.",
+    notSupported: "No disponible para este modelo",
+    removeAttachment: "Quitar archivo",
     sources: "Fuentes consultadas",
     error: "Error de conexion",
     emptyAnswer: "Sin respuesta.",
@@ -195,6 +214,19 @@ const translations = {
     webSearch: "Search the web",
     exportWord: "Word",
     exportPdf: "PDF",
+    showMore: "Show more",
+    showLess: "Show less",
+    returnToComposer: "Go to message composer",
+    addFiles: "Add files",
+    addImages: "Add images",
+    addVideos: "Add videos",
+    analyzeAttachments: "Analyze the attached files.",
+    attachmentTooLarge: "The file exceeds the 4 MB limit.",
+    attachmentReadError: "The file could not be read. Try another format.",
+    attachmentTextTooLong: "The file text exceeds the 200,000-character limit. Split the file and try again.",
+    unsupportedAttachment: "This file type is not enabled for the selected model.",
+    notSupported: "Unavailable for this model",
+    removeAttachment: "Remove file",
     sources: "Sources consulted",
     error: "Connection error",
     emptyAnswer: "No response.",
@@ -303,6 +335,19 @@ const translations = {
     webSearch: "Rechercher sur le web",
     exportWord: "Word",
     exportPdf: "PDF",
+    showMore: "Afficher plus",
+    showLess: "Afficher moins",
+    returnToComposer: "Aller à la zone de saisie",
+    addFiles: "Ajouter des fichiers",
+    addImages: "Ajouter des images",
+    addVideos: "Ajouter des vidéos",
+    analyzeAttachments: "Analyse les fichiers joints.",
+    attachmentTooLarge: "Le fichier dépasse la limite de 4 Mo.",
+    attachmentReadError: "Impossible de lire le fichier. Essayez un autre format.",
+    attachmentTextTooLong: "Le texte dépasse la limite de 200 000 caractères. Divisez le fichier et réessayez.",
+    unsupportedAttachment: "Ce type de fichier n'est pas activé pour le modèle sélectionné.",
+    notSupported: "Indisponible pour ce modèle",
+    removeAttachment: "Supprimer le fichier",
     sources: "Sources consultées",
     error: "Erreur de connexion",
     emptyAnswer: "Aucune réponse.",
@@ -463,6 +508,8 @@ function setLanguage(language) {
   elements.languageButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.lang === state.language);
   });
+  syncAttachmentMenu();
+  renderAttachmentList();
 
   if (!state.accessCode && !elements.sessionState.classList.contains("error")) {
     setSessionState(false, copy.signedOut);
@@ -506,6 +553,174 @@ async function copyTextToClipboard(text) {
   textarea.select();
   document.execCommand("copy");
   textarea.remove();
+}
+
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const MAX_ATTACHMENT_TEXT_CHARS = 200_000;
+const TEXT_FILE_EXTENSIONS = new Set(["txt", "md", "csv", "json", "html", "xml", "log", "yaml", "yml"]);
+
+function selectedCapabilities() {
+  const provider = state.providers.find((item) => item.id === state.selectedProvider);
+  if (provider?.capabilities) return provider.capabilities;
+  return {
+    files: true,
+    images: ["openai", "claude", "gemini"].includes(state.selectedProvider),
+    pdf: ["claude", "gemini"].includes(state.selectedProvider),
+    videos: state.selectedProvider === "gemini"
+  };
+}
+
+function syncAttachmentMenu() {
+  if (!elements.attachmentMenu) return;
+  const copy = translations[state.language];
+  const capabilities = selectedCapabilities();
+  const labels = { file: copy.addFiles, image: copy.addImages, video: copy.addVideos };
+  for (const button of elements.attachmentMenu.querySelectorAll("[data-attachment-kind]")) {
+    const kind = button.dataset.attachmentKind;
+    const enabled = kind === "file" ? capabilities.files !== false : kind === "image" ? capabilities.images === true : capabilities.videos === true;
+    button.textContent = enabled ? labels[kind] : `${labels[kind]} — ${copy.notSupported}`;
+    button.disabled = !enabled;
+    button.title = enabled ? "" : copy.unsupportedAttachment;
+    button.setAttribute("aria-disabled", String(!enabled));
+  }
+  elements.attachButton.dataset.tooltip = "Add files and more";
+  elements.attachButton.setAttribute("aria-label", "Add files and more");
+}
+
+function renderAttachmentList() {
+  if (!elements.attachmentList) return;
+  elements.attachmentList.replaceChildren();
+  elements.attachmentList.hidden = state.attachments.length === 0;
+  const icons = { text: "TXT", pdf: "PDF", image: "IMG", video: "VID" };
+  for (const attachment of state.attachments) {
+    const chip = document.createElement("div");
+    chip.className = "attachment-chip";
+    const icon = document.createElement("span");
+    icon.className = "attachment-kind-icon";
+    icon.textContent = icons[attachment.kind] || "FILE";
+    const filename = document.createElement("span");
+    filename.className = "attachment-filename";
+    filename.textContent = attachment.name;
+    filename.title = attachment.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "remove-attachment";
+    remove.dataset.removeAttachment = attachment.id;
+    remove.setAttribute("aria-label", `${translations[state.language].removeAttachment}: ${attachment.name}`);
+    remove.textContent = "×";
+    chip.append(icon, filename, remove);
+    elements.attachmentList.append(chip);
+  }
+}
+
+function bytesToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function extractDocxText(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const decoder = new TextDecoder();
+  let endRecord = -1;
+  for (let offset = Math.max(0, bytes.length - 65_557); offset <= bytes.length - 22; offset += 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) endRecord = offset;
+  }
+  if (endRecord < 0) throw new Error("Invalid DOCX archive.");
+  const directorySize = view.getUint32(endRecord + 12, true);
+  let cursor = view.getUint32(endRecord + 16, true);
+  const directoryEnd = cursor + directorySize;
+  while (cursor < directoryEnd && view.getUint32(cursor, true) === 0x02014b50) {
+    const method = view.getUint16(cursor + 10, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const localOffset = view.getUint32(cursor + 42, true);
+    const name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
+    if (name === "word/document.xml") {
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+      let xmlBytes;
+      if (method === 0) xmlBytes = compressed;
+      else if (method === 8 && typeof DecompressionStream !== "undefined") {
+        const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        const reader = stream.getReader();
+        const chunks = [];
+        let total = 0;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          total += value.length;
+          if (total > 2_000_000) { await reader.cancel(); throw new Error("DOCX content exceeds the safe extraction limit."); }
+          chunks.push(value);
+        }
+        xmlBytes = new Uint8Array(total);
+        let writeOffset = 0;
+        for (const chunk of chunks) { xmlBytes.set(chunk, writeOffset); writeOffset += chunk.length; }
+      } else throw new Error("Unsupported DOCX compression.");
+      const xml = new DOMParser().parseFromString(decoder.decode(xmlBytes), "application/xml");
+      const paragraphs = [...xml.getElementsByTagNameNS("*", "p")].map((paragraph) =>
+        [...paragraph.getElementsByTagNameNS("*", "t")].map((node) => node.textContent || "").join("")
+      ).filter(Boolean);
+      return paragraphs.join("\n");
+    }
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  throw new Error("DOCX document body was not found.");
+}
+
+async function prepareAttachment(file, kind) {
+  const copy = translations[state.language];
+  const capabilities = selectedCapabilities();
+  if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(copy.attachmentTooLarge);
+  if (state.attachments.length >= 5 || state.attachments.reduce((sum, item) => sum + item.size, 0) + file.size > 4 * 1024 * 1024) throw new Error(copy.attachmentTooLarge);
+  const extension = file.name.split(".").pop().toLowerCase();
+  const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (kind === "image" && capabilities.images && /^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
+    return { id, name: file.name, kind, mimeType: file.type, size: file.size, data: bytesToBase64(await file.arrayBuffer()) };
+  }
+  if (kind === "video" && capabilities.videos && ["video/mp4", "video/webm"].includes(file.type)) {
+    return { id, name: file.name, kind, mimeType: file.type, size: file.size, data: bytesToBase64(await file.arrayBuffer()) };
+  }
+  if (kind !== "file") throw new Error(copy.unsupportedAttachment);
+  if (TEXT_FILE_EXTENSIONS.has(extension) || file.type.startsWith("text/")) {
+    const text = await file.text();
+    if (text.length > MAX_ATTACHMENT_TEXT_CHARS) throw new Error(copy.attachmentTextTooLong);
+    return { id, name: file.name, kind: "text", mimeType: "text/plain", size: file.size, text };
+  }
+  if (extension === "docx") {
+    const text = await extractDocxText(file);
+    if (!text.trim()) throw new Error(copy.attachmentReadError);
+    if (text.length > MAX_ATTACHMENT_TEXT_CHARS) throw new Error(copy.attachmentTextTooLong);
+    return { id, name: file.name, kind: "text", mimeType: "text/plain", size: file.size, text };
+  }
+  if (file.type === "application/pdf" && capabilities.pdf) {
+    return { id, name: file.name, kind: "pdf", mimeType: file.type, size: file.size, data: bytesToBase64(await file.arrayBuffer()) };
+  }
+  throw new Error(copy.unsupportedAttachment);
+}
+
+function openAttachmentPicker(kind) {
+  const capabilities = selectedCapabilities();
+  state.pendingAttachmentKind = kind;
+  const accepts = {
+    file: [".txt", ".md", ".csv", ".json", ".html", ".xml", ".log", ".yaml", ".yml", ".docx", ...(capabilities.pdf ? [".pdf"] : [])].join(","),
+    image: "image/png,image/jpeg,image/webp,image/gif",
+    video: "video/mp4,video/webm"
+  };
+  elements.attachmentInput.accept = accepts[kind];
+  elements.attachmentInput.value = "";
+  elements.attachmentMenu.hidden = true;
+  elements.attachButton.setAttribute("aria-expanded", "false");
+  elements.attachmentInput.click();
 }
 
 function appendInlineMarkdown(parent, text) {
@@ -657,8 +872,11 @@ function downloadBlob(blob, filename) {
 function printAsPdf(contentNode, sources = [], targetWindow = null) {
   const printWindow = targetWindow || window.open("", "_blank");
   if (!printWindow) { window.alert("Permite las ventanas emergentes para guardar la respuesta como PDF."); return; }
+  const printableContent = contentNode.cloneNode(true);
+  printableContent.classList.remove("prompt-collapsed", "prompt-expanded");
+  printableContent.querySelectorAll(".prompt-expand").forEach((button) => button.remove());
   const sourcesHtml = sources.length ? `<h2>${xmlEscape(translations[state.language].sources)}</h2><ul>${sources.map((source) => `<li>${xmlEscape(source.title || source.url)} — ${xmlEscape(source.url)}</li>`).join("")}</ul>` : "";
-  printWindow.document.write(`<!doctype html><html lang="${state.language}"><head><meta charset="utf-8"><title>AllAIs</title><style>body{font:12pt/1.6 Arial,sans-serif;color:#20242a;max-width:800px;margin:40px auto;padding:0 24px}h1{font-size:20pt}h2,h3,h4{margin:1.2em 0 .4em}li{margin:.25em 0}code{background:#eee;padding:2px 4px}</style></head><body><h1>Respuesta de AllAIs</h1>${contentNode.innerHTML}${sourcesHtml}</body></html>`);
+  printWindow.document.write(`<!doctype html><html lang="${state.language}"><head><meta charset="utf-8"><title>AllAIs</title><style>body{font:12pt/1.6 Arial,sans-serif;color:#20242a;max-width:800px;margin:40px auto;padding:0 24px}h1{font-size:20pt}h2,h3,h4{margin:1.2em 0 .4em}li{margin:.25em 0}code{background:#eee;padding:2px 4px}</style></head><body><h1>Respuesta de AllAIs</h1>${printableContent.innerHTML}${sourcesHtml}</body></html>`);
   printWindow.document.close(); printWindow.focus(); window.setTimeout(() => printWindow.print(), 400);
 }
 
@@ -701,6 +919,37 @@ function renderMarkdown(content, container) {
     paragraphLines.push(line);
   }
   flushParagraph();
+}
+
+function addPromptNavigationControls(role, content, responseContent, bubble) {
+  if (String(content).length > 280 || String(content).split(/\n/).length > 4) {
+    responseContent.classList.add("prompt-collapsed");
+    const showMore = document.createElement("button");
+    showMore.type = "button";
+    showMore.className = "prompt-expand";
+    showMore.innerHTML = `<span>${translations[state.language].showMore}</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4 4.5-4" /></svg>`;
+    showMore.setAttribute("aria-expanded", "false");
+    showMore.addEventListener("click", () => {
+      const expanded = responseContent.classList.toggle("prompt-expanded");
+      showMore.querySelector("span").textContent = translations[state.language][expanded ? "showLess" : "showMore"];
+      showMore.classList.toggle("expanded", expanded);
+      showMore.setAttribute("aria-expanded", String(expanded));
+    });
+    responseContent.append(showMore);
+  }
+
+  const returnButton = document.createElement("button");
+  returnButton.type = "button";
+  returnButton.className = "return-to-composer";
+  returnButton.setAttribute("aria-label", translations[state.language].returnToComposer);
+  returnButton.setAttribute("title", translations[state.language].returnToComposer);
+  returnButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7" /></svg>';
+  returnButton.addEventListener("click", () => {
+    elements.promptForm.scrollIntoView({ block: "center", behavior: "smooth" });
+    elements.promptInput.focus({ preventScroll: true });
+  });
+  returnButton.dataset.messageRole = role;
+  bubble.append(returnButton);
 }
 
 function addMessage(role, content, meta = "", sources = []) {
@@ -781,6 +1030,7 @@ function addMessage(role, content, meta = "", sources = []) {
 
   bubble.append(copyButton);
   bubble.append(responseContent);
+  addPromptNavigationControls(role, content, responseContent, bubble);
   if (role === "assistant") {
     const actions = document.createElement("div");
     actions.className = "export-actions";
@@ -812,6 +1062,7 @@ function syncProviderCards() {
   if (elements.selectedProviderNote) {
     elements.selectedProviderNote.textContent = provider?.name || "";
   }
+  syncAttachmentMenu();
 }
 
 function resizePromptInput() {
@@ -888,7 +1139,8 @@ async function sendPrompt(event) {
   event.preventDefault();
 
   const prompt = elements.promptInput.value.trim();
-  if (!prompt) return;
+  const attachmentsAtSend = state.attachments.slice();
+  if (!prompt && !attachmentsAtSend.length) return;
   if (!state.accessCode) {
     setSessionState(false, translations[state.language].needAccess);
     drawAttentionToAccess();
@@ -896,8 +1148,16 @@ async function sendPrompt(event) {
   }
 
   const copy = translations[state.language];
-  const requestedWord = /\b(word|\.docx?|documento\s+de\s+word|archivo\s+word)\b/i.test(prompt);
-  const requestedPdf = /\b(pdf|\.pdf|formato\s+pdf)\b/i.test(prompt);
+  const capabilities = selectedCapabilities();
+  if (attachmentsAtSend.some((item) => (item.kind === "image" && !capabilities.images) || (item.kind === "pdf" && !capabilities.pdf) || (item.kind === "video" && !capabilities.videos))) {
+    window.alert(copy.unsupportedAttachment);
+    return;
+  }
+  const requestText = prompt || copy.analyzeAttachments;
+  const requestsOutputFile = /\b(gener\w*|cre\w*|elabor\w*|conviert\w*|export\w*|descarg\w*|guard\w*|haz\w*|dame|entr[eé]g\w*|r[eé]dact\w*|make|create|generate|deliver|provide|export|convert|save|download|cr[eé]e|g[eé]n[eé]re|convertis|fournis)\b/i.test(prompt)
+    || /\b(en|como|in|as|au\s+format|en\s+format)\s+(?:un\s+)?(?:archivo\s+)?(word|docx|pdf)\b/i.test(prompt);
+  const requestedWord = requestsOutputFile && /\b(word|\.docx?|documento\s+de\s+word|archivo\s+word)\b/i.test(prompt);
+  const requestedPdf = requestsOutputFile && /\b(pdf|\.pdf|formato\s+pdf)\b/i.test(prompt);
   const documentRequest = requestedWord || requestedPdf;
   const documentTransform = documentRequest && /\b(convierte|transforma|mejora|mejorar|edita|editar|revisa|revisar|corrige|corregir|formatea|formato|diseña|profesional|elegante|sin\s+(?:borrar|eliminar|perder|omitir))\b/i.test(prompt);
   const documentFormats = [requestedWord && "docx", requestedPdf && "pdf"].filter(Boolean);
@@ -915,18 +1175,22 @@ async function sendPrompt(event) {
     ? " El usuario entregó un documento para edición sustantiva y diseño. Reescribe y mejora gramática, claridad, cohesión, jerarquía y presentación; conserva todos los datos, nombres, fechas, cifras, argumentos, ejemplos, referencias, DOI y enlaces. No resumas, no borres ni inventes información. Mantén las citas y URLs completas. Resalta conceptos y hallazgos con negritas, usa títulos y subtítulos semánticos, y convierte comparaciones en tablas solo si conservas íntegro su contenido. Analiza inconsistencias o afirmaciones que requieran verificación en una sección final claramente separada, sin corregir hechos por conjetura. Devuelve el documento ya editado en Markdown estructurado, no una explicación sobre cómo editarlo ni un prompt para otra IA."
     : "";
   const system = `${systemBase} La tarea del usuario es: ${taskLabel}.${fileInstruction}${transformInstruction}`;
-  const enrichedPrompt = `${copy.taskPrefix}: ${taskLabel}\n\n${copy.objectivePrefix}:\n${prompt}`;
+  const enrichedPrompt = `${copy.taskPrefix}: ${taskLabel}\n\n${copy.objectivePrefix}:\n${requestText}`;
   const academicSearch = /\b(art[ií]culos? cient[ií]ficos?|literatura cient[ií]fica|papers?|publicaciones acad[eé]micas?|referencias bibliogr[aá]ficas?|revisi[oó]n bibliogr[aá]fica|estudios emp[ií]ricos?|metaan[aá]lisis|ensayos cl[ií]nicos?|pubmed|doi|apa\s*7)\b/i.test(prompt);
   const explicitSearch = /\b(busca|buscar|búscame|buscame|investiga|encuentra|localiza|find|search|recherche|cherche)\b.{0,70}\b(web|internet|fuentes|referencias|artículos|articulos|papers|articles|sources|estudios|literatura)\b/i.test(prompt);
   const autoWebSearch = explicitSearch || (academicSearch && !documentTransform);
   const webSearch = Boolean(elements.webSearchToggle.checked || autoWebSearch);
   if (autoWebSearch) elements.webSearchToggle.checked = true;
 
-  addMessage("user", prompt, taskLabel);
+  const displayPrompt = attachmentsAtSend.length
+    ? `${requestText}\n\n📎 ${attachmentsAtSend.map((item) => item.name).join(", ")}`
+    : requestText;
+  addMessage("user", displayPrompt, taskLabel);
   appendHistory("user", enrichedPrompt);
   elements.promptInput.value = "";
   resizePromptInput();
   elements.sendButton.disabled = true;
+  elements.attachButton.disabled = true;
   elements.sendButton.textContent = copy.processing;
 
   try {
@@ -942,6 +1206,7 @@ async function sendPrompt(event) {
         documentRequest,
         documentTransform,
         documentFormats,
+        attachments: attachmentsAtSend,
         system,
         temperature
       })
@@ -952,17 +1217,20 @@ async function sendPrompt(event) {
 
     const answer = data.answer || copy.emptyAnswer;
     const rendered = addMessage("assistant", answer, `${providerName} · ${data.model || copy.providerFallback}`, data.sources || []);
-    const documentTitle = answer.match(/^\s{0,3}#\s+(.+)$/m)?.[1] || prompt;
+    const documentTitle = answer.match(/^\s{0,3}#\s+(.+)$/m)?.[1] || requestText;
     const fileBaseName = (documentTitle.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z0-9]+/g) || []).slice(0, 8).join("-").slice(0, 65) || "respuesta-allais";
     if (requestedWord) downloadBlob(makeDocxBlob(answer, data.sources || []), `${fileBaseName}-allais.docx`);
     if (requestedPdf && pendingPdfWindow) printAsPdf(rendered.responseContent, data.sources || [], pendingPdfWindow);
     appendHistory("assistant", answer);
+    state.attachments = state.attachments.filter((item) => !attachmentsAtSend.some((sent) => sent.id === item.id));
+    renderAttachmentList();
   } catch (error) {
     if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
     addMessage("assistant", error.message, copy.error);
     state.history.pop();
   } finally {
     elements.sendButton.disabled = false;
+    elements.attachButton.disabled = false;
     elements.sendButton.textContent = copy.send;
     elements.promptForm.scrollIntoView({ block: "end", behavior: "smooth" });
   }
@@ -970,6 +1238,8 @@ async function sendPrompt(event) {
 
 function resetChat() {
   state.history = [];
+  state.attachments = [];
+  renderAttachmentList();
   elements.webSearchToggle.checked = false;
   elements.conversation.innerHTML = "";
   updateTaskUI("write");
@@ -991,6 +1261,46 @@ function bindEvents() {
     elements.promptForm.requestSubmit();
   });
   elements.promptInput.addEventListener("input", resizePromptInput);
+  elements.attachButton.addEventListener("click", () => {
+    const open = elements.attachmentMenu.hidden;
+    elements.attachmentMenu.hidden = !open;
+    elements.attachButton.setAttribute("aria-expanded", String(open));
+  });
+  elements.attachmentMenu.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-attachment-kind]");
+    if (!option || option.disabled) return;
+    openAttachmentPicker(option.dataset.attachmentKind);
+  });
+  elements.attachmentInput.addEventListener("change", async () => {
+    const copy = translations[state.language];
+    for (const file of Array.from(elements.attachmentInput.files || [])) {
+      try {
+        state.attachments.push(await prepareAttachment(file, state.pendingAttachmentKind));
+      } catch (error) {
+        window.alert(error.message || copy.attachmentReadError);
+      }
+    }
+    renderAttachmentList();
+  });
+  elements.attachmentList.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-remove-attachment]");
+    if (!remove) return;
+    state.attachments = state.attachments.filter((item) => item.id !== remove.dataset.removeAttachment);
+    renderAttachmentList();
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".attachment-control")) {
+      elements.attachmentMenu.hidden = true;
+      elements.attachButton.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.attachmentMenu.hidden) {
+      elements.attachmentMenu.hidden = true;
+      elements.attachButton.setAttribute("aria-expanded", "false");
+      elements.attachButton.focus();
+    }
+  });
   elements.newChatButton.addEventListener("click", resetChat);
   elements.providerList.addEventListener("click", (event) => {
     const card = event.target.closest(".provider-card");
@@ -1000,6 +1310,15 @@ function bindEvents() {
   });
   elements.languageButtons.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
+  });
+
+  document.querySelectorAll(".prompt-expand").forEach((button) => {
+    const expanded = button.getAttribute("aria-expanded") === "true";
+    button.querySelector("span").textContent = copy[expanded ? "showLess" : "showMore"];
+  });
+  document.querySelectorAll(".return-to-composer").forEach((button) => {
+    button.setAttribute("aria-label", copy.returnToComposer);
+    button.setAttribute("title", copy.returnToComposer);
   });
   elements.taskGrid.addEventListener("click", (event) => {
     const button = event.target.closest(".task-card");

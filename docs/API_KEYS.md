@@ -51,6 +51,8 @@ Las claves nunca deben ponerse en:
 
 ## Como funciona en esta app
 
+La búsqueda web utiliza la clave de Gemini ya configurada: Gemini realiza Google Search grounding y AllAIs muestra las fuentes. No necesita una clave de Tavily. El uso de búsqueda puede generar cargos o consumir cuota de Gemini según el modelo y el plan de la API.
+
 El frontend de AllAIs llama al backend local:
 
 ```txt

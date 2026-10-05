@@ -47,7 +47,7 @@ function readBody(request) {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 2_000_000) {
+      if (body.length > 8_000_000) {
         reject(new Error("Request too large."));
         request.destroy();
       }
@@ -124,6 +124,11 @@ async function handleApi(request, response) {
     const provider = String(body.provider || "openai");
     const system = String(body.system || "").trim();
     const temperature = Math.min(Math.max(Number(body.temperature ?? 0.4), 0), 1.2);
+    const documentRequest = body.documentRequest === true;
+    const documentTransform = body.documentTransform === true;
+    const history = Array.isArray(body.history) ? body.history.slice(-30) : [];
+    const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+    const webSearch = body.webSearch === true;
 
     if (!prompt) {
       sendJson(response, 400, { error: "Prompt is required." });
@@ -131,12 +136,13 @@ async function handleApi(request, response) {
     }
 
     const startedAt = Date.now();
-    const result = await callProvider(provider, { prompt, system, temperature });
+    const result = await callProvider(provider, { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments });
 
     sendJson(response, 200, {
       provider,
       model: result.rawModel,
       answer: result.text,
+      sources: result.sources || [],
       usage: result.usage,
       elapsedMs: Date.now() - startedAt
     });

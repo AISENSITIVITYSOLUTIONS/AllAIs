@@ -3,10 +3,12 @@ const { listProviders, callProvider } = require("./providers");
 
 const runtimeOptions = {
   region: "us-central1",
+  timeoutSeconds: 300,
   secrets: [
     "NNI_ACCESS_CODE",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
+    "ANTHROPIC_WORKSPACE_ID",
     "GEMINI_API_KEY",
     "DEEPSEEK_API_KEY",
     "QWEN_API_KEY",
@@ -16,8 +18,16 @@ const runtimeOptions = {
 };
 
 function sendJson(response, status, body) {
-  response.status(status).set("cache-control", "no-store").json(body);
+  response.status(status).set({
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8"
+  }).json(body);
 }
+
+const allowedOrigins = new Set([
+  "https://allais-nni.web.app",
+  "https://allais-nni.firebaseapp.com"
+]);
 
 function requireAccess(request) {
   const expected = process.env.NNI_ACCESS_CODE || "NNI-DEMO-2026";
@@ -26,11 +36,27 @@ function requireAccess(request) {
 }
 
 exports.api = onRequest(runtimeOptions, async (request, response) => {
+  const origin = request.get("origin");
+  if (allowedOrigins.has(origin)) {
+    response.set("Access-Control-Allow-Origin", origin);
+    response.set("Vary", "Origin");
+    response.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    response.set("Access-Control-Allow-Headers", "Content-Type");
+  }
+  if (request.method === "OPTIONS") {
+    response.status(204).send("");
+    return;
+  }
   try {
     const path = request.path.replace(/^\/api/, "") || "/";
 
     if (path === "/providers" && request.method === "GET") {
       sendJson(response, 200, { providers: listProviders() });
+      return;
+    }
+
+    if (path === "/health" && request.method === "GET") {
+      sendJson(response, 200, { ok: true, service: "allais-api", version: "2026-10-05-direct-cloudrun" });
       return;
     }
 
@@ -54,6 +80,11 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       const provider = String(request.body?.provider || "openai");
       const system = String(request.body?.system || "").trim();
       const temperature = Math.min(Math.max(Number(request.body?.temperature ?? 0.4), 0), 1.2);
+      const history = Array.isArray(request.body?.history) ? request.body.history.slice(-30) : [];
+      const attachments = Array.isArray(request.body?.attachments) ? request.body.attachments : [];
+      const webSearch = request.body?.webSearch === true;
+      const documentRequest = request.body?.documentRequest === true;
+      const documentTransform = request.body?.documentTransform === true;
 
       if (!prompt) {
         sendJson(response, 400, { error: "Prompt is required." });
@@ -61,12 +92,13 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       const startedAt = Date.now();
-      const result = await callProvider(provider, { prompt, system, temperature });
+      const result = await callProvider(provider, { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments });
 
       sendJson(response, 200, {
         provider,
         model: result.rawModel,
         answer: result.text,
+        sources: result.sources || [],
         usage: result.usage,
         elapsedMs: Date.now() - startedAt
       });

@@ -3,11 +3,15 @@ const state = {
   language: localStorage.getItem("nni_language") || "es",
   providers: [],
   selectedTask: "write",
-  selectedProvider: "openai"
+  selectedProvider: "openai",
+  history: []
 };
 
 const $ = (selector) => document.querySelector(selector);
 const cleanAccessCode = (value) => String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+const API_BASE = ["allais-nni.web.app", "allais-nni.firebaseapp.com"].includes(location.hostname)
+  ? "https://api-6wsxvgd6ra-uc.a.run.app/api"
+  : "/api";
 
 const elements = {
   providerList: $("#providerList"),
@@ -15,6 +19,8 @@ const elements = {
   promptForm: $("#promptForm"),
   promptInput: $("#promptInput"),
   conversation: $("#conversation"),
+  webSearchToggle: $("#webSearchToggle"),
+  webSearchLabel: $("#webSearchLabel"),
   loginButton: $("#loginButton"),
   loginBox: $("#loginBox"),
   accessCodeInput: $("#accessCodeInput"),
@@ -78,6 +84,10 @@ const translations = {
     heroTitle: "¿Qué quieres hacer?",
     send: "Continuar",
     processing: "Procesando...",
+    webSearch: "Buscar en la web",
+    exportWord: "Word",
+    exportPdf: "PDF",
+    sources: "Fuentes consultadas",
     error: "Error de conexion",
     emptyAnswer: "Sin respuesta.",
     providerFallback: "modelo",
@@ -182,6 +192,10 @@ const translations = {
     heroTitle: "What do you want to do?",
     send: "Continue",
     processing: "Processing...",
+    webSearch: "Search the web",
+    exportWord: "Word",
+    exportPdf: "PDF",
+    sources: "Sources consulted",
     error: "Connection error",
     emptyAnswer: "No response.",
     providerFallback: "model",
@@ -286,6 +300,10 @@ const translations = {
     heroTitle: "Que voulez-vous faire ?",
     send: "Continuer",
     processing: "Traitement...",
+    webSearch: "Rechercher sur le web",
+    exportWord: "Word",
+    exportPdf: "PDF",
+    sources: "Sources consultées",
     error: "Erreur de connexion",
     emptyAnswer: "Aucune réponse.",
     providerFallback: "modèle",
@@ -430,6 +448,7 @@ function setLanguage(language) {
   elements.platformPanelLabel.textContent = copy.platform;
   elements.platformDescription.textContent = copy.platformDescription;
   elements.heroTitle.textContent = copy.heroTitle;
+  elements.webSearchLabel.textContent = copy.webSearch;
   elements.accessCodeInput.placeholder = copy.accessPlaceholder;
   elements.sendButton.textContent = copy.send;
   elements.loginButton.textContent = state.accessCode ? copy.exit : copy.enter;
@@ -489,7 +508,202 @@ async function copyTextToClipboard(text) {
   textarea.remove();
 }
 
-function addMessage(role, content, meta = "") {
+function appendInlineMarkdown(parent, text) {
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_)/g;
+  let lastIndex = 0;
+  for (const match of text.matchAll(pattern)) {
+    parent.append(document.createTextNode(text.slice(lastIndex, match.index)));
+    const token = match[0];
+    const content = token.slice(1, -1).replace(/^[*_]|[*_]$/g, "");
+    const node = document.createElement(token.startsWith("`") ? "code" : (token.startsWith("**") || token.startsWith("__")) ? "strong" : "em");
+    node.textContent = content;
+    parent.append(node);
+    lastIndex = match.index + token.length;
+  }
+  parent.append(document.createTextNode(text.slice(lastIndex)));
+}
+
+function xmlEscape(value) {
+  return String(value).replace(/[<>&"']/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[char]);
+}
+
+function docxRuns(text, options = {}, hyperlinks = []) {
+  const pattern = /(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`]+`)/g;
+  const run = (value, props = "") => `<w:r>${props ? `<w:rPr>${props}</w:rPr>` : ""}<w:t xml:space="preserve">${xmlEscape(value)}</w:t></w:r>`;
+  let xml = ""; let offset = 0;
+  for (const match of String(text).matchAll(pattern)) {
+    if (match.index > offset) xml += run(text.slice(offset, match.index), options.bold ? "<w:b/>" : "");
+    const token = match[0];
+    const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+    if (link) {
+      let relation = hyperlinks.find((item) => item.url === link[2]);
+      if (!relation) { relation = { id: `rIdHyper${hyperlinks.length + 1}`, url: link[2] }; hyperlinks.push(relation); }
+      xml += `<w:hyperlink r:id="${relation.id}" w:history="1"><w:r><w:rPr><w:color w:val="176B87"/><w:u w:val="single"/></w:rPr><w:t xml:space="preserve">${xmlEscape(link[1])}</w:t></w:r></w:hyperlink>`;
+    } else {
+      const strong = token.startsWith("**") || token.startsWith("__");
+      const italic = !strong && (token.startsWith("*") || token.startsWith("_"));
+      const code = token.startsWith("`");
+      const trim = strong ? 2 : 1;
+      const value = token.slice(trim, -trim);
+      const props = [options.bold || strong ? "<w:b/>" : "", italic ? "<w:i/>" : "", code ? "<w:rFonts w:ascii=\"Consolas\" w:hAnsi=\"Consolas\"/><w:color w:val=\"52606D\"/>" : ""].join("");
+      xml += run(value, props);
+    }
+    offset = match.index + token.length;
+  }
+  if (offset < text.length) xml += run(text.slice(offset), options.bold ? "<w:b/>" : "");
+  return xml || "<w:r><w:t></w:t></w:r>";
+}
+
+function docxParagraph(text, style, hyperlinks, options = {}) {
+  const pPr = [`<w:pStyle w:val="${style}"/>`, options.pageBreak ? "<w:pageBreakBefore/>" : "", options.shading ? `<w:shd w:val="clear" w:color="auto" w:fill="${options.shading}"/>` : "", options.quote ? `<w:ind w:left="360"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="2C8298"/></w:pBdr>` : ""].filter(Boolean).join("");
+  return `<w:p><w:pPr>${pPr}</w:pPr>${docxRuns(text, { bold: options.bold }, hyperlinks)}</w:p>`;
+}
+
+function splitMarkdownTableRow(line) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function makeDocxBlob(markdown, sources = []) {
+  const hyperlinks = [];
+  const blocks = [];
+  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  let hasTitle = false;
+  const isTableDivider = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+  const tableXml = (rows) => {
+    const columns = Math.max(...rows.map((row) => row.length));
+    const width = Math.floor(9360 / columns);
+    const grid = `<w:tblGrid>${Array.from({ length: columns }, () => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>`;
+    const trs = rows.map((row, rowIndex) => `<w:tr>${Array.from({ length: columns }, (_, index) => {
+      const cell = row[index] || "";
+      const fill = rowIndex === 0 ? "17324D" : rowIndex % 2 ? "F2F6F8" : "FFFFFF";
+      const content = docxRuns(cell.replace(/\*\*/g, ""), { bold: rowIndex === 0 }, hyperlinks);
+      return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/><w:tcMar><w:top w:w="100" w:type="dxa"/><w:start w:w="110" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:end w:w="110" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:pStyle w:val="${rowIndex === 0 ? "TableHeader" : "TableText"}"/></w:pPr>${content}</w:p></w:tc>`;
+    }).join("")}</w:tr>`).join("");
+    return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="D7E0E5"/><w:left w:val="single" w:sz="4" w:color="D7E0E5"/><w:bottom w:val="single" w:sz="4" w:color="D7E0E5"/><w:right w:val="single" w:sz="4" w:color="D7E0E5"/><w:insideH w:val="single" w:sz="4" w:color="D7E0E5"/><w:insideV w:val="single" w:sz="4" w:color="D7E0E5"/></w:tblBorders></w:tblPr>${grid}${trs}</w:tbl>`;
+  };
+
+  if (!/^\s*#\s+\S/m.test(String(markdown || ""))) blocks.push(docxParagraph("Documento revisado", "Title", hyperlinks));
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    if (!raw.trim() || /^\s*---+\s*$/.test(raw)) continue;
+    if (raw.includes("|") && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      const rows = [splitMarkdownTableRow(raw)]; i += 2;
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim()) rows.push(splitMarkdownTableRow(lines[i++]));
+      i -= 1; blocks.push(tableXml(rows)); continue;
+    }
+    const heading = raw.match(/^\s{0,3}(#{1,4})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      if (level === 1) hasTitle = true;
+      const pageBreak = level >= 2 && /^(art[ií]culo|article)\s+\d+/i.test(heading[2]);
+      blocks.push(docxParagraph(heading[2], level === 1 ? "Title" : `Heading${Math.min(level - 1, 3)}`, hyperlinks, { pageBreak }));
+      continue;
+    }
+    const quote = raw.match(/^\s*>\s?(.*)$/);
+    if (quote) { blocks.push(docxParagraph(quote[1], "Quote", hyperlinks, { shading: "EEF5F8", quote: true })); continue; }
+    const item = raw.match(/^\s*(?:([-*+])\s+|(\d+)[.)]\s+)(.+)$/);
+    if (item) {
+      const text = item[2] ? `${item[2]}. ${item[3]}` : `•  ${item[3]}`;
+      blocks.push(docxParagraph(text, "ListParagraph", hyperlinks)); continue;
+    }
+    blocks.push(docxParagraph(raw, "Normal", hyperlinks));
+  }
+  if (!hasTitle && blocks.length) blocks.unshift(docxParagraph("Documento revisado", "Title", hyperlinks));
+  if (sources.length) {
+    blocks.push(docxParagraph(translations[state.language].sources, "Heading1", hyperlinks));
+    sources.forEach((source, index) => blocks.push(docxParagraph(`${index + 1}. ${source.title || source.url} — ${source.url}`, "Normal", hyperlinks)));
+  }
+
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="22"/><w:color w:val="263746"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="150" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="300"/><w:jc w:val="left"/><w:pBdr><w:bottom w:val="single" w:sz="16" w:space="10" w:color="2C8298"/></w:pBdr></w:pPr><w:rPr><w:rFonts w:ascii="Aptos Display" w:hAnsi="Aptos Display"/><w:b/><w:sz w:val="36"/><w:color w:val="17324D"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="360" w:after="160"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:ascii="Aptos Display" w:hAnsi="Aptos Display"/><w:b/><w:sz w:val="30"/><w:color w:val="17324D"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="260" w:after="120"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:color w:val="176B87"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="180" w:after="80"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:sz w:val="23"/><w:color w:val="36566F"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="420"/><w:spacing w:after="90"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360"/><w:spacing w:before="100" w:after="180"/></w:pPr><w:rPr><w:color w:val="36566F"/><w:i/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="TableHeader"><w:name w:val="Table Header"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0"/></w:pPr><w:rPr><w:b/><w:color w:val="FFFFFF"/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="TableText"><w:name w:val="Table Text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0" w:line="260" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style></w:styles>`;
+  const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="8" w:color="D7E0E5"/></w:pBdr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:color w:val="718096"/><w:sz w:val="18"/></w:rPr><w:t>AllAIs · Documento editado  |  Página </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
+  const rels = [`<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`, `<Relationship Id="rIdFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`, ...hyperlinks.map((item) => `<Relationship Id="${item.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xmlEscape(item.url)}" TargetMode="External"/>`)].join("");
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${blocks.join("")}<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:footer="540"/></w:sectPr></w:body></w:document>`;
+  return zipStored({
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`,
+    "word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`,
+    "word/document.xml": documentXml,
+    "word/styles.xml": stylesXml,
+    "word/footer1.xml": footerXml,
+    "docProps/core.xml": `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Documento profesional editado con AllAIs</dc:title><dc:creator>AllAIs</dc:creator></cp:coreProperties>`
+  }, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+}
+
+function zipStored(files, mimeType) {
+  const encoder = new TextEncoder();
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc32 = (bytes) => { let crc = 0xffffffff; for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8); return (crc ^ 0xffffffff) >>> 0; };
+  const u16 = (view, offset, value) => view.setUint16(offset, value, true);
+  const u32 = (view, offset, value) => view.setUint32(offset, value >>> 0, true);
+  const localParts = []; const centralParts = []; let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const filename = encoder.encode(name); const data = encoder.encode(content); const crc = crc32(data);
+    const local = new Uint8Array(30 + filename.length); const lv = new DataView(local.buffer);
+    u32(lv, 0, 0x04034b50); u16(lv, 4, 20); u16(lv, 6, 0x0800); u16(lv, 8, 0); u16(lv, 10, 0); u16(lv, 12, 0x21); u32(lv, 14, crc); u32(lv, 18, data.length); u32(lv, 22, data.length); u16(lv, 26, filename.length); u16(lv, 28, 0); local.set(filename, 30);
+    localParts.push(local, data);
+    const central = new Uint8Array(46 + filename.length); const cv = new DataView(central.buffer);
+    u32(cv, 0, 0x02014b50); u16(cv, 4, 20); u16(cv, 6, 20); u16(cv, 8, 0x0800); u16(cv, 10, 0); u16(cv, 12, 0); u16(cv, 14, 0x21); u32(cv, 16, crc); u32(cv, 20, data.length); u32(cv, 24, data.length); u16(cv, 28, filename.length); u16(cv, 30, 0); u16(cv, 32, 0); u16(cv, 34, 0); u16(cv, 36, 0); u32(cv, 38, 0); u32(cv, 42, offset); central.set(filename, 46); centralParts.push(central); offset += local.length + data.length;
+  }
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0); const end = new Uint8Array(22); const ev = new DataView(end.buffer);
+  u32(ev, 0, 0x06054b50); u16(ev, 4, 0); u16(ev, 6, 0); u16(ev, 8, centralParts.length); u16(ev, 10, centralParts.length); u32(ev, 12, centralSize); u32(ev, 16, offset); u16(ev, 20, 0);
+  return new Blob([...localParts, ...centralParts, end], { type: mimeType });
+}
+
+function downloadBlob(blob, filename) {
+  const link = document.createElement("a"); const url = URL.createObjectURL(blob);
+  link.href = url; link.download = filename; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function printAsPdf(contentNode, sources = [], targetWindow = null) {
+  const printWindow = targetWindow || window.open("", "_blank");
+  if (!printWindow) { window.alert("Permite las ventanas emergentes para guardar la respuesta como PDF."); return; }
+  const sourcesHtml = sources.length ? `<h2>${xmlEscape(translations[state.language].sources)}</h2><ul>${sources.map((source) => `<li>${xmlEscape(source.title || source.url)} — ${xmlEscape(source.url)}</li>`).join("")}</ul>` : "";
+  printWindow.document.write(`<!doctype html><html lang="${state.language}"><head><meta charset="utf-8"><title>AllAIs</title><style>body{font:12pt/1.6 Arial,sans-serif;color:#20242a;max-width:800px;margin:40px auto;padding:0 24px}h1{font-size:20pt}h2,h3,h4{margin:1.2em 0 .4em}li{margin:.25em 0}code{background:#eee;padding:2px 4px}</style></head><body><h1>Respuesta de AllAIs</h1>${contentNode.innerHTML}${sourcesHtml}</body></html>`);
+  printWindow.document.close(); printWindow.focus(); window.setTimeout(() => printWindow.print(), 400);
+}
+
+function renderMarkdown(content, container) {
+  const lines = String(content || "").replace(/\r\n?/g, "\n").split("\n");
+  let list = null;
+  let listType = "";
+  let paragraphLines = [];
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    const p = document.createElement("p");
+    paragraphLines.forEach((line, index) => {
+      if (index) p.append(document.createElement("br"));
+      appendInlineMarkdown(p, line);
+    });
+    container.append(p);
+    paragraphLines = [];
+  };
+  const closeList = () => { list = null; listType = ""; };
+
+  for (const line of lines) {
+    const heading = line.match(/^\s{0,3}(#{1,3})\s+(.+)$/);
+    const item = line.match(/^\s*(?:[-*+]\s+|(\d+)[.)]\s+)(.+)$/);
+    if (!line.trim()) { flushParagraph(); closeList(); continue; }
+    if (heading) {
+      flushParagraph(); closeList();
+      const h = document.createElement(`h${Math.min(heading[1].length + 2, 6)}`);
+      appendInlineMarkdown(h, heading[2]); container.append(h); continue;
+    }
+    if (item) {
+      flushParagraph();
+      const nextType = item[1] ? "ol" : "ul";
+      if (!list || listType !== nextType) {
+        closeList(); list = document.createElement(nextType); listType = nextType; container.append(list);
+      }
+      const li = document.createElement("li"); appendInlineMarkdown(li, item[2]); list.append(li); continue;
+    }
+    closeList();
+    paragraphLines.push(line);
+  }
+  flushParagraph();
+}
+
+function addMessage(role, content, meta = "", sources = []) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
 
@@ -500,13 +714,42 @@ function addMessage(role, content, meta = "") {
   const bubble = document.createElement("div");
   bubble.className = "bubble";
 
-  const paragraph = document.createElement("p");
-  paragraph.textContent = content;
+  const responseContent = document.createElement("div");
+  responseContent.className = "message-content";
+  if (role === "assistant") {
+    renderMarkdown(content, responseContent);
+    if (sources.length) {
+      const sourceBox = document.createElement("section");
+      sourceBox.className = "source-list";
+      const title = document.createElement("strong");
+      title.textContent = translations[state.language].sources;
+      const list = document.createElement("ol");
+      for (const source of sources) {
+        try {
+          const url = new URL(source.url);
+          if (url.protocol !== "https:") continue;
+          const item = document.createElement("li");
+          const link = document.createElement("a");
+          link.href = url.href; link.target = "_blank"; link.rel = "noopener noreferrer";
+          link.textContent = source.title || url.hostname;
+          item.append(link); list.append(item);
+        } catch { /* Ignore malformed source URLs. */ }
+      }
+      if (list.children.length) { sourceBox.append(title, list); responseContent.append(sourceBox); }
+    }
+  }
+  else {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = content;
+    responseContent.append(paragraph);
+  }
 
   const copyButton = document.createElement("button");
   copyButton.type = "button";
   copyButton.className = "copy-message";
-  copyButton.setAttribute("aria-label", "Copiar mensaje");
+  const copyLabel = role === "user" ? "Copiar prompt" : "Copiar respuesta";
+  copyButton.setAttribute("aria-label", copyLabel);
+  copyButton.setAttribute("title", copyLabel);
   copyButton.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="9" y="9" width="10" height="10" rx="2" />
@@ -517,10 +760,12 @@ function addMessage(role, content, meta = "") {
     try {
       await copyTextToClipboard(content);
       copyButton.classList.add("copied");
-      copyButton.setAttribute("aria-label", "Mensaje copiado");
+      copyButton.setAttribute("aria-label", "Copiado");
+      copyButton.setAttribute("title", "Copiado");
       window.setTimeout(() => {
         copyButton.classList.remove("copied");
-        copyButton.setAttribute("aria-label", "Copiar mensaje");
+        copyButton.setAttribute("aria-label", copyLabel);
+        copyButton.setAttribute("title", copyLabel);
       }, 1200);
     } catch {
       copyButton.classList.add("copy-error");
@@ -535,10 +780,28 @@ function addMessage(role, content, meta = "") {
   }
 
   bubble.append(copyButton);
-  bubble.append(paragraph);
+  bubble.append(responseContent);
+  if (role === "assistant") {
+    const actions = document.createElement("div");
+    actions.className = "export-actions";
+    const wordButton = document.createElement("button");
+    wordButton.type = "button"; wordButton.textContent = translations[state.language].exportWord;
+    wordButton.addEventListener("click", () => downloadBlob(makeDocxBlob(content, sources), "respuesta-allais.docx"));
+    const pdfButton = document.createElement("button");
+    pdfButton.type = "button"; pdfButton.textContent = translations[state.language].exportPdf;
+    pdfButton.addEventListener("click", () => printAsPdf(responseContent, sources));
+    actions.append(wordButton, pdfButton); bubble.append(actions);
+  }
   article.append(avatar, bubble);
   elements.conversation.append(article);
   elements.conversation.scrollTop = elements.conversation.scrollHeight;
+  return { article, responseContent };
+}
+
+function appendHistory(role, content) {
+  state.history.push({ role, content: String(content || "") });
+  // Bound request size while retaining complete recent turns.
+  if (state.history.length > 30) state.history = state.history.slice(-30);
 }
 
 function syncProviderCards() {
@@ -564,12 +827,16 @@ async function readApiJson(response) {
     return text ? JSON.parse(text) : {};
   } catch {
     const preview = text.trim().slice(0, 80);
-    throw new Error(`La API no devolvio JSON. Respuesta recibida: ${preview || response.statusText}`);
+    const looksLikeHtml = /<!doctype\s+html|<html[\s>]/i.test(preview);
+    if (looksLikeHtml) {
+      throw new Error(`El servidor de AllAIs respondió HTML (${response.status}) en vez de JSON. Comprueba el estado de la función api y que el servicio Cloud Run esté disponible.`);
+    }
+    throw new Error(`La API devolvió una respuesta inválida (${response.status}): ${preview || response.statusText}`);
   }
 }
 
 async function loadProviders() {
-  const response = await fetch("/api/providers");
+  const response = await fetch(`${API_BASE}/providers`);
   const data = await readApiJson(response);
   state.providers = (data.providers || []).filter((provider) => provider.id !== "qwen");
 
@@ -598,7 +865,7 @@ async function login() {
   }
 
   const accessCode = cleanAccessCode(elements.accessCodeInput.value);
-  const response = await fetch("/api/session", {
+  const response = await fetch(`${API_BASE}/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ accessCode })
@@ -629,29 +896,52 @@ async function sendPrompt(event) {
   }
 
   const copy = translations[state.language];
+  const requestedWord = /\b(word|\.docx?|documento\s+de\s+word|archivo\s+word)\b/i.test(prompt);
+  const requestedPdf = /\b(pdf|\.pdf|formato\s+pdf)\b/i.test(prompt);
+  const documentRequest = requestedWord || requestedPdf;
+  const documentTransform = documentRequest && /\b(convierte|transforma|mejora|mejorar|edita|editar|revisa|revisar|corrige|corregir|formatea|formato|diseña|profesional|elegante|sin\s+(?:borrar|eliminar|perder|omitir))\b/i.test(prompt);
+  const documentFormats = [requestedWord && "docx", requestedPdf && "pdf"].filter(Boolean);
+  const pendingPdfWindow = requestedPdf ? window.open("about:blank", "_blank") : null;
   const provider = state.selectedProvider;
   const providerName = state.providers.find((item) => item.id === provider)?.name || copy.providerFallback;
   const temperature = 0.4;
   const taskLabel = copy.tasks[state.selectedTask]?.label || copy.tasks.other.label;
   const taskMode = taskConfig[state.selectedTask]?.mode || "general";
   const systemBase = systemPrompts[taskMode] || systemPrompts.general;
-  const system = `${systemBase} La tarea del usuario es: ${taskLabel}.`;
+  const fileInstruction = documentRequest
+    ? " El usuario solicita un archivo. Redacta el contenido completo y final, no un esquema ni una lista de ideas. No digas que no puedes generar Word o PDF: la aplicación creará el archivo. Si pide tres páginas, escribe aproximadamente entre 1,200 y 1,500 palabras en prosa desarrollada, con introducción, secciones sustantivas y conclusión; no entregues solo un esquema. Respeta las fechas y matices pertinentes."
+    : "";
+  const transformInstruction = documentTransform
+    ? " El usuario entregó un documento para edición sustantiva y diseño. Reescribe y mejora gramática, claridad, cohesión, jerarquía y presentación; conserva todos los datos, nombres, fechas, cifras, argumentos, ejemplos, referencias, DOI y enlaces. No resumas, no borres ni inventes información. Mantén las citas y URLs completas. Resalta conceptos y hallazgos con negritas, usa títulos y subtítulos semánticos, y convierte comparaciones en tablas solo si conservas íntegro su contenido. Analiza inconsistencias o afirmaciones que requieran verificación en una sección final claramente separada, sin corregir hechos por conjetura. Devuelve el documento ya editado en Markdown estructurado, no una explicación sobre cómo editarlo ni un prompt para otra IA."
+    : "";
+  const system = `${systemBase} La tarea del usuario es: ${taskLabel}.${fileInstruction}${transformInstruction}`;
   const enrichedPrompt = `${copy.taskPrefix}: ${taskLabel}\n\n${copy.objectivePrefix}:\n${prompt}`;
+  const academicSearch = /\b(art[ií]culos? cient[ií]ficos?|literatura cient[ií]fica|papers?|publicaciones acad[eé]micas?|referencias bibliogr[aá]ficas?|revisi[oó]n bibliogr[aá]fica|estudios emp[ií]ricos?|metaan[aá]lisis|ensayos cl[ií]nicos?|pubmed|doi|apa\s*7)\b/i.test(prompt);
+  const explicitSearch = /\b(busca|buscar|búscame|buscame|investiga|encuentra|localiza|find|search|recherche|cherche)\b.{0,70}\b(web|internet|fuentes|referencias|artículos|articulos|papers|articles|sources|estudios|literatura)\b/i.test(prompt);
+  const autoWebSearch = explicitSearch || (academicSearch && !documentTransform);
+  const webSearch = Boolean(elements.webSearchToggle.checked || autoWebSearch);
+  if (autoWebSearch) elements.webSearchToggle.checked = true;
 
   addMessage("user", prompt, taskLabel);
+  appendHistory("user", enrichedPrompt);
   elements.promptInput.value = "";
   resizePromptInput();
   elements.sendButton.disabled = true;
   elements.sendButton.textContent = copy.processing;
 
   try {
-    const response = await fetch("/api/chat", {
+    const response = await fetch(`${API_BASE}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         accessCode: cleanAccessCode(state.accessCode),
         provider,
         prompt: enrichedPrompt,
+        history: state.history.slice(0, -1),
+        webSearch,
+        documentRequest,
+        documentTransform,
+        documentFormats,
         system,
         temperature
       })
@@ -660,9 +950,17 @@ async function sendPrompt(event) {
     const data = await readApiJson(response);
     if (!response.ok) throw new Error(data.error || "No se pudo completar la consulta.");
 
-    addMessage("assistant", data.answer || copy.emptyAnswer, `${providerName} · ${data.model || copy.providerFallback}`);
+    const answer = data.answer || copy.emptyAnswer;
+    const rendered = addMessage("assistant", answer, `${providerName} · ${data.model || copy.providerFallback}`, data.sources || []);
+    const documentTitle = answer.match(/^\s{0,3}#\s+(.+)$/m)?.[1] || prompt;
+    const fileBaseName = (documentTitle.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().match(/[a-z0-9]+/g) || []).slice(0, 8).join("-").slice(0, 65) || "respuesta-allais";
+    if (requestedWord) downloadBlob(makeDocxBlob(answer, data.sources || []), `${fileBaseName}-allais.docx`);
+    if (requestedPdf && pendingPdfWindow) printAsPdf(rendered.responseContent, data.sources || [], pendingPdfWindow);
+    appendHistory("assistant", answer);
   } catch (error) {
+    if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
     addMessage("assistant", error.message, copy.error);
+    state.history.pop();
   } finally {
     elements.sendButton.disabled = false;
     elements.sendButton.textContent = copy.send;
@@ -671,6 +969,8 @@ async function sendPrompt(event) {
 }
 
 function resetChat() {
+  state.history = [];
+  elements.webSearchToggle.checked = false;
   elements.conversation.innerHTML = "";
   updateTaskUI("write");
 }

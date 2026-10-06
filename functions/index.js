@@ -24,6 +24,31 @@ function sendJson(response, status, body) {
   }).json(body);
 }
 
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
+
+function attachmentByteSize(attachment) {
+  const declaredSize = Number(attachment?.size || 0);
+  const base64 = String(attachment?.data || "");
+  const estimatedSize = base64 ? Math.ceil((base64.length * 3) / 4) : 0;
+  return Math.max(declaredSize, estimatedSize);
+}
+
+function validateAttachments(attachments) {
+  let totalBytes = 0;
+  for (const attachment of attachments) {
+    const size = attachmentByteSize(attachment);
+    if (size > MAX_ATTACHMENT_BYTES) {
+      return "Each attachment must be 10 MB or smaller.";
+    }
+    totalBytes += size;
+  }
+  if (totalBytes > MAX_ATTACHMENT_TOTAL_BYTES) {
+    return "Attachments must total 12 MB or less per request.";
+  }
+  return "";
+}
+
 const allowedOrigins = new Set([
   "https://allais.nni.ai",
   "https://allais-nni.web.app",
@@ -83,6 +108,11 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       const temperature = Math.min(Math.max(Number(request.body?.temperature ?? 0.4), 0), 1.2);
       const history = Array.isArray(request.body?.history) ? request.body.history.slice(-30) : [];
       const attachments = Array.isArray(request.body?.attachments) ? request.body.attachments : [];
+      const attachmentError = validateAttachments(attachments);
+      if (attachmentError) {
+        sendJson(response, 413, { error: attachmentError });
+        return;
+      }
       const webSearch = request.body?.webSearch === true;
       const documentRequest = request.body?.documentRequest === true;
       const documentTransform = request.body?.documentTransform === true;

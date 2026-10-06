@@ -25,6 +25,7 @@ function sendJson(response, status, body) {
 }
 
 const allowedOrigins = new Set([
+  "https://allais.nni.ai",
   "https://allais-nni.web.app",
   "https://allais-nni.firebaseapp.com"
 ]);
@@ -56,7 +57,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     }
 
     if (path === "/health" && request.method === "GET") {
-      sendJson(response, 200, { ok: true, service: "allais-api", version: "2026-10-05-direct-cloudrun" });
+      sendJson(response, 200, { ok: true, service: "allais-api", version: "2026-10-06-api-rewrite-json-errors" });
       return;
     }
 
@@ -107,7 +108,16 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 
     sendJson(response, 404, { error: "API route not found." });
   } catch (error) {
-    sendJson(response, 500, { error: error.message || "Unexpected server error." });
+    console.error("AllAIs API error", {
+      message: error?.message,
+      stack: error?.stack,
+      path: request.path,
+      method: request.method
+    });
+    sendJson(response, 500, {
+      error: error?.message || "Unexpected server error.",
+      code: "ALLAIS_API_ERROR"
+    });
   }
 });
 

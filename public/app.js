@@ -16,6 +16,8 @@ const API_BASE = "/api";
 const elements = {
   providerList: $("#providerList"),
   taskGrid: $("#taskGrid"),
+  taskMoreButton: $("#taskMoreButton"),
+  taskMoreMenu: $("#taskMoreMenu"),
   promptForm: $("#promptForm"),
   promptInput: $("#promptInput"),
   attachButton: $("#attachButton"),
@@ -68,6 +70,8 @@ const taskConfig = {
   }
 };
 
+const secondaryTaskIds = new Set(["summarize", "strategy", "code", "other"]);
+
 const translations = {
   es: {
     newChat: "Nuevo Chat",
@@ -89,6 +93,7 @@ const translations = {
     send: "Continuar",
     processing: "Procesando...",
     webSearch: "Buscar en la web",
+    moreTasks: "Más",
     exportWord: "Word",
     exportPdf: "PDF",
     showMore: "Mostrar más",
@@ -210,6 +215,7 @@ const translations = {
     send: "Continue",
     processing: "Processing...",
     webSearch: "Search the web",
+    moreTasks: "More",
     exportWord: "Word",
     exportPdf: "PDF",
     showMore: "Show more",
@@ -331,6 +337,7 @@ const translations = {
     send: "Continuer",
     processing: "Traitement...",
     webSearch: "Rechercher sur le web",
+    moreTasks: "Plus",
     exportWord: "Word",
     exportPdf: "PDF",
     showMore: "Afficher plus",
@@ -507,10 +514,9 @@ const systemPrompts = {
 function updateTaskUI(taskId) {
   const copy = translations[state.language];
   const task = copy.tasks[taskId] || copy.tasks.other;
-  const config = taskConfig[taskId] || taskConfig.other;
   state.selectedTask = taskId;
 
-  document.querySelectorAll(".task-card").forEach((button) => {
+  document.querySelectorAll(".task-card[data-task]").forEach((button) => {
     button.classList.toggle("active", button.dataset.task === taskId);
     const taskCopy = copy.tasks[button.dataset.task];
     if (taskCopy) {
@@ -518,8 +524,36 @@ function updateTaskUI(taskId) {
     }
   });
 
+  document.querySelectorAll(".task-more-option[data-task]").forEach((button) => {
+    const taskCopy = copy.tasks[button.dataset.task];
+    button.classList.toggle("active", button.dataset.task === taskId);
+    if (taskCopy) {
+      button.textContent = taskCopy.label;
+    }
+  });
+
+  if (elements.taskMoreButton) {
+    const activeMoreTask = secondaryTaskIds.has(taskId);
+    elements.taskMoreButton.classList.toggle("active", activeMoreTask);
+    elements.taskMoreButton.querySelector("strong").textContent = activeMoreTask ? task.label : copy.moreTasks;
+  }
+
+  closeTaskMoreMenu();
   elements.promptInput.placeholder = task.placeholder;
   resizePromptInput();
+}
+
+function closeTaskMoreMenu() {
+  if (!elements.taskMoreMenu || !elements.taskMoreButton) return;
+  elements.taskMoreMenu.hidden = true;
+  elements.taskMoreButton.setAttribute("aria-expanded", "false");
+}
+
+function toggleTaskMoreMenu() {
+  if (!elements.taskMoreMenu || !elements.taskMoreButton) return;
+  const open = elements.taskMoreMenu.hidden;
+  elements.taskMoreMenu.hidden = !open;
+  elements.taskMoreButton.setAttribute("aria-expanded", String(open));
 }
 
 function setSessionState(ok, message) {
@@ -1248,7 +1282,8 @@ async function sendPrompt(event) {
   const documentFormats = [requestedWord && "docx", requestedPdf && "pdf"].filter(Boolean);
   const pendingPdfWindow = requestedPdf ? window.open("about:blank", "_blank") : null;
   const provider = state.selectedProvider;
-  const providerName = state.providers.find((item) => item.id === provider)?.name || copy.providerFallback;
+  const providerItem = state.providers.find((item) => item.id === provider);
+  const providerName = providerItem ? providerDisplay(providerItem).name : copy.providerFallback;
   const temperature = 0.4;
   const taskLabel = copy.tasks[state.selectedTask]?.label || copy.tasks.other.label;
   const taskMode = taskConfig[state.selectedTask]?.mode || "general";
@@ -1379,12 +1414,19 @@ function bindEvents() {
       elements.attachmentMenu.hidden = true;
       elements.attachButton.setAttribute("aria-expanded", "false");
     }
+
+    if (!event.target.closest(".task-more")) {
+      closeTaskMoreMenu();
+    }
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !elements.attachmentMenu.hidden) {
-      elements.attachmentMenu.hidden = true;
-      elements.attachButton.setAttribute("aria-expanded", "false");
-      elements.attachButton.focus();
+    if (event.key === "Escape") {
+      if (!elements.attachmentMenu.hidden) {
+        elements.attachmentMenu.hidden = true;
+        elements.attachButton.setAttribute("aria-expanded", "false");
+        elements.attachButton.focus();
+      }
+      closeTaskMoreMenu();
     }
   });
   elements.newChatButton.addEventListener("click", resetChat);
@@ -1407,8 +1449,14 @@ function bindEvents() {
     button.setAttribute("title", copy.returnToComposer);
   });
   elements.taskGrid.addEventListener("click", (event) => {
-    const button = event.target.closest(".task-card");
-    if (!button) return;
+    const moreButton = event.target.closest("#taskMoreButton");
+    if (moreButton) {
+      toggleTaskMoreMenu();
+      return;
+    }
+
+    const button = event.target.closest("[data-task]");
+    if (!button || !elements.taskGrid.contains(button)) return;
     updateTaskUI(button.dataset.task);
   });
 }

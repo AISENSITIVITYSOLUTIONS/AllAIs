@@ -655,6 +655,55 @@ h2 {
   line-height: 1.2;
 }
 
+.task-more {
+  position: relative;
+  display: inline-flex;
+}
+
+.task-more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 3px;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  background: #191919;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.48);
+}
+
+.task-more-menu[hidden] {
+  display: none;
+}
+
+.prompt-workbench .task-more-option {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: transparent;
+  color: #dce4ef;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: none;
+}
+
+.prompt-workbench .task-more-option:hover,
+.prompt-workbench .task-more-option:focus-visible {
+  background: #2a2a2a;
+  color: #ffffff;
+  transform: none;
+  outline: 0;
+}
+
+.prompt-workbench .task-more-option.active {
+  color: var(--metal-blue-text);
+  background: rgba(49, 95, 156, 0.16);
+}
+
 .prompt-workbench textarea {
   width: 100%;
   min-height: clamp(104px, 14vh, 150px);
@@ -1223,7 +1272,8 @@ h2 {
     display: none;
   }
 
-  .prompt-workbench .task-card {
+  .prompt-workbench .task-card,
+  .task-more {
     flex: 0 0 auto;
   }
 

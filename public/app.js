@@ -470,6 +470,20 @@ function setSessionState(ok, message) {
   elements.sessionState.className = ok ? "session-state success" : "session-state error";
 }
 
+function clearAccessError() {
+  elements.loginBox.classList.remove("invalid-code");
+  elements.accessCodeInput.removeAttribute("aria-invalid");
+}
+
+function showAccessError(message) {
+  setSessionState(false, message);
+  elements.loginBox.classList.remove("invalid-code");
+  void elements.loginBox.offsetWidth;
+  elements.loginBox.classList.add("invalid-code");
+  elements.accessCodeInput.setAttribute("aria-invalid", "true");
+  elements.accessCodeInput.focus({ preventScroll: false });
+}
+
 function setLanguage(language) {
   state.language = translations[language] ? language : "es";
   localStorage.setItem("nni_language", state.language);
@@ -517,6 +531,7 @@ function setLanguage(language) {
 function logout() {
   const copy = translations[state.language];
   state.accessCode = "";
+  clearAccessError();
   elements.loginBox.classList.remove("authenticated");
   elements.accessCodeInput.value = "";
   elements.accessCodeInput.type = "password";
@@ -1114,6 +1129,7 @@ async function login() {
   }
 
   const accessCode = cleanAccessCode(elements.accessCodeInput.value);
+  clearAccessError();
   const response = await fetch(`${API_BASE}/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1122,11 +1138,12 @@ async function login() {
   const data = await readApiJson(response);
 
   if (!response.ok || !data.ok) {
-    setSessionState(false, copy.invalidCode);
+    showAccessError(copy.invalidCode);
     return;
   }
 
   state.accessCode = accessCode;
+  clearAccessError();
   elements.accessCodeInput.value = "";
   elements.loginBox.classList.add("authenticated");
   elements.loginButton.textContent = copy.exit;
@@ -1259,6 +1276,7 @@ function bindEvents() {
     elements.promptForm.requestSubmit();
   });
   elements.promptInput.addEventListener("input", resizePromptInput);
+  elements.accessCodeInput.addEventListener("input", clearAccessError);
   elements.attachButton.addEventListener("click", () => {
     const open = elements.attachmentMenu.hidden;
     elements.attachmentMenu.hidden = !open;

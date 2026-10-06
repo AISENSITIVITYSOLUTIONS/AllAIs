@@ -13,7 +13,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AllAIs | NNI</title>
-    <link rel="stylesheet" href="/styles.css?v=31" />
+    <link rel="stylesheet" href="/styles.css?v=32" />
   </head>
   <body>
     <div class="app-shell">
@@ -98,27 +98,26 @@
             <button type="button" class="task-card active" data-task="write">
               <strong>Escribir</strong>
             </button>
-            <button type="button" class="task-card" data-task="learn">
-              <strong>Aprender</strong>
-            </button>
             <button type="button" class="task-card" data-task="research">
               <strong>Investigar</strong>
             </button>
             <button type="button" class="task-card" data-task="analyze">
               <strong>Analizar</strong>
             </button>
-            <button type="button" class="task-card" data-task="summarize">
-              <strong>Resumir</strong>
+            <button type="button" class="task-card" data-task="learn">
+              <strong>Aprender</strong>
             </button>
-            <button type="button" class="task-card" data-task="strategy">
-              <strong>Crear estrategia</strong>
-            </button>
-            <button type="button" class="task-card" data-task="code">
-              <strong>Programar</strong>
-            </button>
-            <button type="button" class="task-card" data-task="other">
-              <strong>Otro</strong>
-            </button>
+            <div class="task-more">
+              <button type="button" class="task-card task-more-button" id="taskMoreButton" aria-haspopup="menu" aria-expanded="false">
+                <strong>Más</strong>
+              </button>
+              <div class="task-more-menu" id="taskMoreMenu" role="menu" hidden>
+                <button type="button" class="task-more-option" role="menuitem" data-task="summarize">Resumir</button>
+                <button type="button" class="task-more-option" role="menuitem" data-task="strategy">Crear estrategia</button>
+                <button type="button" class="task-more-option" role="menuitem" data-task="code">Programar</button>
+                <button type="button" class="task-more-option" role="menuitem" data-task="other">Otro</button>
+              </div>
+            </div>
           </div>
 
           <label class="web-search-option">
@@ -151,7 +150,7 @@
       </main>
     </div>
 
-    <script src="/app.js?v=30"></script>
+    <script src="/app.js?v=31"></script>
   </body>
 </html>
 

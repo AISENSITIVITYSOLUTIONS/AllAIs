@@ -103,7 +103,7 @@ const translations = {
     addImages: "Agregar imágenes",
     addVideos: "Agregar videos",
     analyzeAttachments: "Analiza los archivos adjuntos.",
-    attachmentTooLarge: "El archivo supera el límite permitido de 4 MB.",
+    attachmentTooLarge: "El archivo supera 10 MB o el total de 12 MB por consulta.",
     attachmentReadError: "No se pudo leer el archivo. Prueba con otro formato.",
     attachmentTextTooLong: "El texto del archivo supera el límite de 200,000 caracteres. Divide el archivo e inténtalo otra vez.",
     unsupportedAttachment: "Este formato no está habilitado para el modelo seleccionado.",
@@ -225,7 +225,7 @@ const translations = {
     addImages: "Add images",
     addVideos: "Add videos",
     analyzeAttachments: "Analyze the attached files.",
-    attachmentTooLarge: "The file exceeds the 4 MB limit.",
+    attachmentTooLarge: "The file exceeds 10 MB or the 12 MB total per request.",
     attachmentReadError: "The file could not be read. Try another format.",
     attachmentTextTooLong: "The file text exceeds the 200,000-character limit. Split the file and try again.",
     unsupportedAttachment: "This file type is not enabled for the selected model.",
@@ -347,7 +347,7 @@ const translations = {
     addImages: "Ajouter des images",
     addVideos: "Ajouter des vidéos",
     analyzeAttachments: "Analyse les fichiers joints.",
-    attachmentTooLarge: "Le fichier dépasse la limite de 4 Mo.",
+    attachmentTooLarge: "Le fichier dépasse 10 Mo ou le total de 12 Mo par requête.",
     attachmentReadError: "Impossible de lire le fichier. Essayez un autre format.",
     attachmentTextTooLong: "Le texte dépasse la limite de 200 000 caractères. Divisez le fichier et réessayez.",
     unsupportedAttachment: "Ce type de fichier n'est pas activé pour le modèle sélectionné.",
@@ -659,7 +659,8 @@ async function copyTextToClipboard(text) {
   textarea.remove();
 }
 
-const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_CHARS = 200_000;
 const TEXT_FILE_EXTENSIONS = new Set(["txt", "md", "csv", "json", "html", "xml", "log", "yaml", "yml"]);
 
@@ -785,7 +786,8 @@ async function prepareAttachment(file, kind) {
   const copy = translations[state.language];
   const capabilities = selectedCapabilities();
   if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(copy.attachmentTooLarge);
-  if (state.attachments.length >= 5 || state.attachments.reduce((sum, item) => sum + item.size, 0) + file.size > 4 * 1024 * 1024) throw new Error(copy.attachmentTooLarge);
+  const totalAttachmentBytes = state.attachments.reduce((sum, item) => sum + item.size, 0) + file.size;
+  if (state.attachments.length >= 5 || totalAttachmentBytes > MAX_ATTACHMENT_TOTAL_BYTES) throw new Error(copy.attachmentTooLarge);
   const extension = file.name.split(".").pop().toLowerCase();
   const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   if (kind === "image" && capabilities.images && /^image\/(png|jpeg|webp|gif)$/.test(file.type)) {

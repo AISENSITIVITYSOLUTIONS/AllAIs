@@ -11,9 +11,7 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 const cleanAccessCode = (value) => String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
-const API_BASE = ["allais-nni.web.app", "allais-nni.firebaseapp.com"].includes(location.hostname)
-  ? "https://api-6wsxvgd6ra-uc.a.run.app/api"
-  : "/api";
+const API_BASE = "/api";
 
 const elements = {
   providerList: $("#providerList"),

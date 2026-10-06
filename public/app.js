@@ -434,6 +434,63 @@ const translations = {
   }
 };
 
+const providerTranslations = {
+  es: {
+    openai: {
+      name: "ChatGPT / OpenAI",
+      description: "Uso general, redacción, análisis, síntesis, código y asistentes robustos."
+    },
+    claude: {
+      name: "Claude",
+      description: "Lectura larga, razonamiento editorial, análisis fino y escritura sobria."
+    },
+    gemini: {
+      name: "Gemini",
+      description: "Modelo de Google para razonamiento general, síntesis y tareas multimodales."
+    },
+    deepseek: {
+      name: "DeepSeek",
+      description: "Modelo eficiente para programación, razonamiento técnico y análisis estructurado."
+    }
+  },
+  en: {
+    openai: {
+      name: "ChatGPT / OpenAI",
+      description: "General use, writing, analysis, synthesis, coding and reliable assistants."
+    },
+    claude: {
+      name: "Claude",
+      description: "Long reading, editorial reasoning, fine-grained analysis and sober writing."
+    },
+    gemini: {
+      name: "Gemini",
+      description: "Google model for general reasoning, synthesis and multimodal tasks."
+    },
+    deepseek: {
+      name: "DeepSeek",
+      description: "Efficient model for programming, technical reasoning and structured analysis."
+    }
+  },
+  fr: {
+    openai: {
+      name: "ChatGPT / OpenAI",
+      description: "Usage général, rédaction, analyse, synthèse, code et assistants fiables."
+    },
+    claude: {
+      name: "Claude",
+      description: "Lecture longue, raisonnement éditorial, analyse fine et écriture sobre."
+    },
+    gemini: {
+      name: "Gemini",
+      description: "Modèle de Google pour le raisonnement général, la synthèse et les tâches multimodales."
+    },
+    deepseek: {
+      name: "DeepSeek",
+      description: "Modèle efficace pour la programmation, le raisonnement technique et l'analyse structurée."
+    }
+  }
+};
+
 const systemPrompts = {
   market:
     "Actua como estratega senior de ingenieria de mercados para NNI. Responde con claridad ejecutiva, criterio comercial y foco en conversion, reputacion y viabilidad operativa.",
@@ -515,7 +572,7 @@ function setLanguage(language) {
   );
 
   updateTaskUI(state.selectedTask);
-  syncProviderCards();
+  renderProviders();
 
   elements.languageButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.lang === state.language);
@@ -1067,13 +1124,36 @@ function appendHistory(role, content) {
   if (state.history.length > 30) state.history = state.history.slice(-30);
 }
 
+function providerDisplay(provider) {
+  return providerTranslations[state.language]?.[provider.id] || {
+    name: provider.name,
+    description: provider.description
+  };
+}
+
+function renderProviders() {
+  elements.providerList.innerHTML = "";
+
+  for (const provider of state.providers) {
+    const display = providerDisplay(provider);
+    const card = document.createElement("div");
+    card.className = "provider-card";
+    card.dataset.provider = provider.id;
+    card.innerHTML = `<strong>${display.name}</strong><span>${display.description}</span>`;
+    elements.providerList.append(card);
+  }
+
+  syncProviderCards();
+}
+
 function syncProviderCards() {
   document.querySelectorAll(".provider-card").forEach((card) => {
     card.classList.toggle("active", card.dataset.provider === state.selectedProvider);
   });
   const provider = state.providers.find((item) => item.id === state.selectedProvider);
+  const display = provider ? providerDisplay(provider) : null;
   if (elements.selectedProviderNote) {
-    elements.selectedProviderNote.textContent = provider?.name || "";
+    elements.selectedProviderNote.textContent = display?.name || "";
   }
   syncAttachmentMenu();
 }
@@ -1104,20 +1184,10 @@ async function loadProviders() {
   const data = await readApiJson(response);
   state.providers = (data.providers || []).filter((provider) => provider.id !== "qwen");
 
-  elements.providerList.innerHTML = "";
-
-  for (const provider of state.providers) {
-    const card = document.createElement("div");
-    card.className = "provider-card";
-    card.dataset.provider = provider.id;
-    card.innerHTML = `<strong>${provider.name}</strong><span>${provider.description}</span>`;
-    elements.providerList.append(card);
-  }
-
   if (!state.providers.some((provider) => provider.id === state.selectedProvider)) {
     state.selectedProvider = state.providers[0]?.id || "openai";
   }
-  syncProviderCards();
+  renderProviders();
 }
 
 async function login() {

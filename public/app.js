@@ -1093,7 +1093,7 @@ async function readApiJson(response) {
     const preview = text.trim().slice(0, 80);
     const looksLikeHtml = /<!doctype\s+html|<html[\s>]/i.test(preview);
     if (looksLikeHtml) {
-      throw new Error(`El servidor de AllAIs respondió HTML (${response.status}) en vez de JSON. Comprueba el estado de la función api y que el servicio Cloud Run esté disponible.`);
+      throw new Error("AllAIs no pudo completar la consulta en este momento. Intenta de nuevo en unos segundos; si el problema continúa, cambia de modelo o desactiva Buscar en la web.");
     }
     throw new Error(`La API devolvió una respuesta inválida (${response.status}): ${preview || response.statusText}`);
   }

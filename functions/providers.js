@@ -589,7 +589,20 @@ async function callProvider(providerId, payload) {
   }
   payload = { ...payload, attachments };
   if (payload.webSearch && providerId !== "gemini") {
-    const grounded = await groundWithGemini(payload);
+    let grounded;
+    try {
+      grounded = await groundWithGemini(payload);
+    } catch (error) {
+      console.error("AllAIs web search fallback", {
+        providerId,
+        message: error?.message,
+        stack: error?.stack
+      });
+      const fallbackPrompt = `${payload.prompt}\n\nNota operativa para el modelo: la búsqueda web no pudo completarse en este intento (${error?.message || "servicio no disponible"}). Responde la solicitud con conocimiento general, declara con claridad que no pudiste verificar fuentes en tiempo real y recomienda verificar publicaciones o enlaces primarios antes de citar.`;
+      const result = await provider.call({ ...payload, prompt: fallbackPrompt, webSearch: false });
+      return { ...result, sources: [] };
+    }
+
     const sourceList = grounded.sources.length
       ? `\n\nFuentes web verificables recibidas:\n${grounded.sources.map((source, index) => `[${index + 1}] ${source.title}\nURL: ${source.url}${source.content ? `\nExtracto: ${source.content}` : ""}`).join("\n\n")}`
       : "\n\nGoogle Search no incluyó enlaces estructurados en los metadatos. Trabaja con las referencias y URLs explícitas en el informe de búsqueda; no fabriques enlaces ni bibliografía y aclara cualquier dato no verificable.";

@@ -9,6 +9,32 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "127.0.0.1";
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 
+const MAX_REQUEST_BODY_CHARS = 20_000_000;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_TOTAL_BYTES = 12 * 1024 * 1024;
+
+function attachmentByteSize(attachment) {
+  const declaredSize = Number(attachment?.size || 0);
+  const base64 = String(attachment?.data || "");
+  const estimatedSize = base64 ? Math.ceil((base64.length * 3) / 4) : 0;
+  return Math.max(declaredSize, estimatedSize);
+}
+
+function validateAttachments(attachments) {
+  let totalBytes = 0;
+  for (const attachment of attachments) {
+    const size = attachmentByteSize(attachment);
+    if (size > MAX_ATTACHMENT_BYTES) {
+      return "Each attachment must be 10 MB or smaller.";
+    }
+    totalBytes += size;
+  }
+  if (totalBytes > MAX_ATTACHMENT_TOTAL_BYTES) {
+    return "Attachments must total 12 MB or less per request.";
+  }
+  return "";
+}
+
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -47,7 +73,7 @@ function readBody(request) {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 8_000_000) {
+      if (body.length > MAX_REQUEST_BODY_CHARS) {
         reject(new Error("Request too large."));
         request.destroy();
       }
@@ -128,6 +154,11 @@ async function handleApi(request, response) {
     const documentTransform = body.documentTransform === true;
     const history = Array.isArray(body.history) ? body.history.slice(-30) : [];
     const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+    const attachmentError = validateAttachments(attachments);
+    if (attachmentError) {
+      sendJson(response, 413, { error: attachmentError });
+      return;
+    }
     const webSearch = body.webSearch === true;
 
     if (!prompt) {

@@ -13,6 +13,15 @@ const $ = (selector) => document.querySelector(selector);
 const cleanAccessCode = (value) => String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
 const API_BASE = "/api";
 
+function trackEvent(eventName, params = {}) {
+  if (typeof window.gtag !== "function") return;
+
+  window.gtag("event", eventName, {
+    app_name: "AllAIs",
+    ...params
+  });
+}
+
 const elements = {
   providerList: $("#providerList"),
   taskGrid: $("#taskGrid"),
@@ -576,8 +585,14 @@ function showAccessError(message) {
 }
 
 function setLanguage(language) {
+  const previousLanguage = state.language;
   state.language = translations[language] ? language : "es";
   localStorage.setItem("nni_language", state.language);
+  if (previousLanguage !== state.language) {
+    trackEvent("language_changed", {
+      language: state.language
+    });
+  }
 
   const copy = translations[state.language];
   document.documentElement.lang = state.language;
@@ -1114,6 +1129,9 @@ function addMessage(role, content, meta = "", sources = []) {
   copyButton.addEventListener("click", async () => {
     try {
       await copyTextToClipboard(content);
+      trackEvent(role === "assistant" ? "response_copied" : "prompt_copied", {
+        message_role: role
+      });
       copyButton.classList.add("copied");
       copyButton.setAttribute("aria-label", "Copiado");
       copyButton.setAttribute("title", "Copiado");
@@ -1244,10 +1262,14 @@ async function login() {
   const data = await readApiJson(response);
 
   if (!response.ok || !data.ok) {
+    trackEvent("access_code_failed", {
+      reason: "invalid_code"
+    });
     showAccessError(copy.invalidCode);
     return;
   }
 
+  trackEvent("access_code_success");
   state.accessCode = accessCode;
   clearAccessError();
   elements.accessCodeInput.value = "";
@@ -1263,6 +1285,9 @@ async function sendPrompt(event) {
   const attachmentsAtSend = state.attachments.slice();
   if (!prompt && !attachmentsAtSend.length) return;
   if (!state.accessCode) {
+    trackEvent("access_code_required", {
+      action: "prompt_submit"
+    });
     setSessionState(false, translations[state.language].needAccess);
     drawAttentionToAccess();
     return;
@@ -1271,6 +1296,10 @@ async function sendPrompt(event) {
   const copy = translations[state.language];
   const capabilities = selectedCapabilities();
   if (attachmentsAtSend.some((item) => (item.kind === "image" && !capabilities.images) || (item.kind === "pdf" && !capabilities.pdf) || (item.kind === "video" && !capabilities.videos))) {
+    trackEvent("app_error", {
+      provider: state.selectedProvider,
+      error_area: "unsupported_attachment"
+    });
     window.alert(copy.unsupportedAttachment);
     return;
   }
@@ -1314,6 +1343,16 @@ async function sendPrompt(event) {
   elements.sendButton.disabled = true;
   elements.attachButton.disabled = true;
   elements.sendButton.textContent = copy.processing;
+  trackEvent("prompt_sent", {
+    provider,
+    language: state.language,
+    task: state.selectedTask,
+    web_search: webSearch,
+    has_files: attachmentsAtSend.length > 0,
+    file_count: attachmentsAtSend.length,
+    requested_word: requestedWord,
+    requested_pdf: requestedPdf
+  });
 
   try {
     const response = await fetch(`${API_BASE}/chat`, {
@@ -1348,6 +1387,11 @@ async function sendPrompt(event) {
     renderAttachmentList();
   } catch (error) {
     if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
+    trackEvent("app_error", {
+      provider,
+      error_area: "chat_request",
+      status: "failed"
+    });
     addMessage("assistant", error.message, copy.error);
     state.history.pop();
   } finally {
@@ -1398,8 +1442,21 @@ function bindEvents() {
     const copy = translations[state.language];
     for (const file of Array.from(elements.attachmentInput.files || [])) {
       try {
-        state.attachments.push(await prepareAttachment(file, state.pendingAttachmentKind));
+        const attachment = await prepareAttachment(file, state.pendingAttachmentKind);
+        state.attachments.push(attachment);
+        trackEvent("file_uploaded", {
+          provider: state.selectedProvider,
+          file_kind: attachment.kind,
+          file_type: file.type || "unknown",
+          file_size_mb: Number((file.size / 1024 / 1024).toFixed(2)),
+          attachment_count: state.attachments.length
+        });
       } catch (error) {
+        trackEvent("app_error", {
+          provider: state.selectedProvider,
+          error_area: "file_upload",
+          file_type: file.type || "unknown"
+        });
         window.alert(error.message || copy.attachmentReadError);
       }
     }
@@ -1436,6 +1493,10 @@ function bindEvents() {
     const card = event.target.closest(".provider-card");
     if (!card) return;
     state.selectedProvider = card.dataset.provider;
+    trackEvent("provider_selected", {
+      provider: state.selectedProvider,
+      language: state.language
+    });
     syncProviderCards();
   });
   elements.languageButtons.forEach((button) => {

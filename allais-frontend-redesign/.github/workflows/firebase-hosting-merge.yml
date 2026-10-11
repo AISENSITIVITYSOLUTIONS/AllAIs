@@ -1,0 +1,31 @@
+# Despliega el frontend (public/) a Firebase Hosting en producción
+# cada vez que se fusiona un cambio en main.
+name: Deploy a Firebase Hosting (producción)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "public/**"
+      - "firebase.json"
+      - ".firebaserc"
+      - ".github/workflows/firebase-hosting-merge.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Desplegar a allais-nni (canal live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ALLAIS_NNI }}
+          channelId: live
+          projectId: allais-nni

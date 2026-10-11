@@ -1,0 +1,29 @@
+# Publica una vista previa temporal del frontend en Firebase Hosting
+# para cada pull request y deja el enlace como comentario en el PR.
+name: Vista previa en Firebase Hosting (PR)
+
+on:
+  pull_request:
+    paths:
+      - "public/**"
+      - "firebase.json"
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Desplegar canal de vista previa
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ALLAIS_NNI }}
+          projectId: allais-nni
+          expires: 7d

@@ -51,8 +51,26 @@ const elements = {
   consentCheckbox: $("#consentCheckbox"),
   consentText: $("#consentText"),
   quotaNote: $("#quotaNote"),
+  authDialog: $("#authDialog"),
+  authClose: $("#authClose"),
+  authTitle: $("#authTitle"),
+  authSubtitle: $("#authSubtitle"),
+  accountButton: $("#accountButton"),
+  accountName: $("#accountName"),
+  accountStatus: $("#accountStatus"),
+  accountAvatar: $("#accountAvatar"),
+  topbarAccount: $("#topbarAccount"),
   sessionState: $("#sessionState"),
   sendButton: $("#sendButton"),
+  sendLabel: $("#sendLabel"),
+  heroSubtitle: $("#heroSubtitle"),
+  composerHint: $("#composerHint"),
+  formatChips: $("#formatChips"),
+  topbarModel: $("#topbarModel"),
+  themeToggle: $("#themeToggle"),
+  menuButton: $("#menuButton"),
+  sidebarClose: $("#sidebarClose"),
+  sidebarScrim: $("#sidebarScrim"),
   newChatButton: $("#newChatButton"),
   languageButtons: document.querySelectorAll(".language-button"),
   accessPanelLabel: $("#accessPanelLabel"),
@@ -94,10 +112,19 @@ const secondaryTaskIds = new Set(["summarize", "strategy", "code", "other"]);
 
 const translations = {
   es: {
-    newChat: "Nuevo Chat",
+    newChat: "Nueva consulta",
     access: "Acceso",
     accessPlaceholder: "tu@email.com",
     accessLabel: "Registra tu email para acceso",
+    guest: "Invitado",
+    guestStatus: "Sin sesión · consultas desactivadas",
+    teamAccount: "Equipo NNI",
+    sessionActive: "Sesión activa",
+    signIn: "Iniciar sesión",
+    signOut: "Cerrar sesión",
+    accountLabel: "Tu cuenta",
+    authTitle: "Entra a AllAIs",
+    authSubtitle: "Registra tu email para hacer consultas. Te enviaremos un enlace de acceso; no necesitas contraseña.",
     accessHint: "¿Eres del equipo NNI? También puedes escribir tu código.",
     consentHtml: 'Acepto el <a href="/privacidad.html" target="_blank" rel="noopener">aviso de privacidad</a>',
     consentNeeded: "Acepta el aviso de privacidad para continuar.",
@@ -125,7 +152,17 @@ const translations = {
     platform: "Plataforma",
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
     heroTitle: "¿Qué quieres hacer?",
-    send: "Continuar",
+    heroSubtitle: "Elige el tipo de tarea, describe tu objetivo y AllAIs lo envía al modelo que selecciones.",
+    composerHint: "Enter envía; Shift + Enter agrega una línea.",
+    themeToggle: "Cambiar tema claro u oscuro",
+    openPanel: "Abrir panel",
+    closePanel: "Cerrar panel",
+    attach: "Agregar archivos",
+    copyPrompt: "Copiar prompt",
+    copyResponse: "Copiar respuesta",
+    copied: "Copiado",
+    thinking: "Generando respuesta",
+    send: "Enviar",
     processing: "Procesando...",
     webSearch: "Buscar en la web",
     moreTasks: "Más",
@@ -231,10 +268,19 @@ const translations = {
     }
   },
   en: {
-    newChat: "New chat",
+    newChat: "New request",
     access: "Access",
     accessPlaceholder: "you@email.com",
     accessLabel: "Register your email to get access",
+    guest: "Guest",
+    guestStatus: "Not signed in · queries disabled",
+    teamAccount: "NNI team",
+    sessionActive: "Signed in",
+    signIn: "Sign in",
+    signOut: "Sign out",
+    accountLabel: "Your account",
+    authTitle: "Sign in to AllAIs",
+    authSubtitle: "Register your email to send queries. We'll email you a sign-in link; no password needed.",
     accessHint: "On the NNI team? You can also enter your code.",
     consentHtml: 'I accept the <a href="/privacidad.html" target="_blank" rel="noopener">privacy notice</a>',
     consentNeeded: "Accept the privacy notice to continue.",
@@ -262,7 +308,17 @@ const translations = {
     platform: "Platform",
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
     heroTitle: "What do you want to do?",
-    send: "Continue",
+    heroSubtitle: "Pick a task type, describe your goal and AllAIs sends it to the model you choose.",
+    composerHint: "Enter sends; Shift + Enter adds a line.",
+    themeToggle: "Switch light or dark theme",
+    openPanel: "Open panel",
+    closePanel: "Close panel",
+    attach: "Add files",
+    copyPrompt: "Copy prompt",
+    copyResponse: "Copy response",
+    copied: "Copied",
+    thinking: "Generating response",
+    send: "Send",
     processing: "Processing...",
     webSearch: "Search the web",
     moreTasks: "More",
@@ -368,10 +424,19 @@ const translations = {
     }
   },
   fr: {
-    newChat: "Nouveau chat",
+    newChat: "Nouvelle demande",
     access: "Accès",
     accessPlaceholder: "vous@email.com",
     accessLabel: "Inscrivez votre email pour accéder",
+    guest: "Invité",
+    guestStatus: "Non connecté · requêtes désactivées",
+    teamAccount: "Équipe NNI",
+    sessionActive: "Session active",
+    signIn: "Se connecter",
+    signOut: "Se déconnecter",
+    accountLabel: "Votre compte",
+    authTitle: "Accéder à AllAIs",
+    authSubtitle: "Inscrivez votre email pour envoyer des requêtes. Nous vous enverrons un lien de connexion, sans mot de passe.",
     accessHint: "Membre de l'équipe NNI ? Vous pouvez aussi saisir votre code.",
     consentHtml: 'J\'accepte l\'<a href="/privacidad.html" target="_blank" rel="noopener">avis de confidentialité</a>',
     consentNeeded: "Acceptez l'avis de confidentialité pour continuer.",
@@ -399,7 +464,17 @@ const translations = {
     platform: "Plateforme",
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
     heroTitle: "Que voulez-vous faire ?",
-    send: "Continuer",
+    heroSubtitle: "Choisissez le type de tâche, décrivez votre objectif et AllAIs l'envoie au modèle sélectionné.",
+    composerHint: "Entrée envoie ; Maj + Entrée ajoute une ligne.",
+    themeToggle: "Basculer le thème clair ou sombre",
+    openPanel: "Ouvrir le panneau",
+    closePanel: "Fermer le panneau",
+    attach: "Ajouter des fichiers",
+    copyPrompt: "Copier le prompt",
+    copyResponse: "Copier la réponse",
+    copied: "Copié",
+    thinking: "Génération de la réponse",
+    send: "Envoyer",
     processing: "Traitement...",
     webSearch: "Rechercher sur le web",
     moreTasks: "Plus",
@@ -604,8 +679,32 @@ function updateTaskUI(taskId) {
   }
 
   closeTaskMoreMenu();
+  renderFormatChips(task);
   elements.promptInput.placeholder = task.placeholder;
   resizePromptInput();
+}
+
+function renderFormatChips(task) {
+  if (!elements.formatChips) return;
+  elements.formatChips.replaceChildren();
+  for (const option of task.options || []) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "format-chip";
+    chip.textContent = option;
+    chip.addEventListener("click", () => {
+      const allOptions = Object.values(translations[state.language].tasks).flatMap((item) => item.options || []);
+      let current = elements.promptInput.value;
+      const prefix = allOptions.find((item) => current.startsWith(`${item}: `));
+      if (prefix) current = current.slice(prefix.length + 2);
+      elements.promptInput.value = `${option}: ${current}`;
+      elements.promptInput.focus();
+      elements.promptInput.setSelectionRange(elements.promptInput.value.length, elements.promptInput.value.length);
+      resizePromptInput();
+      trackEvent("format_chip_selected", { task: state.selectedTask, format: option });
+    });
+    elements.formatChips.append(chip);
+  }
 }
 
 function closeTaskMoreMenu() {
@@ -623,7 +722,7 @@ function toggleTaskMoreMenu() {
 
 function setSessionState(ok, message) {
   elements.sessionState.textContent = message;
-  elements.sessionState.className = ok ? "session-state success" : "session-state error";
+  elements.sessionState.className = ok === null ? "session-state" : ok ? "session-state success" : "session-state error";
 }
 
 function clearAccessError() {
@@ -662,25 +761,35 @@ function setLanguage(language) {
     </span>
     ${copy.newChat}
   `;
-  elements.accessPanelLabel.textContent = copy.access;
   elements.providersPanelLabel.textContent = copy.providers;
   elements.platformPanelLabel.textContent = copy.platform;
   elements.platformDescription.textContent = copy.platformDescription;
   elements.heroTitle.textContent = copy.heroTitle;
+  elements.heroSubtitle.textContent = copy.heroSubtitle;
+  elements.composerHint.textContent = copy.composerHint;
   elements.webSearchLabel.textContent = copy.webSearch;
   elements.accessCodeInput.placeholder = copy.accessPlaceholder;
+  if (!elements.sendButton.disabled) elements.sendLabel.textContent = copy.send;
+  elements.themeToggle.setAttribute("aria-label", copy.themeToggle);
+  elements.themeToggle.setAttribute("title", copy.themeToggle);
+  elements.menuButton.setAttribute("aria-label", copy.openPanel);
+  elements.sidebarClose.setAttribute("aria-label", copy.closePanel);
+  elements.attachButton.setAttribute("aria-label", copy.attach);
+  elements.attachButton.setAttribute("title", copy.attach);
   elements.accessLabel.textContent = copy.accessLabel;
   elements.accessHint.textContent = copy.accessHint;
   elements.consentText.innerHTML = copy.consentHtml;
-  elements.sendButton.textContent = copy.send;
   elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
   renderQuota();
+  renderAccount();
 
   updateTaskUI(state.selectedTask);
   renderProviders();
 
   elements.languageButtons.forEach((button) => {
-    button.classList.toggle("active", button.dataset.lang === state.language);
+    const active = button.dataset.lang === state.language;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
   syncAttachmentMenu();
   renderAttachmentList();
@@ -707,7 +816,45 @@ function logout() {
   elements.loginButton.textContent = copy.enter;
   syncConsentVisibility();
   renderQuota();
-  setSessionState(false, copy.signedOut);
+  renderAccount();
+  setSessionState(null, copy.signedOut);
+}
+
+function openAuthDialog() {
+  const dialog = elements.authDialog;
+  if (!dialog || dialog.open) return;
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+  document.body.classList.add("auth-open");
+  window.setTimeout(() => {
+    if (!isAuthenticated()) elements.accessCodeInput.focus({ preventScroll: true });
+    else elements.loginButton.focus({ preventScroll: true });
+  }, 60);
+}
+
+function closeAuthDialog() {
+  const dialog = elements.authDialog;
+  if (!dialog || !dialog.open) return;
+  if (typeof dialog.close === "function") dialog.close();
+  else dialog.removeAttribute("open");
+  document.body.classList.remove("auth-open");
+}
+
+function renderAccount() {
+  const copy = translations[state.language];
+  const signed = isAuthenticated();
+  const name = state.authMode === "email" ? state.email : state.authMode === "code" ? copy.teamAccount : copy.guest;
+  elements.accountName.textContent = name;
+  elements.accountStatus.textContent = signed ? copy.sessionActive : copy.guestStatus;
+  elements.accountStatus.classList.toggle("is-active", signed);
+  elements.accountButton.textContent = signed ? copy.signOut : copy.signIn;
+  elements.accountAvatar.textContent = signed ? (state.email || "N").charAt(0).toUpperCase() : "";
+  elements.accountAvatar.classList.toggle("is-guest", !signed);
+  elements.topbarAccount.classList.toggle("is-signed", signed);
+  elements.topbarAccount.setAttribute("aria-label", signed ? `${copy.accountLabel}: ${name}` : copy.signIn);
+  elements.topbarAccount.querySelector(".topbar-account-label").textContent = signed ? (state.email ? state.email.charAt(0).toUpperCase() : "N") : copy.signIn;
+  elements.authTitle.textContent = signed ? copy.accountLabel : copy.authTitle;
+  elements.authSubtitle.textContent = signed ? copy.signedInAs(name) : copy.authSubtitle;
 }
 
 function syncConsentVisibility() {
@@ -790,8 +937,10 @@ async function startEmailSession() {
   elements.loginButton.textContent = copy.exit;
   syncConsentVisibility();
   renderQuota();
+  renderAccount();
   setSessionState(true, copy.signedInAs(state.email));
   trackEvent("email_session_started");
+  closeAuthDialog();
 }
 
 async function restoreEmailSession() {
@@ -810,11 +959,12 @@ async function restoreEmailSession() {
 }
 
 function drawAttentionToAccess() {
+  closeSidebar();
+  openAuthDialog();
   elements.loginBox.classList.remove("needs-attention");
   void elements.loginBox.offsetWidth;
   elements.loginBox.classList.add("needs-attention");
   elements.accessCodeInput.focus({ preventScroll: false });
-  elements.loginBox.scrollIntoView({ block: "center", behavior: "smooth" });
   window.setTimeout(() => {
     elements.loginBox.classList.remove("needs-attention");
   }, 1600);
@@ -866,8 +1016,6 @@ function syncAttachmentMenu() {
     button.title = enabled ? "" : copy.unsupportedAttachment;
     button.setAttribute("aria-disabled", String(!enabled));
   }
-  elements.attachButton.dataset.tooltip = "Add files and more";
-  elements.attachButton.setAttribute("aria-label", "Add files and more");
 }
 
 function renderAttachmentList() {
@@ -1206,7 +1354,7 @@ function renderMarkdown(content, container) {
 }
 
 function addPromptNavigationControls(role, content, responseContent, bubble) {
-  if (String(content).length > 280 || String(content).split(/\n/).length > 4) {
+  if (role === "user" && (String(content).length > 280 || String(content).split(/\n/).length > 4)) {
     responseContent.classList.add("prompt-collapsed");
     const showMore = document.createElement("button");
     showMore.type = "button";
@@ -1242,6 +1390,7 @@ function addMessage(role, content, meta = "", sources = []) {
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
+  avatar.setAttribute("aria-hidden", "true");
   avatar.textContent = role === "user" ? "T" : "N";
 
   const bubble = document.createElement("div");
@@ -1280,7 +1429,7 @@ function addMessage(role, content, meta = "", sources = []) {
   const copyButton = document.createElement("button");
   copyButton.type = "button";
   copyButton.className = "copy-message";
-  const copyLabel = role === "user" ? "Copiar prompt" : "Copiar respuesta";
+  const copyLabel = role === "user" ? translations[state.language].copyPrompt : translations[state.language].copyResponse;
   copyButton.setAttribute("aria-label", copyLabel);
   copyButton.setAttribute("title", copyLabel);
   copyButton.innerHTML = `
@@ -1296,8 +1445,8 @@ function addMessage(role, content, meta = "", sources = []) {
         message_role: role
       });
       copyButton.classList.add("copied");
-      copyButton.setAttribute("aria-label", "Copiado");
-      copyButton.setAttribute("title", "Copiado");
+      copyButton.setAttribute("aria-label", translations[state.language].copied);
+      copyButton.setAttribute("title", translations[state.language].copied);
       window.setTimeout(() => {
         copyButton.classList.remove("copied");
         copyButton.setAttribute("aria-label", copyLabel);
@@ -1310,29 +1459,70 @@ function addMessage(role, content, meta = "", sources = []) {
   });
 
   if (role === "assistant") {
-    const strong = document.createElement("strong");
-    strong.textContent = meta || "NNI Assistant";
-    bubble.append(strong);
+    const metaLine = document.createElement("strong");
+    metaLine.className = "message-meta";
+    metaLine.textContent = meta || "NNI Assistant";
+    bubble.append(metaLine);
   }
 
-  bubble.append(copyButton);
+  if (role === "user") bubble.append(copyButton);
   bubble.append(responseContent);
   addPromptNavigationControls(role, content, responseContent, bubble);
   if (role === "assistant") {
     const actions = document.createElement("div");
     actions.className = "export-actions";
+    const docIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8Z" /><path d="M14 3.5V8h4.5M9 13h6M9 16.5h4" /></svg>';
     const wordButton = document.createElement("button");
-    wordButton.type = "button"; wordButton.textContent = translations[state.language].exportWord;
+    wordButton.type = "button";
+    wordButton.innerHTML = docIcon;
+    wordButton.append(translations[state.language].exportWord);
     wordButton.addEventListener("click", () => downloadBlob(makeDocxBlob(content, sources), "respuesta-allais.docx"));
     const pdfButton = document.createElement("button");
-    pdfButton.type = "button"; pdfButton.textContent = translations[state.language].exportPdf;
+    pdfButton.type = "button";
+    pdfButton.innerHTML = docIcon;
+    pdfButton.append(translations[state.language].exportPdf);
     pdfButton.addEventListener("click", () => printAsPdf(responseContent, sources));
-    actions.append(wordButton, pdfButton); bubble.append(actions);
+    actions.append(copyButton, wordButton, pdfButton);
+    bubble.append(actions);
   }
   article.append(avatar, bubble);
   elements.conversation.append(article);
-  elements.conversation.scrollTop = elements.conversation.scrollHeight;
+  setConversationState();
+  scrollConversationToEnd();
   return { article, responseContent };
+}
+
+function setConversationState() {
+  document.body.classList.toggle("is-empty", !elements.conversation.querySelector(".message"));
+}
+
+function scrollConversationToEnd() {
+  const scroller = elements.conversation.closest(".chat-card");
+  if (scroller) scroller.scrollTop = scroller.scrollHeight;
+}
+
+function addPendingMessage(label) {
+  const article = document.createElement("article");
+  article.className = "message assistant pending";
+  article.setAttribute("aria-label", translations[state.language].thinking);
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = "N";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  const metaLine = document.createElement("strong");
+  metaLine.className = "message-meta";
+  metaLine.textContent = label;
+  const content = document.createElement("div");
+  content.className = "message-content";
+  content.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+  bubble.append(metaLine, content);
+  article.append(avatar, bubble);
+  elements.conversation.append(article);
+  setConversationState();
+  scrollConversationToEnd();
+  return article;
 }
 
 function appendHistory(role, content) {
@@ -1351,12 +1541,27 @@ function providerDisplay(provider) {
 function renderProviders() {
   elements.providerList.innerHTML = "";
 
+  const monograms = { openai: "OA", claude: "Cl", gemini: "Ge", deepseek: "DS", qwen: "Qw" };
   for (const provider of state.providers) {
     const display = providerDisplay(provider);
-    const card = document.createElement("div");
+    const card = document.createElement("button");
+    card.type = "button";
     card.className = "provider-card";
     card.dataset.provider = provider.id;
-    card.innerHTML = `<strong>${display.name}</strong><span>${display.description}</span>`;
+    card.setAttribute("role", "radio");
+    const monogram = document.createElement("span");
+    monogram.className = "provider-monogram";
+    monogram.setAttribute("aria-hidden", "true");
+    monogram.textContent = monograms[provider.id] || String(display.name || "?").slice(0, 2);
+    const copyBox = document.createElement("span");
+    copyBox.className = "provider-copy";
+    const name = document.createElement("strong");
+    name.textContent = display.name;
+    const description = document.createElement("span");
+    description.textContent = display.description;
+    copyBox.append(name, description);
+    card.append(monogram, copyBox);
+    card.insertAdjacentHTML("beforeend", '<svg class="provider-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>');
     elements.providerList.append(card);
   }
 
@@ -1365,13 +1570,16 @@ function renderProviders() {
 
 function syncProviderCards() {
   document.querySelectorAll(".provider-card").forEach((card) => {
-    card.classList.toggle("active", card.dataset.provider === state.selectedProvider);
+    const active = card.dataset.provider === state.selectedProvider;
+    card.classList.toggle("active", active);
+    card.setAttribute("aria-checked", String(active));
   });
   const provider = state.providers.find((item) => item.id === state.selectedProvider);
   const display = provider ? providerDisplay(provider) : null;
   if (elements.selectedProviderNote) {
     elements.selectedProviderNote.textContent = display?.name || "";
   }
+  if (elements.topbarModel) elements.topbarModel.textContent = display?.name || "";
   syncAttachmentMenu();
 }
 
@@ -1399,7 +1607,7 @@ async function readApiJson(response) {
 async function loadProviders() {
   const response = await fetch(`${API_BASE}/providers`);
   const data = await readApiJson(response);
-  state.providers = (data.providers || []).filter((provider) => provider.id !== "qwen");
+  state.providers = (data.providers || []).filter((provider) => !["qwen", "happyhorse"].includes(provider.id));
 
   if (!state.providers.some((provider) => provider.id === state.selectedProvider)) {
     state.selectedProvider = state.providers[0]?.id || "openai";
@@ -1464,6 +1672,8 @@ async function login() {
   trackEvent("access_code_success");
   state.accessCode = accessCode;
   state.authMode = "code";
+  renderAccount();
+  window.setTimeout(closeAuthDialog, 700);
   clearAccessError();
   elements.accessCodeInput.value = "";
   elements.loginBox.classList.add("authenticated");
@@ -1539,7 +1749,8 @@ async function sendPrompt(event) {
   resizePromptInput();
   elements.sendButton.disabled = true;
   elements.attachButton.disabled = true;
-  elements.sendButton.textContent = copy.processing;
+  elements.sendLabel.textContent = copy.processing;
+  const pendingMessage = addPendingMessage(providerName);
   trackEvent("prompt_sent", {
     provider,
     language: state.language,
@@ -1571,6 +1782,7 @@ async function sendPrompt(event) {
     });
 
     const data = await readApiJson(response);
+    pendingMessage.remove();
     if (data.quota) {
       state.quota = data.quota;
       renderQuota();
@@ -1594,6 +1806,7 @@ async function sendPrompt(event) {
     state.attachments = state.attachments.filter((item) => !attachmentsAtSend.some((sent) => sent.id === item.id));
     renderAttachmentList();
   } catch (error) {
+    pendingMessage.remove();
     if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
     trackEvent("app_error", {
       provider,
@@ -1605,8 +1818,8 @@ async function sendPrompt(event) {
   } finally {
     elements.sendButton.disabled = false;
     elements.attachButton.disabled = false;
-    elements.sendButton.textContent = copy.send;
-    elements.promptForm.scrollIntoView({ block: "end", behavior: "smooth" });
+    elements.sendLabel.textContent = translations[state.language].send;
+    elements.promptInput.focus({ preventScroll: true });
   }
 }
 
@@ -1616,10 +1829,44 @@ function resetChat() {
   renderAttachmentList();
   elements.webSearchToggle.checked = false;
   elements.conversation.innerHTML = "";
+  setConversationState();
   updateTaskUI("write");
+  closeSidebar();
+  elements.promptInput.focus({ preventScroll: true });
+}
+
+function openSidebar() {
+  document.body.classList.add("sidebar-open");
+  elements.sidebarScrim.hidden = false;
+  elements.menuButton.setAttribute("aria-expanded", "true");
+  elements.sidebarClose.focus({ preventScroll: true });
+}
+
+function closeSidebar() {
+  if (!document.body.classList.contains("sidebar-open")) return;
+  document.body.classList.remove("sidebar-open");
+  elements.sidebarScrim.hidden = true;
+  elements.menuButton.setAttribute("aria-expanded", "false");
+}
+
+function currentTheme() {
+  const explicit = document.documentElement.dataset.theme;
+  if (explicit === "light" || explicit === "dark") return explicit;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("nni_theme", next); } catch { /* Storage unavailable. */ }
+  trackEvent("theme_changed", { theme: next });
 }
 
 function bindEvents() {
+  elements.menuButton.addEventListener("click", openSidebar);
+  elements.sidebarClose.addEventListener("click", closeSidebar);
+  elements.sidebarScrim.addEventListener("click", closeSidebar);
+  elements.themeToggle.addEventListener("click", toggleTheme);
   elements.loginButton.addEventListener("click", login);
   elements.accessCodeInput.addEventListener("input", syncConsentVisibility);
   elements.accessCodeInput.addEventListener("keydown", (event) => {
@@ -1629,6 +1876,12 @@ function bindEvents() {
     }
   });
   elements.consentCheckbox.addEventListener("change", clearAccessError);
+  elements.accountButton.addEventListener("click", () => { closeSidebar(); openAuthDialog(); });
+  elements.topbarAccount.addEventListener("click", openAuthDialog);
+  elements.authClose.addEventListener("click", closeAuthDialog);
+  elements.authDialog.addEventListener("click", (event) => {
+    if (event.target === elements.authDialog) closeAuthDialog();
+  });
   elements.promptForm.addEventListener("submit", sendPrompt);
   elements.promptInput.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
@@ -1695,6 +1948,7 @@ function bindEvents() {
         elements.attachButton.focus();
       }
       closeTaskMoreMenu();
+      closeSidebar();
     }
   });
   elements.newChatButton.addEventListener("click", resetChat);
@@ -1707,19 +1961,12 @@ function bindEvents() {
       language: state.language
     });
     syncProviderCards();
+    closeSidebar();
   });
   elements.languageButtons.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
   });
 
-  document.querySelectorAll(".prompt-expand").forEach((button) => {
-    const expanded = button.getAttribute("aria-expanded") === "true";
-    button.querySelector("span").textContent = copy[expanded ? "showLess" : "showMore"];
-  });
-  document.querySelectorAll(".return-to-composer").forEach((button) => {
-    button.setAttribute("aria-label", copy.returnToComposer);
-    button.setAttribute("title", copy.returnToComposer);
-  });
   elements.taskGrid.addEventListener("click", (event) => {
     const moreButton = event.target.closest("#taskMoreButton");
     if (moreButton) {
@@ -1742,8 +1989,13 @@ async function init() {
   setLanguage(state.language);
   updateTaskUI(state.selectedTask);
   resizePromptInput();
-  setSessionState(false, translations[state.language].signedOut);
+  setSessionState(null, translations[state.language].signedOut);
+  renderAccount();
   await restoreEmailSession();
+  if (!isAuthenticated() && !sessionStorage.getItem("allais_auth_prompted")) {
+    sessionStorage.setItem("allais_auth_prompted", "1");
+    openAuthDialog();
+  }
 }
 
 init();

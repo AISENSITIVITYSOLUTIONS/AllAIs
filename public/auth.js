@@ -29,7 +29,8 @@ window.AllAIsAuth = {
     await ready();
     auth.languageCode = language || "es";
     await authApi.sendSignInLinkToEmail(auth, email, {
-      url: `${window.location.origin}/?acceso=1`,
+      // El correo viaja en el enlace para no pedirlo otra vez si se abre en otro navegador o dentro de la app de Gmail.
+      url: `${window.location.origin}/?acceso=1&e=${encodeURIComponent(email)}`,
       handleCodeInApp: true
     });
     localStorage.setItem(EMAIL_KEY, email);
@@ -38,7 +39,8 @@ window.AllAIsAuth = {
   async completeLinkIfPresent(askEmail) {
     await ready();
     if (!authApi.isSignInWithEmailLink(auth, window.location.href)) return null;
-    let email = localStorage.getItem(EMAIL_KEY);
+    const params = new URLSearchParams(window.location.search);
+    let email = localStorage.getItem(EMAIL_KEY) || String(params.get("e") || "").trim().toLowerCase();
     if (!email) email = String((await askEmail()) || "").trim().toLowerCase();
     if (!email) return null;
     const credential = await authApi.signInWithEmailLink(auth, email, window.location.href);

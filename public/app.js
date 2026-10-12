@@ -1,5 +1,8 @@
 const state = {
   accessCode: "",
+  authMode: "",
+  email: "",
+  quota: null,
   language: localStorage.getItem("nni_language") || "es",
   providers: [],
   selectedTask: "write",
@@ -11,6 +14,9 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 const cleanAccessCode = (value) => String(value || "").replace(/[^\x20-\x7E]/g, "").trim();
+const isEmailValue = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || "").trim());
+const CONSENT_KEY = "allais_privacy_consent";
+const isAuthenticated = () => Boolean(state.accessCode || state.authMode === "email");
 const API_BASE = "/api";
 
 function trackEvent(eventName, params = {}) {
@@ -39,7 +45,12 @@ const elements = {
   loginButton: $("#loginButton"),
   loginBox: $("#loginBox"),
   accessCodeInput: $("#accessCodeInput"),
-  toggleAccessVisibility: $("#toggleAccessVisibility"),
+  accessLabel: $("#accessLabel"),
+  accessHint: $("#accessHint"),
+  consentRow: $("#consentRow"),
+  consentCheckbox: $("#consentCheckbox"),
+  consentText: $("#consentText"),
+  quotaNote: $("#quotaNote"),
   sessionState: $("#sessionState"),
   sendButton: $("#sendButton"),
   newChatButton: $("#newChatButton"),
@@ -85,7 +96,22 @@ const translations = {
   es: {
     newChat: "Nuevo Chat",
     access: "Acceso",
-    accessPlaceholder: "Código de acceso",
+    accessPlaceholder: "tu@email.com",
+    accessLabel: "Registra tu email para acceso",
+    accessHint: "¿Eres del equipo NNI? También puedes escribir tu código.",
+    consentHtml: 'Acepto el <a href="/privacidad.html" target="_blank" rel="noopener">aviso de privacidad</a>',
+    consentNeeded: "Acepta el aviso de privacidad para continuar.",
+    sendingLink: "Enviando enlace…",
+    linkSent: (email) => `Te enviamos un enlace a ${email}. Ábrelo en este dispositivo para entrar.`,
+    linkError: "No pudimos enviar el enlace. Revisa el correo e inténtalo de nuevo.",
+    linkExpired: "El enlace expiró o ya se usó. Escribe tu email para recibir uno nuevo.",
+    confirmEmailPrompt: "Confirma el email con el que solicitaste el enlace:",
+    signedInAs: (email) => `Sesión iniciada como ${email}`,
+    quotaRemaining: (n) => (n === 1 ? "Te queda 1 consulta hoy" : `Te quedan ${n} consultas hoy`),
+    quotaEmptyNote: (time) => `Sin consultas por hoy · se renuevan ${time}`,
+    quotaExhausted: (limit, time) => `Alcanzaste tu límite de ${limit} consultas de hoy. Se renovará ${time}.`,
+    resetTomorrow: (time) => `mañana a las ${time}`,
+    resetToday: (time) => `hoy a las ${time}`,
     showCode: "Mostrar código",
     hideCode: "Ocultar código",
     enter: "Entrar",
@@ -94,7 +120,7 @@ const translations = {
     savedLocally: "Código eliminado al abrir. Inicia sesión para continuar.",
     invalidCode: "Código inválido",
     welcome: "Bienvenido. Sesión iniciada.",
-    needAccess: "Ingresa el código de acceso antes de enviar.",
+    needAccess: "Registra tu email (o tu código de equipo) antes de enviar.",
     providers: "Modelos conectables",
     platform: "Plataforma",
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
@@ -207,7 +233,22 @@ const translations = {
   en: {
     newChat: "New chat",
     access: "Access",
-    accessPlaceholder: "Access code",
+    accessPlaceholder: "you@email.com",
+    accessLabel: "Register your email to get access",
+    accessHint: "On the NNI team? You can also enter your code.",
+    consentHtml: 'I accept the <a href="/privacidad.html" target="_blank" rel="noopener">privacy notice</a>',
+    consentNeeded: "Accept the privacy notice to continue.",
+    sendingLink: "Sending link…",
+    linkSent: (email) => `We sent a link to ${email}. Open it on this device to sign in.`,
+    linkError: "We couldn't send the link. Check the email address and try again.",
+    linkExpired: "The link expired or was already used. Enter your email to get a new one.",
+    confirmEmailPrompt: "Confirm the email you used to request the link:",
+    signedInAs: (email) => `Signed in as ${email}`,
+    quotaRemaining: (n) => (n === 1 ? "1 query left today" : `${n} queries left today`),
+    quotaEmptyNote: (time) => `No queries left today · renews ${time}`,
+    quotaExhausted: (limit, time) => `You reached your limit of ${limit} queries for today. It renews ${time}.`,
+    resetTomorrow: (time) => `tomorrow at ${time}`,
+    resetToday: (time) => `today at ${time}`,
     showCode: "Show code",
     hideCode: "Hide code",
     enter: "Enter",
@@ -216,7 +257,7 @@ const translations = {
     savedLocally: "Access code cleared on open. Sign in to continue.",
     invalidCode: "Invalid code",
     welcome: "Welcome. Session started.",
-    needAccess: "Enter the access code before sending.",
+    needAccess: "Register your email (or team code) before sending.",
     providers: "Connectable models",
     platform: "Platform",
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
@@ -329,7 +370,22 @@ const translations = {
   fr: {
     newChat: "Nouveau chat",
     access: "Accès",
-    accessPlaceholder: "Code d'accès",
+    accessPlaceholder: "vous@email.com",
+    accessLabel: "Inscrivez votre email pour accéder",
+    accessHint: "Membre de l'équipe NNI ? Vous pouvez aussi saisir votre code.",
+    consentHtml: 'J\'accepte l\'<a href="/privacidad.html" target="_blank" rel="noopener">avis de confidentialité</a>',
+    consentNeeded: "Acceptez l'avis de confidentialité pour continuer.",
+    sendingLink: "Envoi du lien…",
+    linkSent: (email) => `Nous avons envoyé un lien à ${email}. Ouvrez-le sur cet appareil pour entrer.`,
+    linkError: "Impossible d'envoyer le lien. Vérifiez l'adresse et réessayez.",
+    linkExpired: "Le lien a expiré ou a déjà été utilisé. Saisissez votre email pour en recevoir un nouveau.",
+    confirmEmailPrompt: "Confirmez l'email utilisé pour demander le lien :",
+    signedInAs: (email) => `Connecté en tant que ${email}`,
+    quotaRemaining: (n) => (n === 1 ? "Il vous reste 1 requête aujourd'hui" : `Il vous reste ${n} requêtes aujourd'hui`),
+    quotaEmptyNote: (time) => `Plus de requêtes aujourd'hui · renouvellement ${time}`,
+    quotaExhausted: (limit, time) => `Vous avez atteint votre limite de ${limit} requêtes pour aujourd'hui. Elle sera renouvelée ${time}.`,
+    resetTomorrow: (time) => `demain à ${time}`,
+    resetToday: (time) => `aujourd'hui à ${time}`,
     showCode: "Afficher le code",
     hideCode: "Masquer le code",
     enter: "Entrer",
@@ -338,7 +394,7 @@ const translations = {
     savedLocally: "Code d'accès effacé à l'ouverture. Connectez-vous pour continuer.",
     invalidCode: "Code invalide",
     welcome: "Bienvenue. Session démarrée.",
-    needAccess: "Entrez le code d'accès avant d'envoyer.",
+    needAccess: "Inscrivez votre email (ou code d'équipe) avant d'envoyer.",
     providers: "Modèles connectables",
     platform: "Plateforme",
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
@@ -613,12 +669,12 @@ function setLanguage(language) {
   elements.heroTitle.textContent = copy.heroTitle;
   elements.webSearchLabel.textContent = copy.webSearch;
   elements.accessCodeInput.placeholder = copy.accessPlaceholder;
+  elements.accessLabel.textContent = copy.accessLabel;
+  elements.accessHint.textContent = copy.accessHint;
+  elements.consentText.innerHTML = copy.consentHtml;
   elements.sendButton.textContent = copy.send;
-  elements.loginButton.textContent = state.accessCode ? copy.exit : copy.enter;
-  elements.toggleAccessVisibility.setAttribute(
-    "aria-label",
-    elements.accessCodeInput.type === "password" ? copy.showCode : copy.hideCode
-  );
+  elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
+  renderQuota();
 
   updateTaskUI(state.selectedTask);
   renderProviders();
@@ -629,21 +685,128 @@ function setLanguage(language) {
   syncAttachmentMenu();
   renderAttachmentList();
 
-  if (!state.accessCode && !elements.sessionState.classList.contains("error")) {
+  if (!isAuthenticated() && !elements.sessionState.classList.contains("error")) {
     setSessionState(false, copy.signedOut);
+  } else if (state.authMode === "email") {
+    setSessionState(true, copy.signedInAs(state.email));
   }
 }
 
 function logout() {
   const copy = translations[state.language];
+  if (state.authMode === "email" && window.AllAIsAuth) {
+    window.AllAIsAuth.signOut().catch(() => {});
+  }
   state.accessCode = "";
+  state.authMode = "";
+  state.email = "";
+  state.quota = null;
   clearAccessError();
   elements.loginBox.classList.remove("authenticated");
   elements.accessCodeInput.value = "";
-  elements.accessCodeInput.type = "password";
   elements.loginButton.textContent = copy.enter;
-  elements.toggleAccessVisibility.textContent = "👁";
+  syncConsentVisibility();
+  renderQuota();
   setSessionState(false, copy.signedOut);
+}
+
+function syncConsentVisibility() {
+  const show = !isAuthenticated() && isEmailValue(elements.accessCodeInput.value);
+  elements.consentRow.hidden = !show;
+}
+
+function formatResetTime(resetAt) {
+  const copy = translations[state.language];
+  const reset = new Date(resetAt);
+  if (Number.isNaN(reset.getTime())) return "";
+  const locale = { es: "es-MX", en: "en-US", fr: "fr-FR" }[state.language] || "es-MX";
+  const time = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZoneName: "short" }).format(reset);
+  const sameDay = reset.toDateString() === new Date().toDateString();
+  return sameDay ? copy.resetToday(time) : copy.resetTomorrow(time);
+}
+
+function renderQuota() {
+  const note = elements.quotaNote;
+  if (!note) return;
+  const quota = state.quota;
+  if (state.authMode !== "email" || !quota) {
+    note.hidden = true;
+    note.textContent = "";
+    return;
+  }
+  const copy = translations[state.language];
+  note.hidden = false;
+  note.classList.toggle("exhausted", quota.remaining <= 0);
+  note.textContent = quota.remaining > 0
+    ? copy.quotaRemaining(quota.remaining)
+    : copy.quotaEmptyNote(formatResetTime(quota.resetAt));
+}
+
+function clientContext() {
+  const params = new URLSearchParams(window.location.search);
+  const utm = ["utm_source", "utm_medium", "utm_campaign"]
+    .map((key) => (params.get(key) ? `${key}=${params.get(key)}` : ""))
+    .filter(Boolean)
+    .join("&");
+  return {
+    referrer: document.referrer || "",
+    utm,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    language: navigator.language || ""
+  };
+}
+
+async function authHeaders() {
+  const headers = { "content-type": "application/json" };
+  if (state.authMode === "email" && window.AllAIsAuth) {
+    const token = await window.AllAIsAuth.idToken();
+    if (token) headers.authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+async function startEmailSession() {
+  const copy = translations[state.language];
+  state.authMode = "email";
+  const response = await fetch(`${API_BASE}/session`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      authType: "email",
+      consent: localStorage.getItem(CONSENT_KEY) === "1",
+      client: clientContext()
+    })
+  });
+  const data = await readApiJson(response);
+  if (!response.ok || !data.ok) {
+    state.authMode = "";
+    throw new Error(data.message || "session_failed");
+  }
+  state.email = data.email;
+  state.quota = data.quota || null;
+  clearAccessError();
+  elements.accessCodeInput.value = "";
+  elements.loginBox.classList.add("authenticated");
+  elements.loginButton.textContent = copy.exit;
+  syncConsentVisibility();
+  renderQuota();
+  setSessionState(true, copy.signedInAs(state.email));
+  trackEvent("email_session_started");
+}
+
+async function restoreEmailSession() {
+  if (!window.AllAIsAuth) return;
+  const copy = translations[state.language];
+  try {
+    const linkedUser = await window.AllAIsAuth.completeLinkIfPresent(() => window.prompt(copy.confirmEmailPrompt) || "");
+    const user = linkedUser || (await window.AllAIsAuth.currentUser());
+    if (user) await startEmailSession();
+  } catch (error) {
+    console.warn("AllAIs email session", error);
+    if (/expired|invalid-action-code|invalid-email/i.test(String(error?.code || error?.message))) {
+      showAccessError(copy.linkExpired);
+    }
+  }
 }
 
 function drawAttentionToAccess() {
@@ -1247,17 +1410,46 @@ async function loadProviders() {
 async function login() {
   const copy = translations[state.language];
 
-  if (state.accessCode) {
+  if (isAuthenticated()) {
     logout();
     return;
   }
 
-  const accessCode = cleanAccessCode(elements.accessCodeInput.value);
+  const rawValue = elements.accessCodeInput.value.trim();
   clearAccessError();
+
+  if (isEmailValue(rawValue)) {
+    if (!elements.consentCheckbox.checked) {
+      syncConsentVisibility();
+      showAccessError(copy.consentNeeded);
+      return;
+    }
+    if (!window.AllAIsAuth) {
+      showAccessError(copy.linkError);
+      return;
+    }
+    elements.loginButton.disabled = true;
+    setSessionState(true, copy.sendingLink);
+    try {
+      localStorage.setItem(CONSENT_KEY, "1");
+      await window.AllAIsAuth.sendLink(rawValue.toLowerCase(), state.language);
+      setSessionState(true, copy.linkSent(rawValue.toLowerCase()));
+      trackEvent("email_link_sent");
+    } catch (error) {
+      console.warn("AllAIs email link", error);
+      trackEvent("email_link_failed");
+      showAccessError(copy.linkError);
+    } finally {
+      elements.loginButton.disabled = false;
+    }
+    return;
+  }
+
+  const accessCode = cleanAccessCode(rawValue);
   const response = await fetch(`${API_BASE}/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ accessCode })
+    body: JSON.stringify({ accessCode, client: clientContext() })
   });
   const data = await readApiJson(response);
 
@@ -1271,6 +1463,7 @@ async function login() {
 
   trackEvent("access_code_success");
   state.accessCode = accessCode;
+  state.authMode = "code";
   clearAccessError();
   elements.accessCodeInput.value = "";
   elements.loginBox.classList.add("authenticated");
@@ -1284,7 +1477,7 @@ async function sendPrompt(event) {
   const prompt = elements.promptInput.value.trim();
   const attachmentsAtSend = state.attachments.slice();
   if (!prompt && !attachmentsAtSend.length) return;
-  if (!state.accessCode) {
+  if (!isAuthenticated()) {
     trackEvent("access_code_required", {
       action: "prompt_submit"
     });
@@ -1294,6 +1487,10 @@ async function sendPrompt(event) {
   }
 
   const copy = translations[state.language];
+  if (state.authMode === "email" && state.quota && state.quota.remaining <= 0) {
+    addMessage("assistant", copy.quotaExhausted(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs");
+    return;
+  }
   const capabilities = selectedCapabilities();
   if (attachmentsAtSend.some((item) => (item.kind === "image" && !capabilities.images) || (item.kind === "pdf" && !capabilities.pdf) || (item.kind === "video" && !capabilities.videos))) {
     trackEvent("app_error", {
@@ -1357,7 +1554,7 @@ async function sendPrompt(event) {
   try {
     const response = await fetch(`${API_BASE}/chat`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: await authHeaders(),
       body: JSON.stringify({
         accessCode: cleanAccessCode(state.accessCode),
         provider,
@@ -1374,6 +1571,17 @@ async function sendPrompt(event) {
     });
 
     const data = await readApiJson(response);
+    if (data.quota) {
+      state.quota = data.quota;
+      renderQuota();
+    }
+    if (response.status === 429 && data.code === "DAILY_LIMIT") {
+      if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
+      trackEvent("daily_limit_reached");
+      addMessage("assistant", copy.quotaExhausted(data.quota?.limit || 20, formatResetTime(data.quota?.resetAt)), "AllAIs");
+      state.history.pop();
+      return;
+    }
     if (!response.ok) throw new Error(data.error || "No se pudo completar la consulta.");
 
     const answer = data.answer || copy.emptyAnswer;
@@ -1413,13 +1621,14 @@ function resetChat() {
 
 function bindEvents() {
   elements.loginButton.addEventListener("click", login);
-  elements.toggleAccessVisibility.addEventListener("click", () => {
-    const copy = translations[state.language];
-    const isPassword = elements.accessCodeInput.type === "password";
-    elements.accessCodeInput.type = isPassword ? "text" : "password";
-    elements.toggleAccessVisibility.textContent = isPassword ? "🙈" : "👁";
-    elements.toggleAccessVisibility.setAttribute("aria-label", isPassword ? copy.hideCode : copy.showCode);
+  elements.accessCodeInput.addEventListener("input", syncConsentVisibility);
+  elements.accessCodeInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      login();
+    }
   });
+  elements.consentCheckbox.addEventListener("change", clearAccessError);
   elements.promptForm.addEventListener("submit", sendPrompt);
   elements.promptInput.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
@@ -1534,6 +1743,7 @@ async function init() {
   updateTaskUI(state.selectedTask);
   resizePromptInput();
   setSessionState(false, translations[state.language].signedOut);
+  await restoreEmailSession();
 }
 
 init();

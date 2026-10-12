@@ -13,7 +13,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AllAIs | NNI</title>
-    <link rel="stylesheet" href="/styles.css?v=32" />
+    <link rel="stylesheet" href="/styles.css?v=33" />
   </head>
   <body>
     <div class="app-shell">
@@ -42,11 +42,16 @@
         <section class="panel">
           <p class="panel-label" id="accessPanelLabel">Acceso</p>
           <div class="login-box" id="loginBox">
+            <label class="access-label" id="accessLabel" for="accessCodeInput">Registra tu email para acceso</label>
             <div class="password-field">
-              <input id="accessCodeInput" type="password" placeholder="Código de acceso" autocomplete="off" />
-              <button type="button" class="password-toggle" id="toggleAccessVisibility" aria-label="Mostrar código">👁</button>
+              <input id="accessCodeInput" type="text" inputmode="email" placeholder="tu@email.com" autocomplete="email" autocapitalize="off" spellcheck="false" />
             </div>
+            <label class="consent-row" id="consentRow" hidden>
+              <input type="checkbox" id="consentCheckbox" />
+              <span id="consentText">Acepto el <a href="/privacidad.html" target="_blank" rel="noopener">aviso de privacidad</a></span>
+            </label>
             <button id="loginButton">Entrar</button>
+            <p class="access-hint" id="accessHint">¿Eres del equipo NNI? También puedes escribir tu código.</p>
           </div>
           <p class="session-state" id="sessionState">Sesión no iniciada</p>
         </section>
@@ -142,6 +147,7 @@
           <div class="attachment-list" id="attachmentList" aria-live="polite" hidden></div>
 
           <div class="composer-footer">
+            <span class="quota-note" id="quotaNote" aria-live="polite" hidden></span>
             <span class="selected-provider-note" id="selectedProviderNote">ChatGPT / OpenAI</span>
             <button type="submit" id="sendButton">Continuar</button>
           </div>
@@ -150,7 +156,8 @@
       </main>
     </div>
 
-    <script src="/app.js?v=32"></script>
+    <script type="module" src="/auth.js?v=33"></script>
+    <script defer src="/app.js?v=33"></script>
   </body>
 </html>
 

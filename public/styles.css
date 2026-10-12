@@ -1299,3 +1299,63 @@ h2 {
     white-space: nowrap;
   }
 }
+
+/* Acceso por email y límite diario */
+.access-label {
+  color: var(--muted-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.login-box.authenticated .access-label,
+.login-box.authenticated .access-hint,
+.login-box.authenticated .consent-row {
+  display: none;
+}
+
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.consent-row[hidden] {
+  display: none;
+}
+
+.consent-row input {
+  margin: 2px 0 0;
+  accent-color: #4d8fe8;
+}
+
+.consent-row a {
+  color: var(--metal-blue-text);
+}
+
+.access-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.quota-note {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  opacity: 0.85;
+}
+
+.quota-note.exhausted {
+  color: #e9b872;
+  opacity: 1;
+}
+
+.quota-note[hidden] {
+  display: none;
+}

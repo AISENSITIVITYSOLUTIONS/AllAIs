@@ -184,3 +184,23 @@ NNI no vende acceso simple a modelos. Vende una capa profesional:
 - historial organizado por cliente/proyecto;
 - control de costos;
 - reportes exportables.
+
+## Acceso por email, registro de visitas y límite diario
+
+- El acceso principal es por **enlace al correo** (Firebase Authentication, sin contraseña). El **código de equipo** (`NNI_ACCESS_CODE`) sigue funcionando como alternativa en el mismo campo y no tiene límite diario.
+- Cada inicio de sesión registra una visita en Firestore:
+  - `visitors/{email}`: primera y última visita, número de visitas, última ubicación aproximada y consentimiento del aviso de privacidad.
+  - `visits/{id}`: cada visita con fecha, método (email o código), país, estado, ciudad, navegador, referencia y UTM. La IP no se guarda.
+  - `usage/{email}_{AAAA-MM-DD}`: consultas usadas por día.
+- Límite diario por email: `DAILY_QUERY_LIMIT` (20 por defecto); se renueva a las 00:00 de la Ciudad de México.
+- La ubicación se obtiene de la IP con `GEO_LOOKUP_URL` (por defecto `https://ipapi.co/{ip}/json/`).
+
+### Configuración única en Firebase
+
+1. Authentication → Sign-in method → Email/Password → activar **Email link (passwordless sign-in)**.
+2. Authentication → Settings → Authorized domains → agregar `allais.nni.ai`.
+3. Authentication → Templates → idioma de las plantillas en español.
+4. Firestore Database → crear base de datos (modo producción).
+5. `firebase deploy --only functions,hosting,firestore:rules`
+
+El acceso por email solo funciona en Firebase Hosting (o en sus emuladores); el servidor local `npm start` sigue aceptando únicamente el código de equipo.

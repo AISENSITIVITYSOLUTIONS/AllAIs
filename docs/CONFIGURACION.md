@@ -29,7 +29,7 @@ notepad functions\.env
    SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
    SHEETS_WEBHOOK_TOKEN=la-misma-clave-del-paso-3
    ```
-7. Las pestañas Visitas y Consultas se crean solas con el primer registro.
+7. Las pestañas Visitas, Consultas y Usuarios se crean solas con el primer registro.
 
 ## 4. Firestore (recomendado)
 

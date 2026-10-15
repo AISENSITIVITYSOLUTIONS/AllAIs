@@ -80,6 +80,8 @@ const elements = {
   sidebarClose: $("#sidebarClose"),
   sidebarScrim: $("#sidebarScrim"),
   newChatButton: $("#newChatButton"),
+  topbarNewChat: $("#topbarNewChat"),
+  topbarNewChatLabel: $("#topbarNewChatLabel"),
   languageButtons: document.querySelectorAll(".language-button"),
   accessPanelLabel: $("#accessPanelLabel"),
   providersPanelLabel: $("#providersPanelLabel"),
@@ -788,6 +790,7 @@ function setLanguage(language) {
     </span>
     ${copy.newChat}
   `;
+  if (elements.topbarNewChatLabel) elements.topbarNewChatLabel.textContent = copy.newChat;
   elements.providersPanelLabel.textContent = copy.providers;
   elements.platformPanelLabel.textContent = copy.platform;
   elements.platformDescription.textContent = copy.platformDescription;
@@ -2100,6 +2103,7 @@ function bindEvents() {
     }
   });
   elements.newChatButton.addEventListener("click", resetChat);
+  if (elements.topbarNewChat) elements.topbarNewChat.addEventListener("click", resetChat);
   elements.providerList.addEventListener("click", (event) => {
     const card = event.target.closest(".provider-card");
     if (!card) return;

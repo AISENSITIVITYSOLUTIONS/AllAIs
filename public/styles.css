@@ -2377,3 +2377,43 @@ img {
 #formatChips[hidden] {
   display: none !important;
 }
+
+/* Botón "Nueva consulta" en la barra superior, junto al modelo en uso */
+.topbar-new-chat {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.topbar-new-chat:hover {
+  border-color: var(--accent);
+  background: var(--surface-2, var(--surface));
+}
+.topbar-new-chat .new-chat-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+.topbar-new-chat .new-chat-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (max-width: 720px) {
+  .topbar-new-chat #topbarNewChatLabel { display: none; }
+  .topbar-new-chat { padding: 0 10px; }
+}

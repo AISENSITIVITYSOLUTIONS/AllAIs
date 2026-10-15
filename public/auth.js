@@ -18,6 +18,8 @@ function ready() {
       const app = appModule.initializeApp(config);
       auth = authApi.getAuth(app);
       await authApi.setPersistence(auth, authApi.browserLocalPersistence);
+      // Si el inicio con Google usó redirección (navegadores que bloquean ventanas), se completa aquí.
+      await authApi.getRedirectResult(auth).catch(() => null);
       return auth;
     })();
   }
@@ -34,6 +36,26 @@ window.AllAIsAuth = {
       handleCodeInApp: true
     });
     localStorage.setItem(EMAIL_KEY, email);
+  },
+
+  // Inicio de sesión con Google: ventana emergente y, si el navegador la bloquea, redirección.
+  async signInWithGoogle(language) {
+    await ready();
+    auth.languageCode = language || "es";
+    const provider = new authApi.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      const credential = await authApi.signInWithPopup(auth, provider);
+      return credential.user;
+    } catch (error) {
+      const code = error?.code || "";
+      if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+        await authApi.signInWithRedirect(auth, provider);
+        return null;
+      }
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return null;
+      throw error;
+    }
   },
 
   async completeLinkIfPresent(askEmail) {

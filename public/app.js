@@ -51,6 +51,11 @@ const elements = {
   consentCheckbox: $("#consentCheckbox"),
   consentText: $("#consentText"),
   quotaNote: $("#quotaNote"),
+  googleButton: $("#googleButton"),
+  googleLabel: $("#googleLabel"),
+  authDivider: $("#authDivider"),
+  authDividerText: $("#authDividerText"),
+  limitNote: $("#limitNote"),
   authDialog: $("#authDialog"),
   authClose: $("#authClose"),
   authTitle: $("#authTitle"),
@@ -116,6 +121,10 @@ const translations = {
     access: "Acceso",
     accessPlaceholder: "tu@email.com",
     accessLabel: "Registra tu email para acceso",
+    google: "Continuar con Google",
+    googleError: "No se pudo iniciar sesión con Google. Intenta de nuevo o usa tu email.",
+    orEmail: "o con tu email",
+    limitNote: (n) => `Tienes un límite de ${n} consultas diarias.`,
     guest: "Invitado",
     guestStatus: "Sin sesión · consultas desactivadas",
     teamAccount: "Invitado con código promocional",
@@ -124,7 +133,7 @@ const translations = {
     signOut: "Cerrar sesión",
     accountLabel: "Tu cuenta",
     authTitle: "Entra a AllAIs",
-    authSubtitle: "Registra tu email para hacer consultas. Te enviaremos un enlace de acceso; no necesitas contraseña.",
+    authSubtitle: "Entra con tu cuenta de Google o con tu email. No necesitas contraseña.",
     accessHint: "¿Tienes tu código promocional? También puedes entrar con él.",
     consentHtml: 'Acepto el <a href="/privacidad.html" target="_blank" rel="noopener">aviso de privacidad</a>',
     consentNeeded: "Acepta el aviso de privacidad para continuar.",
@@ -272,6 +281,10 @@ const translations = {
     access: "Access",
     accessPlaceholder: "you@email.com",
     accessLabel: "Register your email to get access",
+    google: "Continue with Google",
+    googleError: "Couldn't sign in with Google. Try again or use your email.",
+    orEmail: "or with your email",
+    limitNote: (n) => `You have a limit of ${n} queries per day.`,
     guest: "Guest",
     guestStatus: "Not signed in · queries disabled",
     teamAccount: "Guest with promo code",
@@ -280,7 +293,7 @@ const translations = {
     signOut: "Sign out",
     accountLabel: "Your account",
     authTitle: "Sign in to AllAIs",
-    authSubtitle: "Register your email to send queries. We'll email you a sign-in link; no password needed.",
+    authSubtitle: "Sign in with your Google account or your email. No password needed.",
     accessHint: "Have a promo code? You can also sign in with it.",
     consentHtml: 'I accept the <a href="/privacidad.html" target="_blank" rel="noopener">privacy notice</a>',
     consentNeeded: "Accept the privacy notice to continue.",
@@ -428,6 +441,10 @@ const translations = {
     access: "Accès",
     accessPlaceholder: "vous@email.com",
     accessLabel: "Inscrivez votre email pour accéder",
+    google: "Continuer avec Google",
+    googleError: "Impossible de se connecter avec Google. Réessayez ou utilisez votre email.",
+    orEmail: "ou avec votre email",
+    limitNote: (n) => `Vous avez une limite de ${n} requêtes par jour.`,
     guest: "Invité",
     guestStatus: "Non connecté · requêtes désactivées",
     teamAccount: "Invité avec code promotionnel",
@@ -436,7 +453,7 @@ const translations = {
     signOut: "Se déconnecter",
     accountLabel: "Votre compte",
     authTitle: "Accéder à AllAIs",
-    authSubtitle: "Inscrivez votre email pour envoyer des requêtes. Nous vous enverrons un lien de connexion, sans mot de passe.",
+    authSubtitle: "Connectez-vous avec votre compte Google ou votre email. Aucun mot de passe nécessaire.",
     accessHint: "Vous avez un code promotionnel ? Vous pouvez aussi l'utiliser pour entrer.",
     consentHtml: 'J\'accepte l\'<a href="/privacidad.html" target="_blank" rel="noopener">avis de confidentialité</a>',
     consentNeeded: "Acceptez l'avis de confidentialité pour continuer.",
@@ -778,6 +795,9 @@ function setLanguage(language) {
   elements.attachButton.setAttribute("title", copy.attach);
   elements.accessLabel.textContent = copy.accessLabel;
   elements.accessHint.textContent = copy.accessHint;
+  elements.googleLabel.textContent = copy.google;
+  elements.authDividerText.textContent = copy.orEmail;
+  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 20);
   elements.consentText.innerHTML = copy.consentHtml;
   elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
   renderQuota();
@@ -849,7 +869,11 @@ function renderAccount() {
   elements.accountStatus.classList.toggle("is-active", signed);
   elements.accountButton.textContent = signed ? copy.signOut : copy.signIn;
   elements.accountAvatar.textContent = signed ? (state.email || "N").charAt(0).toUpperCase() : "";
+  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 20);
   elements.accountAvatar.classList.toggle("is-guest", !signed);
+  elements.googleButton.hidden = signed;
+  elements.authDivider.hidden = signed;
+  document.getElementById("googleConsent").hidden = signed;
   elements.topbarAccount.classList.toggle("is-signed", signed);
   elements.topbarAccount.setAttribute("aria-label", signed ? `${copy.accountLabel}: ${name}` : copy.signIn);
   elements.topbarAccount.querySelector(".topbar-account-label").textContent = signed ? (state.email ? state.email.charAt(0).toUpperCase() : "N") : copy.signIn;
@@ -941,6 +965,27 @@ async function startEmailSession() {
   setSessionState(true, copy.signedInAs(state.email));
   trackEvent("email_session_started");
   closeAuthDialog();
+}
+
+async function signInWithGoogle() {
+  const copy = translations[state.language];
+  if (!window.AllAIsAuth) {
+    showAccessError(copy.googleError);
+    return;
+  }
+  clearAccessError();
+  elements.googleButton.disabled = true;
+  try {
+    localStorage.setItem(CONSENT_KEY, "1");
+    const user = await window.AllAIsAuth.signInWithGoogle(state.language);
+    if (user) await startEmailSession();
+    trackEvent("google_sign_in");
+  } catch (error) {
+    console.warn("AllAIs Google sign-in", error);
+    showAccessError(copy.googleError);
+  } finally {
+    elements.googleButton.disabled = false;
+  }
 }
 
 async function restoreEmailSession() {
@@ -1876,6 +1921,7 @@ function bindEvents() {
     }
   });
   elements.consentCheckbox.addEventListener("change", clearAccessError);
+  elements.googleButton.addEventListener("click", signInWithGoogle);
   elements.accountButton.addEventListener("click", () => { closeSidebar(); openAuthDialog(); });
   elements.topbarAccount.addEventListener("click", openAuthDialog);
   elements.authClose.addEventListener("click", closeAuthDialog);

@@ -916,11 +916,15 @@ function renderQuota() {
     return;
   }
   const copy = translations[state.language];
+  if (quota.remaining > 0) {
+    note.hidden = true;
+    note.textContent = "";
+    note.classList.remove("exhausted");
+    return;
+  }
   note.hidden = false;
-  note.classList.toggle("exhausted", quota.remaining <= 0);
-  note.textContent = quota.remaining > 0
-    ? copy.quotaRemaining(quota.remaining)
-    : copy.quotaEmptyNote(formatResetTime(quota.resetAt));
+  note.classList.add("exhausted");
+  note.textContent = copy.quotaEmptyNote(formatResetTime(quota.resetAt));
 }
 
 function clientContext() {

@@ -929,6 +929,10 @@ function clientContext() {
 
 async function authHeaders() {
   const headers = { "content-type": "application/json" };
+  if (window.AllAIsAuth?.appCheckToken) {
+    const appCheckToken = await window.AllAIsAuth.appCheckToken();
+    if (appCheckToken) headers["x-firebase-appcheck"] = appCheckToken;
+  }
   if (state.authMode === "email" && window.AllAIsAuth) {
     const token = await window.AllAIsAuth.idToken();
     if (token) headers.authorization = `Bearer ${token}`;
@@ -1701,7 +1705,7 @@ async function login() {
   const accessCode = cleanAccessCode(rawValue);
   const response = await fetch(`${API_BASE}/session`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: await authHeaders(),
     body: JSON.stringify({ accessCode, client: clientContext() })
   });
   const data = await readApiJson(response);

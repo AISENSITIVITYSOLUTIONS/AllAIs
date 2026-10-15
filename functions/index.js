@@ -1,5 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const crypto = require("node:crypto");
 const { listProviders, callProvider } = require("./providers");
 
 admin.initializeApp();
@@ -189,6 +190,46 @@ async function consumeQuota(holder, limit = DAILY_QUERY_LIMIT) {
   });
 }
 
+// ---------- Protección contra abuso ----------
+// Límite de solicitudes por IP (la IP se guarda cifrada con hash, nunca en claro).
+const RATE_LIMITS = {
+  session: { max: Number(process.env.RATE_SESSION_PER_15MIN || 10), windowMs: 15 * 60 * 1000 },
+  chat: { max: Number(process.env.RATE_CHAT_PER_MIN || 20), windowMs: 60 * 1000 }
+};
+
+async function rateLimited(request, kind) {
+  const rule = RATE_LIMITS[kind];
+  const ip = clientIp(request);
+  if (!rule || !ip) return false;
+  const bucket = Math.floor(Date.now() / rule.windowMs);
+  const id = `${kind}_${crypto.createHash("sha256").update(ip).digest("hex").slice(0, 24)}_${bucket}`;
+  const ref = db.collection("rateLimits").doc(id);
+  try {
+    const count = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const next = (snapshot.exists ? Number(snapshot.get("count") || 0) : 0) + 1;
+      transaction.set(ref, { count: next, expiresAt: new Date(Date.now() + rule.windowMs * 2) }, { merge: true });
+      return next;
+    });
+    return count > rule.max;
+  } catch (error) {
+    console.warn("AllAIs rate limit check failed", error?.message);
+    return false;
+  }
+}
+
+// Firebase App Check (reCAPTCHA v3). Se activa al definir APPCHECK_SITE_KEY; se exige con APPCHECK_ENFORCE=true.
+async function appCheckOk(request) {
+  const token = String(request.get("x-firebase-appcheck") || "");
+  if (!token) return process.env.APPCHECK_ENFORCE !== "true";
+  try {
+    await admin.appCheck().verifyToken(token);
+    return true;
+  } catch {
+    return process.env.APPCHECK_ENFORCE !== "true";
+  }
+}
+
 // ---------- Registro en Google Sheets (Apps Script) ----------
 // SHEETS_WEBHOOK_URL y SHEETS_WEBHOOK_TOKEN se configuran en functions/.env. Si faltan, no se envía nada.
 async function logToSheet(type, row) {
@@ -263,7 +304,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     response.set("Access-Control-Allow-Origin", origin);
     response.set("Vary", "Origin");
     response.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    response.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    response.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Firebase-AppCheck");
   }
   if (request.method === "OPTIONS") {
     response.status(204).send("");
@@ -275,6 +316,23 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     if (path === "/providers" && request.method === "GET") {
       sendJson(response, 200, { providers: listProviders() });
       return;
+    }
+
+    if (path === "/config" && request.method === "GET") {
+      sendJson(response, 200, { appCheckSiteKey: process.env.APPCHECK_SITE_KEY || "", dailyLimit: DAILY_QUERY_LIMIT });
+      return;
+    }
+
+    if ((path === "/session" || path === "/chat") && request.method === "POST") {
+      if (!(await appCheckOk(request))) {
+        sendJson(response, 401, { ok: false, error: "App verification failed.", code: "APP_CHECK" });
+        return;
+      }
+      const limitedKind = path === "/chat" ? "chat" : (request.body?.authType === "email" ? null : "session");
+      if (limitedKind && await rateLimited(request, limitedKind)) {
+        sendJson(response, 429, { ok: false, error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", message: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", code: "RATE_LIMIT" });
+        return;
+      }
     }
 
     if (path === "/health" && request.method === "GET") {

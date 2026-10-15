@@ -6,6 +6,8 @@ const EMAIL_KEY = "allais_email_for_signin";
 let authApi = null;
 let auth = null;
 let readyPromise = null;
+let appCheckApi = null;
+let appCheck = null;
 
 function ready() {
   if (!readyPromise) {
@@ -17,6 +19,19 @@ function ready() {
       authApi = await import(`${SDK}/firebase-auth.js`);
       const app = appModule.initializeApp(config);
       auth = authApi.getAuth(app);
+      // App Check (reCAPTCHA v3): solo si el servidor publica una clave de sitio.
+      try {
+        const settings = await fetch("/api/config").then((r) => (r.ok ? r.json() : {}));
+        if (settings.appCheckSiteKey) {
+          appCheckApi = await import(`${SDK}/firebase-app-check.js`);
+          appCheck = appCheckApi.initializeAppCheck(app, {
+            provider: new appCheckApi.ReCaptchaV3Provider(settings.appCheckSiteKey),
+            isTokenAutoRefreshEnabled: true
+          });
+        }
+      } catch (error) {
+        console.warn("AllAIs App Check", error);
+      }
       await authApi.setPersistence(auth, authApi.browserLocalPersistence);
       // Si el inicio con Google usó redirección (navegadores que bloquean ventanas), se completa aquí.
       await authApi.getRedirectResult(auth).catch(() => null);
@@ -80,6 +95,17 @@ window.AllAIsAuth = {
   async idToken() {
     const user = await this.currentUser();
     return user ? user.getIdToken() : "";
+  },
+
+  async appCheckToken() {
+    try {
+      await ready();
+      if (!appCheck) return "";
+      const result = await appCheckApi.getToken(appCheck, false);
+      return result.token || "";
+    } catch {
+      return "";
+    }
   },
 
   async signOut() {

@@ -2373,3 +2373,7 @@ img {
   font-size: 13px;
   font-weight: 600;
 }
+
+#formatChips[hidden] {
+  display: none !important;
+}

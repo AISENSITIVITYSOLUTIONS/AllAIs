@@ -206,7 +206,7 @@ const translations = {
         label: "Escribir",
         description: "Mensajes, emails, cartas, propuestas y textos.",
         placeholder: "Ejemplo: Necesito escribirle un mensaje a mi jefe para pedirle una reunión breve esta semana...",
-        options: ["Mensaje", "Email", "Carta formal", "Publicación para redes", "Propuesta", "Texto académico", "Texto comercial"]
+        options: []
       },
       learn: {
         label: "Aprender",
@@ -368,7 +368,7 @@ const translations = {
         label: "Write",
         description: "Messages, emails, letters, proposals and texts.",
         placeholder: "Example: I need to write my boss a message asking for a short meeting this week...",
-        options: ["Message", "Email", "Formal letter", "Social post", "Proposal", "Academic text", "Commercial text"]
+        options: []
       },
       learn: {
         label: "Learn",
@@ -530,7 +530,7 @@ const translations = {
         label: "Écrire",
         description: "Messages, emails, lettres, propositions et textes.",
         placeholder: "Exemple : Je dois écrire un message à mon responsable pour demander une courte réunion cette semaine...",
-        options: ["Message", "Email", "Lettre formelle", "Publication réseaux sociaux", "Proposition", "Texte académique", "Texte commercial"]
+        options: []
       },
       learn: {
         label: "Apprendre",
@@ -713,6 +713,7 @@ function updateTaskUI(taskId) {
 function renderFormatChips(task) {
   if (!elements.formatChips) return;
   elements.formatChips.replaceChildren();
+  elements.formatChips.hidden = !(task.options || []).length;
   for (const option of task.options || []) {
     const chip = document.createElement("button");
     chip.type = "button";

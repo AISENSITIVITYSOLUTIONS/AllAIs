@@ -232,6 +232,107 @@ async function appCheckOk(request) {
   }
 }
 
+// ---------- Panel de administración ----------
+function adminEmails() {
+  return String(process.env.ADMIN_EMAILS || "fdealbam@nni.ai,fdealbam@gmail.com")
+    .split(/[\s,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+}
+
+async function requireAdmin(request) {
+  const user = await verifyEmailUser(request);
+  if (!user || !adminEmails().includes(user.email)) return null;
+  return user;
+}
+
+function toIso(value) {
+  if (!value) return null;
+  const date = value.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+async function adminStats(days) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const sinceDay = dayKey(since);
+  const [visitsSnap, usageSnap, codesSnap] = await Promise.all([
+    db.collection("visits").where("at", ">=", since).orderBy("at", "desc").limit(5000).get(),
+    db.collection("usage").where("day", ">=", sinceDay).limit(5000).get(),
+    db.collection("promoCodes").limit(500).get()
+  ]);
+
+  const byDay = {};
+  const byCountry = {};
+  const byMethod = {};
+  const emails = new Set();
+  const recent = [];
+  visitsSnap.forEach((doc) => {
+    const v = doc.data();
+    const at = v.at?.toDate ? v.at.toDate() : null;
+    if (!at) return;
+    const day = dayKey(at);
+    byDay[day] = (byDay[day] || 0) + 1;
+    const country = v.country || "Sin dato";
+    byCountry[country] = (byCountry[country] || 0) + 1;
+    const method = v.method || "otro";
+    byMethod[method] = (byMethod[method] || 0) + 1;
+    if (v.email) emails.add(v.email);
+    if (recent.length < 50) recent.push({ at: at.toISOString(), email: v.email || "", code: v.code || "", method, country: v.country || "", city: v.city || "" });
+  });
+
+  const byHolder = {};
+  const queriesByDay = {};
+  usageSnap.forEach((doc) => {
+    const u = doc.data();
+    const holder = u.holder || u.email || doc.id.replace(/_\d{4}-\d{2}-\d{2}$/, "");
+    const count = Number(u.count || 0);
+    byHolder[holder] = (byHolder[holder] || 0) + count;
+    queriesByDay[u.day] = (queriesByDay[u.day] || 0) + count;
+  });
+
+  const codes = [];
+  codesSnap.forEach((doc) => {
+    const c = doc.data();
+    codes.push({ code: doc.id, label: c.label || "", active: c.active !== false, uses: Number(c.uses || 0), maxUses: c.maxUses || null, dailyLimit: c.dailyLimit || PROMO_DEFAULT_DAILY_LIMIT, expiresAt: toIso(c.expiresAt), createdAt: toIso(c.createdAt) });
+  });
+  codes.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+
+  const sortDesc = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+  return {
+    days,
+    totals: {
+      visits: visitsSnap.size,
+      uniqueEmails: emails.size,
+      queries: Object.values(byHolder).reduce((sum, n) => sum + n, 0)
+    },
+    visitsByDay: byDay,
+    queriesByDay,
+    countries: sortDesc(byCountry).slice(0, 15),
+    methods: sortDesc(byMethod),
+    topUsers: sortDesc(byHolder).slice(0, 20),
+    recent,
+    codes
+  };
+}
+
+async function saveCode(body, adminUser) {
+  const id = cleanCode(body.code).toUpperCase().replace(/\s+/g, "-");
+  if (!/^[A-Z0-9-]{4,40}$/.test(id)) throw Object.assign(new Error("El código debe tener de 4 a 40 letras, números o guiones."), { status: 400 });
+  if (id === cleanCode(process.env.NNI_ACCESS_CODE || "NNI-DEMO-2026").toUpperCase()) throw Object.assign(new Error("Ese código está reservado."), { status: 400 });
+  const ref = db.collection("promoCodes").doc(id);
+  const existing = await ref.get();
+  const data = {
+    label: cleanText(body.label, 120),
+    active: body.active !== false,
+    maxUses: body.maxUses ? Math.max(1, Math.floor(Number(body.maxUses))) : null,
+    dailyLimit: body.dailyLimit ? Math.max(1, Math.floor(Number(body.dailyLimit))) : PROMO_DEFAULT_DAILY_LIMIT,
+    expiresAt: body.expiresAt ? new Date(`${body.expiresAt}T23:59:59-06:00`) : null,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: adminUser.email
+  };
+  if (!existing.exists) Object.assign(data, { uses: 0, createdAt: FieldValue.serverTimestamp(), createdBy: adminUser.email });
+  await ref.set(data, { merge: true });
+  return id;
+}
+
 // ---------- Registro en Google Sheets (Apps Script) ----------
 // SHEETS_WEBHOOK_URL y SHEETS_WEBHOOK_TOKEN se configuran en functions/.env. Si faltan, no se envía nada.
 async function logToSheet(type, row) {
@@ -333,6 +434,28 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       const limitedKind = path === "/chat" ? "chat" : (request.body?.authType === "email" ? null : "session");
       if (limitedKind && await rateLimited(request, limitedKind)) {
         sendJson(response, 429, { ok: false, error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", message: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", code: "RATE_LIMIT" });
+        return;
+      }
+    }
+
+    if (path.startsWith("/admin/")) {
+      const adminUser = await requireAdmin(request);
+      if (!adminUser) {
+        sendJson(response, 403, { error: "Solo administradores." });
+        return;
+      }
+      if (path === "/admin/stats" && request.method === "GET") {
+        const days = Math.min(Math.max(Number(request.query?.days || 30), 1), 180);
+        sendJson(response, 200, await adminStats(days));
+        return;
+      }
+      if (path === "/admin/codes" && request.method === "POST") {
+        try {
+          const code = await saveCode(request.body || {}, adminUser);
+          sendJson(response, 200, { ok: true, code });
+        } catch (error) {
+          sendJson(response, error.status || 500, { error: error.message });
+        }
         return;
       }
     }

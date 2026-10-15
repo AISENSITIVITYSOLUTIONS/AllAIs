@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Panel · AllAIs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --ground: #0a1628;
+        --surface: #11233a;
+        --surface-2: #162c47;
+        --line: #233d5c;
+        --ink: #e6edf3;
+        --ink-2: #b0bfcc;
+        --ink-3: #8a9cad;
+        --accent: #6ec6e6;
+        --accent-ink: #08141d;
+        --good: #6fe3b0;
+        --warn: #e9b872;
+        --font-ui: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+        --font-read: "Newsreader", Georgia, serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(900px 480px at 50% -120px, rgba(78, 140, 200, 0.25), transparent 70%),
+          linear-gradient(180deg, #0d1d33 0%, #0a1628 60%, #081322 100%);
+        color: var(--ink);
+        font: 15px/1.5 var(--font-ui);
+      }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .wrap { width: min(1180px, 100% - 32px); margin: 0 auto; padding: 24px 0 64px; }
+      header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 28px; }
+      header img { width: 40px; height: 40px; border-radius: 11px; background: #fff; }
+      header h1 { margin: 0; font: 500 28px/1.1 var(--font-read); }
+      header p { margin: 0; color: var(--ink-3); font-size: 13px; }
+      .spacer { flex: 1; }
+      .btn { min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-weight: 600; }
+      .btn.primary { border: 0; background: linear-gradient(180deg, #9fdcf2, #5fb9dc 50%, #3f97c0); color: #061423; }
+      .btn.google { border-color: #dadce0; background: #fff; color: #1f1f1f; display: inline-flex; align-items: center; gap: 8px; }
+      .seg { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,0.03); }
+      .seg button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); }
+      .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+      .gate { max-width: 440px; margin: 12vh auto 0; padding: 28px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); text-align: center; }
+      .gate h2 { margin: 0 0 8px; font: 500 26px var(--font-read); }
+      .gate p { color: var(--ink-2); }
+      .msg { color: var(--warn); font-size: 13px; min-height: 20px; }
+      .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+      .card { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 40%), var(--surface); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 40px -28px rgba(0,0,0,0.9); }
+      .card h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+      .kpi strong { display: block; font: 500 40px/1 var(--font-read); }
+      .kpi span { color: var(--ink-3); font-size: 13px; }
+      .wide { grid-column: 1 / -1; }
+      .chart { display: flex; align-items: flex-end; gap: 3px; height: 160px; padding-top: 8px; }
+      .chart div { flex: 1; min-width: 4px; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #9fdcf2, #3f97c0); position: relative; }
+      .chart div.q { background: linear-gradient(180deg, #b7f0d6, #3fa77f); }
+      .axis { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 11.5px; margin-top: 6px; }
+      .legend { display: flex; gap: 16px; color: var(--ink-3); font-size: 12px; margin-bottom: 6px; }
+      .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+      .bars { display: grid; gap: 8px; }
+      .bars .row { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 10px; align-items: center; font-size: 13.5px; }
+      .bars .label { position: relative; padding: 6px 10px; border-radius: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .bars .label::before { content: ""; position: absolute; inset: 0; width: var(--w); background: rgba(110, 198, 230, 0.18); border-radius: 8px; }
+      .bars .label span { position: relative; }
+      .bars .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+      th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+      th { color: var(--ink-3); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; }
+      .pill.on { background: rgba(111, 227, 176, 0.14); color: var(--good); }
+      .pill.off { background: rgba(255,255,255,0.06); color: var(--ink-3); }
+      form.codes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); align-items: end; margin-bottom: 18px; }
+      label.f { display: grid; gap: 6px; color: var(--ink-2); font-size: 12.5px; }
+      label.f input { min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--ink); }
+      .check { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--ink-2); font-size: 13px; }
+      .empty { color: var(--ink-3); font-size: 13.5px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <img src="/assets/nni-logo.svg" alt="" />
+        <div>
+          <h1>Panel de AllAIs</h1>
+          <p id="who">Visitas, consumo y códigos promocionales</p>
+        </div>
+        <span class="spacer"></span>
+        <div class="seg" role="group" aria-label="Periodo" id="period" hidden>
+          <button type="button" data-days="7">7 días</button>
+          <button type="button" data-days="30" aria-pressed="true">30 días</button>
+          <button type="button" data-days="90">90 días</button>
+        </div>
+        <button type="button" class="btn" id="signOut" hidden>Cerrar sesión</button>
+      </header>
+
+      <section class="gate" id="gate">
+        <h2>Acceso de administración</h2>
+        <p>Entra con la cuenta autorizada para ver el panel.</p>
+        <button type="button" class="btn google" id="signIn">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h6a5.1 5.1 0 0 1-2.2 3.4v2.8h3.6c2.1-1.9 3.2-4.8 3.2-8.2Z"/><path fill="#34A853" d="M12 23c3 0 5.5-1 7.4-2.7l-3.6-2.8c-1 .7-2.3 1.1-3.8 1.1-2.9 0-5.4-2-6.3-4.7H2v2.9A11 11 0 0 0 12 23Z"/><path fill="#FBBC05" d="M5.7 13.9a6.6 6.6 0 0 1 0-4.2V6.8H2a11 11 0 0 0 0 9.9l3.7-2.8Z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.2-3.2A11 11 0 0 0 2 6.8l3.7 2.9C6.6 7.3 9.1 5.4 12 5.4Z"/></svg>
+          Continuar con Google
+        </button>
+        <p class="msg" id="gateMsg" role="status"></p>
+      </section>
+
+      <main id="panel" hidden>
+        <div class="grid">
+          <div class="card kpi"><h2>Visitas</h2><strong id="kVisits">–</strong><span>inicios de sesión en el periodo</span></div>
+          <div class="card kpi"><h2>Personas</h2><strong id="kPeople">–</strong><span>emails distintos</span></div>
+          <div class="card kpi"><h2>Consultas</h2><strong id="kQueries">–</strong><span>con email o código promocional</span></div>
+
+          <div class="card wide">
+            <h2>Actividad por día</h2>
+            <div class="legend"><span><i style="background:#5fb9dc"></i>Visitas</span><span><i style="background:#3fa77f"></i>Consultas</span></div>
+            <div class="chart" id="chart" role="img" aria-label="Visitas y consultas por día"></div>
+            <div class="axis"><span id="axisStart"></span><span id="axisEnd"></span></div>
+          </div>
+
+          <div class="card"><h2>Países</h2><div class="bars" id="countries"></div></div>
+          <div class="card"><h2>Método de acceso</h2><div class="bars" id="methods"></div></div>
+          <div class="card"><h2>Mayor consumo</h2><div class="bars" id="topUsers"></div></div>
+
+          <div class="card wide">
+            <h2>Códigos promocionales</h2>
+            <form class="codes" id="codeForm">
+              <label class="f">Código<input name="code" required maxlength="40" placeholder="PROMO-2026" /></label>
+              <label class="f">Descripción<input name="label" maxlength="120" placeholder="Taller UPN" /></label>
+              <label class="f">Usos máximos<input name="maxUses" type="number" min="1" placeholder="Sin límite" /></label>
+              <label class="f">Consultas por día<input name="dailyLimit" type="number" min="1" value="50" /></label>
+              <label class="f">Caduca el<input name="expiresAt" type="date" /></label>
+              <label class="check"><input name="active" type="checkbox" checked /> Activo</label>
+              <button type="button" class="btn" id="randomCode">Generar código</button>
+              <button type="submit" class="btn primary">Guardar código</button>
+            </form>
+            <p class="msg" id="codeMsg" role="status"></p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Código</th><th>Descripción</th><th>Estado</th><th>Usos</th><th>Por día</th><th>Caduca</th><th></th></tr></thead>
+                <tbody id="codes"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card wide">
+            <h2>Visitas recientes</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Fecha</th><th>Email / código</th><th>Método</th><th>Ubicación</th></tr></thead>
+                <tbody id="recent"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="/auth.js?v=50"></script>
+    <script type="module" src="/admin.js?v=50"></script>
+  </body>
+</html>

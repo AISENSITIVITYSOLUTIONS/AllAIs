@@ -414,9 +414,43 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       const startedAt = Date.now();
+      const payload = { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments };
+
+      // Respuesta en tiempo real: líneas JSON (NDJSON) con fragmentos de texto y un cierre con metadatos.
+      if (request.body?.stream === true) {
+        response.status(200).set({
+          "content-type": "application/x-ndjson; charset=utf-8",
+          "cache-control": "no-store",
+          "x-accel-buffering": "no"
+        });
+        if (typeof response.flushHeaders === "function") response.flushHeaders();
+        const writeLine = (event) => response.write(`${JSON.stringify(event)}\n`);
+        let streamed = false;
+        try {
+          const result = await callProvider(provider, {
+            ...payload,
+            onDelta: (text) => {
+              streamed = true;
+              writeLine({ t: "delta", text });
+            }
+          });
+          if (!streamed && result.text) writeLine({ t: "delta", text: result.text });
+          writeLine({ t: "done", provider, model: result.rawModel, answer: result.text, sources: result.sources || [], elapsedMs: Date.now() - startedAt, ...(quota ? { quota } : {}) });
+          await logToSheet("consulta", { email: emailUser?.email || "", codigo: codeAccess?.code || "", modelo: provider, resultado: "ok", restantes: quota ? quota.remaining : "" });
+        } catch (error) {
+          console.error("AllAIs stream error", { provider, message: error?.message });
+          await refundQuota(quotaRef);
+          if (quota) quota.remaining += 1;
+          writeLine({ t: "error", error: error?.message || "No se pudo completar la consulta.", ...(quota ? { quota } : {}) });
+          await logToSheet("consulta", { email: emailUser?.email || "", codigo: codeAccess?.code || "", modelo: provider, resultado: "error", detalle: cleanText(error?.message, 200) });
+        }
+        response.end();
+        return;
+      }
+
       let result;
       try {
-        result = await callProvider(provider, { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments });
+        result = await callProvider(provider, payload);
       } catch (error) {
         await refundQuota(quotaRef);
         await logToSheet("consulta", { email: emailUser?.email || "", codigo: codeAccess?.code || "", modelo: provider, resultado: "error", detalle: cleanText(error?.message, 200) });

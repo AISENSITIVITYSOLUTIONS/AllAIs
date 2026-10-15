@@ -2347,3 +2347,29 @@ img {
   opacity: 0.75;
 }
 .google-consent[hidden] { display: none; }
+
+/* Respuesta en tiempo real y reintento con otro modelo */
+.message.pending.streaming .message-content {
+  white-space: pre-wrap;
+}
+
+.retry-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.retry-button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-ring);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}

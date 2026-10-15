@@ -18,6 +18,9 @@ const isEmailValue = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(valu
 const CONSENT_KEY = "allais_privacy_consent";
 const isAuthenticated = () => Boolean(state.accessCode || state.authMode === "email");
 const API_BASE = "/api";
+// Firebase Hosting no transmite respuestas parciales; para el texto en tiempo real se llama directo a la función.
+const STREAM_ENDPOINT = "https://api-6wsxvgd6ra-uc.a.run.app/chat";
+const STREAM_HOSTS = new Set(["allais.nni.ai", "allais-nni.web.app", "allais-nni.firebaseapp.com"]);
 
 function trackEvent(eventName, params = {}) {
   if (typeof window.gtag !== "function") return;
@@ -171,6 +174,8 @@ const translations = {
     copyResponse: "Copiar respuesta",
     copied: "Copiado",
     thinking: "Generando respuesta",
+    retryWith: "Reintentar con:",
+    streamCut: "La conexión se interrumpió antes de terminar la respuesta.",
     send: "Enviar",
     processing: "Procesando...",
     webSearch: "Buscar en la web",
@@ -331,6 +336,8 @@ const translations = {
     copyResponse: "Copy response",
     copied: "Copied",
     thinking: "Generating response",
+    retryWith: "Try again with:",
+    streamCut: "The connection was interrupted before the answer finished.",
     send: "Send",
     processing: "Processing...",
     webSearch: "Search the web",
@@ -491,6 +498,8 @@ const translations = {
     copyResponse: "Copier la réponse",
     copied: "Copié",
     thinking: "Génération de la réponse",
+    retryWith: "Réessayer avec :",
+    streamCut: "La connexion a été interrompue avant la fin de la réponse.",
     send: "Envoyer",
     processing: "Traitement...",
     webSearch: "Rechercher sur le web",
@@ -1550,6 +1559,92 @@ function scrollConversationToEnd() {
   if (scroller) scroller.scrollTop = scroller.scrollHeight;
 }
 
+// Envía la consulta pidiendo respuesta en tiempo real; si no es posible, usa la ruta normal.
+async function requestChat(body, onDelta) {
+  const headers = await authHeaders();
+  if (STREAM_HOSTS.has(window.location.hostname)) {
+    let response = null;
+    try {
+      response = await fetch(STREAM_ENDPOINT, { method: "POST", headers, body: JSON.stringify({ ...body, stream: true }) });
+    } catch (error) {
+      console.warn("AllAIs streaming unavailable, using standard route", error);
+    }
+    if (response) {
+      const type = response.headers.get("content-type") || "";
+      if (!type.includes("ndjson") || !response.body) return { response, data: await readApiJson(response) };
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let text = "";
+      let final = null;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let index;
+        while ((index = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, index).trim();
+          buffer = buffer.slice(index + 1);
+          if (!line) continue;
+          let event;
+          try { event = JSON.parse(line); } catch { continue; }
+          if (event.t === "delta") {
+            text += event.text;
+            onDelta(text);
+          } else if (event.t === "done") {
+            final = event;
+          } else if (event.t === "error") {
+            final = { failed: true, error: event.error, quota: event.quota };
+          }
+        }
+      }
+      if (!final) final = { failed: true, error: translations[state.language].streamCut };
+      if (final.failed) return { response: { ok: false, status: 502 }, data: { error: final.error, quota: final.quota } };
+      return { response: { ok: true, status: 200 }, data: { ...final, answer: final.answer || text } };
+    }
+  }
+  const response = await fetch(`${API_BASE}/chat`, { method: "POST", headers: await authHeaders(), body: JSON.stringify(body) });
+  return { response, data: await readApiJson(response) };
+}
+
+function showStreamingText(pendingMessage, text) {
+  const content = pendingMessage.querySelector(".message-content");
+  if (!content) return;
+  pendingMessage.classList.add("streaming");
+  content.textContent = text;
+  scrollConversationToEnd();
+}
+
+function addRetryOptions(failedProvider, promptText) {
+  const copy = translations[state.language];
+  const others = state.providers.filter((item) => item.id !== failedProvider);
+  if (!others.length) return;
+  const box = document.createElement("div");
+  box.className = "retry-options";
+  const label = document.createElement("span");
+  label.textContent = copy.retryWith;
+  box.append(label);
+  for (const item of others) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "retry-button";
+    button.textContent = providerDisplay(item).name;
+    button.addEventListener("click", () => {
+      box.remove();
+      state.selectedProvider = item.id;
+      syncProviderCards();
+      elements.promptInput.value = promptText;
+      resizePromptInput();
+      trackEvent("retry_other_model", { from: failedProvider, to: item.id });
+      elements.promptForm.requestSubmit();
+    });
+    box.append(button);
+  }
+  const target = elements.conversation.lastElementChild?.querySelector(".bubble") || elements.conversation;
+  target.append(box);
+  scrollConversationToEnd();
+}
+
 function addPendingMessage(label) {
   const article = document.createElement("article");
   article.className = "message assistant pending";
@@ -1814,10 +1909,7 @@ async function sendPrompt(event) {
   });
 
   try {
-    const response = await fetch(`${API_BASE}/chat`, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify({
+    const { response, data } = await requestChat({
         accessCode: cleanAccessCode(state.accessCode),
         provider,
         prompt: enrichedPrompt,
@@ -1829,10 +1921,8 @@ async function sendPrompt(event) {
         attachments: attachmentsAtSend,
         system,
         temperature
-      })
-    });
+      }, (text) => showStreamingText(pendingMessage, text));
 
-    const data = await readApiJson(response);
     pendingMessage.remove();
     if (data.quota) {
       state.quota = data.quota;
@@ -1866,6 +1956,7 @@ async function sendPrompt(event) {
     });
     addMessage("assistant", error.message, copy.error);
     state.history.pop();
+    addRetryOptions(provider, prompt);
   } finally {
     elements.sendButton.disabled = false;
     elements.attachButton.disabled = false;

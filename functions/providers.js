@@ -302,6 +302,38 @@ async function groundWithGemini(payload) {
   return { text, sources };
 }
 
+// Lee un flujo SSE (líneas "data: {...}") y llama a onEvent con cada objeto JSON.
+async function readSse(response, onEvent) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) continue;
+      const data = line.replace(/^data:\s*/, "");
+      if (!data || data === "[DONE]") continue;
+      let event;
+      try {
+        event = JSON.parse(data);
+      } catch {
+        continue; // Fragmento incompleto o no JSON: se ignora.
+      }
+      onEvent(event);
+    }
+  }
+}
+
+async function streamFailure(response) {
+  const errorText = await response.text().catch(() => "");
+  throw new Error(`${response.status} ${response.statusText}: ${errorText.slice(0, 500)}`);
+}
+
 async function callOpenAICompatible(
   endpoint,
   apiKey,
@@ -315,6 +347,7 @@ async function callOpenAICompatible(
     throw new Error("Falta configurar la API key del proveedor seleccionado.");
   }
 
+  const streaming = typeof payload.onDelta === "function";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -326,9 +359,23 @@ async function callOpenAICompatible(
       messages: buildMessages(payload),
       temperature: 0.7,
       max_tokens: payload.documentRequest ? 5000 : 1200,
+      ...(streaming ? { stream: true } : {}),
       ...extraBody
     })
   });
+
+  if (streaming) {
+    if (!response.ok || !response.body) await streamFailure(response);
+    let text = "";
+    await readSse(response, (event) => {
+      const piece = event.choices?.[0]?.delta?.content;
+      if (piece) {
+        text += piece;
+        payload.onDelta(piece);
+      }
+    });
+    return { text: text || "Sin respuesta.", rawModel: model, raw: {} };
+  }
 
   const data = await parseResponse(response);
 
@@ -455,6 +502,7 @@ async function callAnthropic(payload) {
     ? "claude-sonnet-5-5"
     : configuredModel;
 
+  const streaming = typeof payload.onDelta === "function";
   const response = await fetch(ANTHROPIC_ENDPOINT, {
     method: "POST",
     headers: {
@@ -465,6 +513,7 @@ async function callAnthropic(payload) {
     },
     body: JSON.stringify({
       model,
+      ...(streaming ? { stream: true } : {}),
       max_tokens: payload.documentRequest ? 5000 : 4000,
       system: buildSystemInstruction(payload),
       messages: [
@@ -473,6 +522,20 @@ async function callAnthropic(payload) {
       ]
     })
   });
+
+  if (streaming) {
+    if (!response.ok || !response.body) await streamFailure(response);
+    let text = "";
+    await readSse(response, (event) => {
+      if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
+        text += event.delta.text;
+        payload.onDelta(event.delta.text);
+      }
+      if (event.type === "error") throw new Error(event.error?.message || "Claude interrumpió la respuesta.");
+    });
+    if (!text.trim()) throw new Error("Claude no devolvió texto.");
+    return { text, rawModel: model, raw: {} };
+  }
 
   const data = await parseResponse(response);
   const content = data.content;

@@ -1,11 +1,13 @@
 const { onRequest } = require("firebase-functions/v2/https");
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
+const { getAppCheck } = require("firebase-admin/app-check");
 const crypto = require("node:crypto");
 const { listProviders, callProvider } = require("./providers");
 
-admin.initializeApp();
-const db = admin.firestore();
-const { FieldValue } = admin.firestore;
+initializeApp();
+const db = getFirestore();
 
 const DAILY_QUERY_LIMIT = Number(process.env.DAILY_QUERY_LIMIT || 20);
 const PROMO_DEFAULT_DAILY_LIMIT = Number(process.env.PROMO_DEFAULT_DAILY_LIMIT || 50);
@@ -117,7 +119,7 @@ async function verifyEmailUser(request) {
   const match = String(request.get("authorization") || "").match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
   try {
-    const token = await admin.auth().verifyIdToken(match[1]);
+    const token = await getAuth().verifyIdToken(match[1]);
     if (!token.email || !token.email_verified) return null;
     const signIn = token.firebase?.sign_in_provider || "";
     return { uid: token.uid, email: token.email.toLowerCase(), name: token.name || "", provider: signIn === "google.com" ? "google" : "email" };
@@ -223,7 +225,7 @@ async function appCheckOk(request) {
   const token = String(request.get("x-firebase-appcheck") || "");
   if (!token) return process.env.APPCHECK_ENFORCE !== "true";
   try {
-    await admin.appCheck().verifyToken(token);
+    await getAppCheck().verifyToken(token);
     return true;
   } catch {
     return process.env.APPCHECK_ENFORCE !== "true";
@@ -336,7 +338,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     }
 
     if (path === "/health" && request.method === "GET") {
-      sendJson(response, 200, { ok: true, service: "allais-api", version: "2026-10-06-api-rewrite-json-errors" });
+      sendJson(response, 200, { ok: true, service: "allais-api", version: "2026-10-15-streaming-codes-appcheck" });
       return;
     }
 

@@ -900,7 +900,7 @@ function renderQuota() {
   const note = elements.quotaNote;
   if (!note) return;
   const quota = state.quota;
-  if (state.authMode !== "email" || !quota) {
+  if (!state.authMode || !quota) {
     note.hidden = true;
     note.textContent = "";
     return;
@@ -1710,13 +1710,15 @@ async function login() {
     trackEvent("access_code_failed", {
       reason: "invalid_code"
     });
-    showAccessError(copy.invalidCode);
+    showAccessError(data.message && data.message !== "Invalid access code" ? data.message : copy.invalidCode);
     return;
   }
 
   trackEvent("access_code_success");
   state.accessCode = accessCode;
   state.authMode = "code";
+  state.quota = data.quota || null;
+  renderQuota();
   renderAccount();
   window.setTimeout(closeAuthDialog, 700);
   clearAccessError();

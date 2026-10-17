@@ -233,6 +233,12 @@ async function subscribe(planId, button) {
       method: "POST",
       body: JSON.stringify({ plan: planId })
     });
+    if (data.mock) {
+      setMessage("Suscripción de prueba activada (sin cobro).");
+      button.disabled = false;
+      await refreshStatus();
+      return;
+    }
     if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago.");
     window.location.href = data.initPoint;
   } catch (error) {

@@ -16,6 +16,7 @@ const MP_API = "https://api.mercadopago.com";
 const TRIAL_DAYS = Number(process.env.BILLING_TRIAL_DAYS || 3);
 const BACK_URL = process.env.BILLING_BACK_URL || "https://allais.nni.ai/?pago=retorno";
 const CURRENCY = "MXN";
+const MOCK_MODE = process.env.BILLING_MOCK === "true";
 
 const allowedOrigins = new Set([
   "https://allais.nni.ai",
@@ -122,6 +123,24 @@ async function createSubscription(request) {
   }
 
   const startDate = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  // Modo de prueba interno (BILLING_MOCK=true): activa la suscripción sin llamar a Mercado Pago.
+  // Sirve para validar la interfaz y Firestore. Debe estar apagado (false o sin definir) en producción.
+  if (MOCK_MODE) {
+    await db.collection("subscriptions").doc(user.uid).set({
+      email: user.email,
+      uid: user.uid,
+      plan: plan.id,
+      preapprovalId: "mock",
+      status: "active",
+      mpStatus: "mock",
+      mock: true,
+      trialEndsAt: startDate,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { initPoint: null, mock: true };
+  }
+
   // En sandbox, Mercado Pago solo acepta un usuario de prueba como comprador: MP_PAYER_EMAIL.
   // En producción se deja vacío y se usa el correo real del usuario.
   const payerEmail = process.env.MP_PAYER_EMAIL || user.email;

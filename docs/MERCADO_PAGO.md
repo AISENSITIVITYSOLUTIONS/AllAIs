@@ -8,7 +8,7 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
 2. El backend crea una suscripción (preapproval) en **estado pendiente**, con inicio dentro de **3 días** (prueba gratuita) y cobro mensual en **MXN**.
 3. El usuario es enviado a `init_point` de Mercado Pago, donde registra su tarjeta.
 4. Mercado Pago llama a `POST /billing/webhook`. El backend **vuelve a consultar** la suscripción en la API antes de cambiar nada.
-5. El estado queda en `subscriptions/{correo}` de Firestore. El frontend lo lee con `GET /billing/status`.
+5. El estado queda en `subscriptions/{uid}` de Firestore. El frontend lo lee con `GET /billing/status`.
 
 ## Estados
 
@@ -37,10 +37,14 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
    ```
    Desplegar solo `billing` no altera el endpoint principal `api`.
 
+## Pruebas en sandbox
+
+Con credenciales de prueba, Mercado Pago solo acepta como comprador a un **usuario de prueba**. Define `MP_PAYER_EMAIL` en `functions/.env` con el correo del usuario de prueba (pestaña Cuentas de prueba) y vuelve a desplegar `billing`. En producción deja esa variable vacía.
+
 ## Pruebas antes de cobrar a clientes reales
 
 - Usar las **credenciales de prueba** y las **cuentas de prueba** de Mercado Pago para registrar tarjetas de prueba.
-- Verificar que el webhook actualiza `subscriptions/{correo}` a `active`.
+- Verificar que el webhook actualiza `subscriptions/{uid}` a `active`.
 - Revisar los registros en Firebase Functions (`billing`) si algo falla.
 
 ## Pendientes antes de publicar precios

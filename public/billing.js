@@ -3,7 +3,7 @@
 const PLANS = [
   { id: "lanzamiento", name: "Lanzamiento", price: 99, badge: "Precio de lanzamiento" },
   { id: "profesional_1", name: "Profesional 1", price: 199, badge: "" },
-  { id: "profesional_2", name: "Profesional 2", price: 299, badge: "" },
+  { id: "profesional_2", name: "Profesional 2", price: 299, badge: "Recomendado" },
   { id: "profesional_3", name: "Profesional 3", price: 399, badge: "" }
 ];
 
@@ -164,7 +164,7 @@ function buildDialog() {
   const list = node("div", { class: "billing-plans", id: "billingPlans" });
 
   PLANS.forEach((plan, index) => {
-    const button = node("button", { type: "button", class: "billing-plan" + (index === 0 ? " is-featured" : ""), "data-plan": plan.id });
+    const button = node("button", { type: "button", class: "billing-plan" + (plan.id === "profesional_2" ? " is-featured" : ""), "data-plan": plan.id });
     const left = node("span", {});
     left.append(node("span", { class: "plan-name" }, plan.name));
     if (plan.badge) left.append(node("span", { class: "plan-badge" }, plan.badge));

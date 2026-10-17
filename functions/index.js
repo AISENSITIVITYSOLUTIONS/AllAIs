@@ -623,3 +623,6 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 // force qwen flash model 2026-10-04
 
 // force qwen streaming 2026-10-04
+
+// Cobros con Mercado Pago (módulo independiente).
+exports.billing = require("./billing").billing;

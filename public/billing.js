@@ -53,8 +53,12 @@ const STYLES = `
 }
 @keyframes billingShine { 0%{left:-75%} 60%,100%{left:125%} }
 
+.billing-dialog { width: min(460px, 92vw); max-width: 460px; max-height: 92vh; overflow: hidden; }
 .billing-dialog .auth-card {
-  width: min(460px, 92vw);
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
   padding: 28px 26px 22px;
   border-radius: var(--radius-l);
   background:
@@ -74,7 +78,9 @@ const STYLES = `
 .billing-dialog .billing-status { min-height: 1.2em; margin: 10px 0 0; color: var(--accent); font-weight: 600; font-size: .9rem; }
 .billing-plans { display: grid; gap: 10px; margin-top: 16px; }
 .billing-plan {
+  box-sizing: border-box;
   position: relative;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -159,7 +165,7 @@ function buildDialog() {
   close.addEventListener("click", () => dialog.close());
 
   const title = node("h2", { id: "billingTitle" }, "Elige tu plan");
-  const intro = node("p", { class: "billing-intro" }, "Tienes 3 días de prueba gratuita. Tu primer cobro es al cuarto día y después cada mes.");
+  const intro = node("p", { class: "billing-intro" }, "3 días gratis. Primer cobro al cuarto día.");
   const status = node("p", { id: "billingStatus", class: "billing-status", role: "status" }, "");
   const list = node("div", { class: "billing-plans", id: "billingPlans" });
 
@@ -176,7 +182,7 @@ function buildDialog() {
   });
 
   const error = node("p", { id: "billingMessage", class: "billing-error", role: "alert" }, "");
-  const legal = node("p", { class: "billing-legal" }, "Los pagos los procesa Mercado Pago. Puedes cancelar cuando quieras.");
+  const legal = node("p", { class: "billing-legal" }, "Pagos procesados por Mercado Pago.");
 
   card.append(close, title, intro, status, list, error, legal);
   dialog.append(card);

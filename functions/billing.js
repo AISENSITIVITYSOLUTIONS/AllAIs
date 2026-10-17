@@ -23,7 +23,8 @@ const allowedOrigins = new Set([
   "https://allais-nni.firebaseapp.com"
 ]);
 
-// Los montos salen de variables de entorno (functions/.env). Si falta alguno, no se cobra nada.
+// Los montos salen de variables de entorno (functions/.env), en pesos mexicanos al mes.
+// Si falta un monto, ese plan no se puede contratar y no se cobra nada.
 function plans() {
   return {
     lanzamiento: {
@@ -31,10 +32,20 @@ function plans() {
       label: "AllAIs · Plan lanzamiento",
       amount: Number(process.env.MP_PRICE_LANZAMIENTO_MXN || 0)
     },
-    profesional: {
-      id: "profesional",
-      label: "AllAIs · Plan profesional",
-      amount: Number(process.env.MP_PRICE_PROFESIONAL_MXN || 0)
+    profesional_1: {
+      id: "profesional_1",
+      label: "AllAIs · Plan profesional 1",
+      amount: Number(process.env.MP_PRICE_PROFESIONAL_1_MXN || 0)
+    },
+    profesional_2: {
+      id: "profesional_2",
+      label: "AllAIs · Plan profesional 2",
+      amount: Number(process.env.MP_PRICE_PROFESIONAL_2_MXN || 0)
+    },
+    profesional_3: {
+      id: "profesional_3",
+      label: "AllAIs · Plan profesional 3",
+      amount: Number(process.env.MP_PRICE_PROFESIONAL_3_MXN || 0)
     }
   };
 }

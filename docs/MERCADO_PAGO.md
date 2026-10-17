@@ -4,7 +4,7 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
 
 ## Flujo
 
-1. El usuario elige un plan. El frontend llama a `POST /billing/subscribe` con `{ "plan": "lanzamiento" }` o `{ "plan": "profesional" }` y su token de Firebase Auth.
+1. El usuario elige un plan. El frontend llama a `POST /billing/subscribe` con `{ "plan": "lanzamiento" }`, `profesional_1`, `profesional_2` o `profesional_3` y su token de Firebase Auth.
 2. El backend crea una suscripción (preapproval) en **estado pendiente**, con inicio dentro de **3 días** (prueba gratuita) y cobro mensual en **MXN**.
 3. El usuario es enviado a `init_point` de Mercado Pago, donde registra su tarjeta.
 4. Mercado Pago llama a `POST /billing/webhook`. El backend **vuelve a consultar** la suscripción en la API antes de cambiar nada.
@@ -26,7 +26,7 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
    ```powershell
    firebase functions:secrets:set MERCADOPAGO_ACCESS_TOKEN
    ```
-3. **Montos:** definir `MP_PRICE_LANZAMIENTO_MXN` y `MP_PRICE_PROFESIONAL_MXN` en `functions/.env` antes de desplegar. Mientras estén vacíos, el backend responde que el plan no tiene precio y **no cobra**.
+3. **Montos:** definir `MP_PRICE_LANZAMIENTO_MXN`, `MP_PRICE_PROFESIONAL_1_MXN`, `MP_PRICE_PROFESIONAL_2_MXN` y `MP_PRICE_PROFESIONAL_3_MXN` en `functions/.env` (por ejemplo 99, 199, 299 y 399) antes de desplegar. Mientras estén vacíos, el backend responde que el plan no tiene precio y **no cobra**.
 4. **Webhook:** en Mercado Pago Developers → Webhooks, registrar `https://allais.nni.ai/billing/webhook` y suscribirse al evento de **Planes y suscripciones**.
 5. **Despliegue:**
    ```powershell

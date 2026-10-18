@@ -10,6 +10,25 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
 4. Mercado Pago llama a `POST /billing/webhook`. El backend **vuelve a consultar** la suscripción en la API antes de cambiar nada.
 5. El estado queda en `subscriptions/{uid}` de Firestore. El frontend lo lee con `GET /billing/status`.
 
+## Rutas
+
+| Ruta | Método | Qué hace |
+|---|---|---|
+| `/billing/subscribe` | POST | Crea la suscripción. Falla con 409 si ya hay una vigente. |
+| `/billing/status` | GET | Estado, plan y si es de prueba. |
+| `/billing/change` | POST | Cambia el plan de una suscripción vigente. |
+| `/billing/cancel` | POST | Cancela la suscripción vigente. |
+| `/billing/webhook` | POST | Notificaciones de Mercado Pago. |
+
+**Cambiar de plan reutiliza el mismo preapproval**: solo actualiza el monto mensual y la
+referencia externa, así que el usuario no vuelve a registrar su tarjeta.
+
+**Cancelar no borra el documento**: deja `status: "cancelled"` para conservar el historial.
+El usuario puede contratar de nuevo desde la misma pantalla.
+
+Ambas rutas detectan las suscripciones de prueba (`mock: true`) y, en ese caso, solo
+escriben en Firestore sin llamar a Mercado Pago.
+
 ## Estados
 
 | Mercado Pago | AllAIs | Significado |

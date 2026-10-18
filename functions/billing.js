@@ -187,9 +187,98 @@ async function subscriptionStatus(request) {
   return {
     status: data.status || "unknown",
     plan: data.plan || null,
+    mock: data.mock === true,
     trialEndsAt: toIso(data.trialEndsAt),
     updatedAt: toIso(data.updatedAt)
   };
+}
+
+// Devuelve la suscripción vigente del usuario, o un error si no hay ninguna que administrar.
+async function liveSubscription(user) {
+  const ref = db.collection("subscriptions").doc(user.uid);
+  const snapshot = await ref.get();
+  if (!snapshot.exists || !["active", "pending"].includes(snapshot.get("status"))) {
+    throw httpError(409, "No tienes una suscripción activa.");
+  }
+  return { ref, data: snapshot.data() };
+}
+
+// Una suscripción de prueba (BILLING_MOCK) no existe en Mercado Pago: solo vive en Firestore.
+function isMock(data) {
+  return data.mock === true || data.preapprovalId === "mock";
+}
+
+// Cancelar no borra el documento: deja el estado en `cancelled` para conservar el historial.
+async function cancelSubscription(request) {
+  const user = await verifyUser(request);
+  if (!user) throw httpError(401, "Inicia sesión para administrar tu suscripción.");
+
+  const { ref, data } = await liveSubscription(user);
+
+  if (isMock(data)) {
+    await ref.set({
+      status: "cancelled",
+      mpStatus: "cancelled",
+      cancelledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { status: "cancelled" };
+  }
+
+  const preapproval = await mercadoPago(`/preapproval/${encodeURIComponent(String(data.preapprovalId))}`, {
+    method: "PUT",
+    body: JSON.stringify({ status: "cancelled" })
+  });
+
+  const status = internalStatus(preapproval.status) || "cancelled";
+  await ref.set({
+    status,
+    mpStatus: preapproval.status || "cancelled",
+    cancelledAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { status };
+}
+
+// Cambiar de plan reutiliza la misma suscripción: solo cambia el monto mensual.
+// No se crea un preapproval nuevo, así que el usuario no vuelve a registrar su tarjeta.
+async function changePlan(request) {
+  const user = await verifyUser(request);
+  if (!user) throw httpError(401, "Inicia sesión para cambiar de plan.");
+
+  const planId = String(request.body?.plan || "");
+  const plan = plans()[planId];
+  if (!plan) throw httpError(400, "Plan no válido.");
+  if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
+
+  const { ref, data } = await liveSubscription(user);
+  if (data.plan === plan.id) throw httpError(409, "Ya tienes ese plan.");
+
+  if (isMock(data)) {
+    await ref.set({ plan: plan.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { plan: plan.id, mock: true };
+  }
+
+  const preapproval = await mercadoPago(`/preapproval/${encodeURIComponent(String(data.preapprovalId))}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      reason: plan.label,
+      external_reference: `${user.uid}|${plan.id}`,
+      auto_recurring: {
+        transaction_amount: plan.amount,
+        currency_id: CURRENCY
+      }
+    })
+  });
+
+  await ref.set({
+    plan: plan.id,
+    mpStatus: preapproval.status || data.mpStatus || null,
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { plan: plan.id };
 }
 
 // Mercado Pago envía { type, data: { id } } o parámetros en la URL. Solo se usa el id; el estado se consulta a la API.
@@ -238,6 +327,14 @@ exports.billing = onRequest({
 
     if (path === "/subscribe" && request.method === "POST") {
       sendJson(response, 200, { ok: true, ...(await createSubscription(request)) });
+      return;
+    }
+    if (path === "/change" && request.method === "POST") {
+      sendJson(response, 200, { ok: true, ...(await changePlan(request)) });
+      return;
+    }
+    if (path === "/cancel" && request.method === "POST") {
+      sendJson(response, 200, { ok: true, ...(await cancelSubscription(request)) });
       return;
     }
     if (path === "/status" && request.method === "GET") {

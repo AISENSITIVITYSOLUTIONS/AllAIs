@@ -35,11 +35,56 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
    git pull
    firebase deploy --only functions:billing,hosting
    ```
-   Desplegar solo `billing` no altera el endpoint principal `api`.
+   **Hosting va siempre junto con la función.** Ver la sección siguiente.
+
+## Por qué hay que desplegar Hosting junto con la función
+
+En `firebase.json`, la reescritura de `/billing/**` usa `"pinTag": true`:
+
+```json
+{
+  "source": "/billing/**",
+  "function": { "functionId": "billing", "region": "us-central1", "pinTag": true }
+}
+```
+
+`pinTag` fija la ruta `/billing/**` a la **revisión concreta** de la función que existía
+cuando se desplegó Hosting por última vez. Es deliberado: evita que un despliegue a medias
+deje el sitio hablando con una versión de la función que todavía no está lista.
+
+La consecuencia práctica es que **`firebase deploy --only functions:billing` no basta**.
+Ese comando crea una revisión nueva, pero Hosting sigue enviando el tráfico a la revisión
+anterior, así que el sitio se comporta como si nada hubiera cambiado. El síntoma es
+desconcertante: el despliegue termina en `Deploy complete!`, el código y el `.env` son
+correctos, y aun así el comportamiento viejo persiste por más veces que se repita.
+
+Por eso, **cualquier cambio en `functions/billing.js` o en las variables de
+`functions/.env` exige desplegar Hosting en el mismo comando**:
+
+```powershell
+firebase deploy --only functions:billing,hosting
+```
+
+Lo mismo aplica al endpoint `api`, que usa la misma configuración.
 
 ## Pruebas en sandbox
 
-Con credenciales de prueba, Mercado Pago solo acepta como comprador a un **usuario de prueba**. Define `MP_PAYER_EMAIL` en `functions/.env` con el correo del usuario de prueba (pestaña Cuentas de prueba) y vuelve a desplegar `billing`. En producción deja esa variable vacía.
+Con credenciales de prueba, Mercado Pago solo acepta como comprador a un **usuario de prueba**. Define `MP_PAYER_EMAIL` en `functions/.env` con el correo del usuario de prueba (pestaña Cuentas de prueba) y vuelve a desplegar con `firebase deploy --only functions:billing,hosting`. En producción deja esa variable vacía.
+
+## Modo de prueba interno (`BILLING_MOCK`)
+
+Para validar la interfaz y Firestore **sin llamar a Mercado Pago ni cobrar nada**, define
+`BILLING_MOCK=true` en `functions/.env` y despliega con
+`firebase deploy --only functions:billing,hosting`.
+
+Con el modo activo, `/billing/subscribe` no contacta a Mercado Pago: escribe directamente
+`subscriptions/{uid}` con `status: "active"` y `mock: true`, y responde `{ mock: true }`.
+El frontend muestra entonces "Suscripción de prueba activada (sin cobro)".
+
+Sirve sobre todo mientras no se tenga un comprador de prueba válido para el sandbox.
+
+> **En producción, `BILLING_MOCK` debe quedar en `false` o sin definir, y `MP_PAYER_EMAIL`
+> vacío.** De lo contrario nadie paga y todas las cuentas quedan activas.
 
 ## Pruebas antes de cobrar a clientes reales
 
@@ -51,4 +96,5 @@ Con credenciales de prueba, Mercado Pago solo acepta como comprador a un **usuar
 
 - Confirmar que la cuenta puede cobrar en **USD** o fijar la conversión a MXN. Esta versión cobra solo en MXN.
 - Confirmar con Mercado Pago que la prueba gratuita por fecha de inicio diferido se comporta como se espera en producción.
-- Conectar el frontend (botón de suscripción y estado de la cuenta). No está incluido en esta rama.
+- Quitar `BILLING_MOCK` y `MP_PAYER_EMAIL` del `.env` de producción, cambiar el secreto al token de producción y registrar el webhook en modo productivo.
+- Validar la firma `x-signature` del webhook antes de aceptar notificaciones en producción.

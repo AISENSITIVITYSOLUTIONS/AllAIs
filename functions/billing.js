@@ -8,6 +8,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { initializeApp, getApps } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -51,6 +52,17 @@ function plans() {
   };
 }
 
+// La vigencia de la promoción se decide aquí, en el servidor. El navegador puede
+// ocultar o mostrar el precio de Lanzamiento, pero no puede contratarlo fuera de fecha.
+function assertAvailable(planId) {
+  const verdict = canSubscribeTo(planId);
+  if (verdict.ok) return;
+  if (verdict.reason === "promo_closed") {
+    throw httpError(409, "El precio de lanzamiento ya terminó. Elige uno de los planes vigentes.");
+  }
+  throw httpError(400, "Plan no disponible.");
+}
+
 function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
@@ -81,6 +93,23 @@ async function mercadoPago(path, options = {}) {
     throw httpError(502, "Mercado Pago no pudo completar la solicitud. Inténtalo de nuevo.");
   }
   return data;
+}
+
+// Consulta de una suscripción en Mercado Pago. La API principal la usa para
+// revalidar el plan de una cuenta: el derecho de uso se confirma contra Mercado
+// Pago, nunca contra lo que declare el navegador.
+async function fetchPreapproval(preapprovalId) {
+  const data = await mercadoPago(`/preapproval/${encodeURIComponent(preapprovalId)}`, { method: "GET" });
+  // "status" sale tal cual lo manda Mercado Pago ("authorized", "paused"...),
+  // porque quien consume este dato lo traduce con su propio mapa de estados.
+  // Devolverlo ya traducido degradaría a "unknown" a un suscriptor al corriente.
+  return {
+    id: data.id,
+    status: data.status,
+    internalStatus: internalStatus(data.status),
+    externalReference: data.external_reference || null,
+    nextPaymentDate: data.next_payment_date || null
+  };
 }
 
 // Identidad del usuario por token de Firebase Auth (mismo criterio que la API principal).
@@ -115,6 +144,7 @@ async function createSubscription(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
+  assertAvailable(plan.id);
 
   // Una sola suscripción activa o pendiente por correo.
   const existing = await db.collection("subscriptions").doc(user.uid).get();
@@ -251,6 +281,7 @@ async function changePlan(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
+  assertAvailable(plan.id);
 
   const { ref, data } = await liveSubscription(user);
   if (data.plan === plan.id) throw httpError(409, "Ya tienes ese plan.");
@@ -356,3 +387,5 @@ exports.billing = onRequest({
     });
   }
 });
+
+exports.fetchPreapproval = fetchPreapproval;

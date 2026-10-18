@@ -151,6 +151,7 @@ const translations = {
     quotaRemaining: (n) => (n === 1 ? "Te queda 1 consulta hoy" : `Te quedan ${n} consultas hoy`),
     quotaEmptyNote: (time) => `Sin consultas por hoy · se renuevan ${time}`,
     quotaExhausted: (limit, time) => `Alcanzaste tu límite de ${limit} consultas de hoy. Se renovará ${time}.`,
+    quotaExhaustedMonthly: (limit, time) => `Alcanzaste tu límite de ${limit} consultas de este periodo. Se renovará ${time}.`,
     resetTomorrow: (time) => `mañana a las ${time}`,
     resetToday: (time) => `hoy a las ${time}`,
     showCode: "Mostrar código",
@@ -313,6 +314,7 @@ const translations = {
     quotaRemaining: (n) => (n === 1 ? "1 query left today" : `${n} queries left today`),
     quotaEmptyNote: (time) => `No queries left today · renews ${time}`,
     quotaExhausted: (limit, time) => `You reached your limit of ${limit} queries for today. It renews ${time}.`,
+    quotaExhaustedMonthly: (limit, time) => `You reached your limit of ${limit} queries for this period. It renews ${time}.`,
     resetTomorrow: (time) => `tomorrow at ${time}`,
     resetToday: (time) => `today at ${time}`,
     showCode: "Show code",
@@ -475,6 +477,7 @@ const translations = {
     quotaRemaining: (n) => (n === 1 ? "Il vous reste 1 requête aujourd'hui" : `Il vous reste ${n} requêtes aujourd'hui`),
     quotaEmptyNote: (time) => `Plus de requêtes aujourd'hui · renouvellement ${time}`,
     quotaExhausted: (limit, time) => `Vous avez atteint votre limite de ${limit} requêtes pour aujourd'hui. Elle sera renouvelée ${time}.`,
+    quotaExhaustedMonthly: (limit, time) => `Vous avez atteint votre limite de ${limit} requêtes pour cette période. Elle sera renouvelée ${time}.`,
     resetTomorrow: (time) => `demain à ${time}`,
     resetToday: (time) => `aujourd'hui à ${time}`,
     showCode: "Afficher le code",
@@ -1852,7 +1855,9 @@ async function sendPrompt(event) {
 
   const copy = translations[state.language];
   if (state.authMode === "email" && state.quota && state.quota.remaining <= 0) {
-    addMessage("assistant", copy.quotaExhausted(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs");
+    // El cupo agotado puede ser el del periodo o el del día: el backend indica cuál manda.
+    const text = state.quota.scope === "monthly" ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
+    addMessage("assistant", text(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs");
     return;
   }
   const capabilities = selectedCapabilities();
@@ -1936,10 +1941,12 @@ async function sendPrompt(event) {
       state.quota = data.quota;
       renderQuota();
     }
-    if (response.status === 429 && data.code === "DAILY_LIMIT") {
+    if (response.status === 429 && (data.code === "DAILY_LIMIT" || data.code === "MONTHLY_LIMIT")) {
       if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
-      trackEvent("daily_limit_reached");
-      addMessage("assistant", copy.quotaExhausted(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs");
+      const monthly = data.code === "MONTHLY_LIMIT";
+      trackEvent(monthly ? "monthly_limit_reached" : "daily_limit_reached", { plan: data.plan || "free" });
+      const text = monthly ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
+      addMessage("assistant", text(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs");
       state.history.pop();
       return;
     }

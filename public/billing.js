@@ -58,12 +58,20 @@ const PLANS = [
 
 // Lanzamiento ofrece el mismo cupo que Esencial a precio promocional, no es un nivel aparte.
 // Por eso lleva fecha límite: sin ella, el plan más barato sería el de mejor relación.
+// Cierre de la promoción: cubre todo el 10 de noviembre de 2026 y termina a la
+// medianoche siguiente, hora de la Ciudad de México (UTC-6 todo el año).
+// Esta fecha solo decide lo que se muestra; quien autoriza la contratación es el
+// backend (functions/plans.js), con la misma fecha. Si alguien edita esta línea
+// en su navegador, el servidor rechaza el plan igual.
+const PROMO_ENDS_AT = Date.UTC(2026, 10, 11, 6, 0, 0);
+const promoOpen = () => Date.now() < PROMO_ENDS_AT;
+
 const LAUNCH = {
   id: "lanzamiento",
   name: "Lanzamiento",
   price: 99,
   note: "300 consultas al mes, 10 al día.",
-  deadline: "Precio válido si contratas antes del 1 de noviembre."
+  deadline: "Precio válido si contratas antes del 10 de noviembre de 2026."
 };
 
 const ALL_PLANS = [...PLANS, LAUNCH];
@@ -505,10 +513,17 @@ function resetCancel() {
 function paintPlans({ signedIn = true } = {}) {
   const live = signedIn && hasLiveSubscription();
 
+  // Terminada la promoción, Lanzamiento desaparece de la pantalla. Quien ya lo
+  // tenga contratado lo sigue viendo, porque conserva su precio.
+  const launchVisible = promoOpen() || (live && current.plan === LAUNCH.id);
+  const strip = document.querySelector(`.billing-launch[data-plan="${LAUNCH.id}"]`);
+  if (strip) strip.hidden = !launchVisible;
+
   ALL_PLANS.forEach((plan) => {
     const button = document.querySelector(`[data-choose="${plan.id}"]`);
     const card = document.querySelector(`[data-plan="${plan.id}"]`);
     if (!button || !card) return;
+    if (plan.id === LAUNCH.id && !launchVisible) return;
 
     const isCurrent = live && plan.id === current.plan;
     card.classList.toggle("is-current", isCurrent);

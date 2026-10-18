@@ -16,6 +16,7 @@ const MP_API = "https://api.mercadopago.com";
 const TRIAL_DAYS = Number(process.env.BILLING_TRIAL_DAYS || 3);
 const BACK_URL = process.env.BILLING_BACK_URL || "https://allais.nni.ai/?pago=retorno";
 const CURRENCY = "MXN";
+const MOCK_MODE = process.env.BILLING_MOCK === "true";
 
 const allowedOrigins = new Set([
   "https://allais.nni.ai",
@@ -116,18 +117,39 @@ async function createSubscription(request) {
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
 
   // Una sola suscripción activa o pendiente por correo.
-  const existing = await db.collection("subscriptions").doc(user.email).get();
+  const existing = await db.collection("subscriptions").doc(user.uid).get();
   if (existing.exists && ["active", "pending"].includes(existing.get("status"))) {
     throw httpError(409, "Ya tienes una suscripción activa o pendiente.");
   }
 
   const startDate = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  // Modo de prueba interno (BILLING_MOCK=true): activa la suscripción sin llamar a Mercado Pago.
+  // Sirve para validar la interfaz y Firestore. Debe estar apagado (false o sin definir) en producción.
+  if (MOCK_MODE) {
+    await db.collection("subscriptions").doc(user.uid).set({
+      email: user.email,
+      uid: user.uid,
+      plan: plan.id,
+      preapprovalId: "mock",
+      status: "active",
+      mpStatus: "mock",
+      mock: true,
+      trialEndsAt: startDate,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { initPoint: null, mock: true };
+  }
+
+  // En sandbox, Mercado Pago solo acepta un usuario de prueba como comprador: MP_PAYER_EMAIL.
+  // En producción se deja vacío y se usa el correo real del usuario.
+  const payerEmail = process.env.MP_PAYER_EMAIL || user.email;
   const preapproval = await mercadoPago("/preapproval", {
     method: "POST",
     body: JSON.stringify({
       reason: plan.label,
       external_reference: `${user.uid}|${plan.id}`,
-      payer_email: user.email,
+      payer_email: payerEmail,
       back_url: BACK_URL,
       status: "pending",
       auto_recurring: {
@@ -140,8 +162,9 @@ async function createSubscription(request) {
     })
   });
 
-  await db.collection("subscriptions").doc(user.email).set({
+  await db.collection("subscriptions").doc(user.uid).set({
     email: user.email,
+    payerEmail,
     uid: user.uid,
     plan: plan.id,
     preapprovalId: String(preapproval.id),
@@ -157,7 +180,7 @@ async function createSubscription(request) {
 async function subscriptionStatus(request) {
   const user = await verifyUser(request);
   if (!user) throw httpError(401, "Inicia sesión para ver tu suscripción.");
-  const snapshot = await db.collection("subscriptions").doc(user.email).get();
+  const snapshot = await db.collection("subscriptions").doc(user.uid).get();
   if (!snapshot.exists) return { status: "none" };
   const data = snapshot.data();
   const toIso = (value) => (value?.toDate ? value.toDate().toISOString() : value || null);
@@ -176,12 +199,12 @@ async function handleWebhook(request) {
   if (type !== "subscription_preapproval" || !id) return { ignored: true };
 
   const preapproval = await mercadoPago(`/preapproval/${encodeURIComponent(String(id))}`);
-  const email = String(preapproval.payer_email || "").toLowerCase();
-  if (!email) return { ignored: true };
+  const [uid = "", planId = ""] = String(preapproval.external_reference || "").split("|");
+  if (!uid) return { ignored: true };
 
-  const [, planId = ""] = String(preapproval.external_reference || "").split("|");
-  await db.collection("subscriptions").doc(email).set({
-    email,
+  await db.collection("subscriptions").doc(uid).set({
+    uid,
+    payerEmail: String(preapproval.payer_email || "").toLowerCase(),
     plan: planId || null,
     preapprovalId: String(preapproval.id),
     status: internalStatus(preapproval.status),

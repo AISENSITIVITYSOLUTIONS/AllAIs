@@ -5,6 +5,9 @@ const { getAuth } = require("firebase-admin/auth");
 const { getAppCheck } = require("firebase-admin/app-check");
 const crypto = require("node:crypto");
 const { listProviders, callProvider } = require("./providers");
+const { dayKey, nextDailyResetIso } = require("./plans");
+const { resolveEntitlement } = require("./entitlements");
+const { consumeUsage, readUsage, refundUsage } = require("./quota");
 
 initializeApp();
 const db = getFirestore();
@@ -69,20 +72,9 @@ const allowedOrigins = new Set([
 
 // ---------- Acceso por email, visitas y límite diario ----------
 
-function dayKey(date = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: QUOTA_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(date);
-}
-
-// Medianoche siguiente en la Ciudad de México. CDMX está en UTC-6 todo el año (sin horario de verano desde 2022).
-function nextResetIso() {
-  const [year, month, day] = dayKey().split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day + 1, 6, 0, 0)).toISOString();
-}
+// dayKey y nextDailyResetIso viven en plans.js: son la misma regla de fechas que
+// usan las cuotas por plan, y duplicarlas aquí haría que se desalinearan.
+const nextResetIso = () => nextDailyResetIso();
 
 function clientIp(request) {
   const forwarded = String(request.get("x-forwarded-for") || "");
@@ -391,13 +383,35 @@ async function resolveCode(rawCode, { activate = false } = {}) {
   });
 }
 
-async function refundQuota(ref) {
-  if (!ref) return;
-  try {
-    await ref.update({ count: FieldValue.increment(-1) });
-  } catch (error) {
-    console.warn("AllAIs quota refund failed", error?.message);
-  }
+// Una consulta que no llegó a entregarse se devuelve en todos los contadores
+// que la registraron: el del ciclo y, si aplica, el del día.
+// La resta vive en quota.js para no tener dos implementaciones del mismo descuento.
+async function refundQuota(refs) {
+  await refundUsage([].concat(refs || []).filter(Boolean), FieldValue.increment);
+}
+
+// Consulta a Mercado Pago usada para revalidar una suscripción guardada.
+// Se carga de forma diferida para no acoplar el arranque de este módulo.
+async function verifyPreapproval(preapprovalId) {
+  const { fetchPreapproval } = require("./billing");
+  return fetchPreapproval(preapprovalId);
+}
+
+// Derecho de uso de una cuenta: plan resuelto en el servidor a partir del uid.
+async function entitlementFor(user) {
+  return resolveEntitlement({
+    db,
+    uid: user.uid,
+    freeDaily: DAILY_QUERY_LIMIT,
+    verifyPreapproval
+  });
+}
+
+// Estado de cuota para mostrar, sin consumir.
+async function accountQuota(user) {
+  const entitlement = await entitlementFor(user);
+  const quota = await readUsage({ db, holder: user.email, uid: user.uid, entitlement });
+  return { quota, plan: entitlement.planId, planName: entitlement.planName };
 }
 
 
@@ -475,7 +489,8 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         const visit = await recordVisit({ method: user.provider, email: user.email, request, consent: request.body?.consent === true })
           .catch((error) => { console.error("AllAIs visit log failed", error?.message); return {}; });
         await logToSheet("visita", { email: user.email, metodo: user.provider, ...visit });
-        sendJson(response, 200, { ok: true, authType: "email", email: user.email, quota: await readQuota(user.email) });
+        const account = await accountQuota(user);
+        sendJson(response, 200, { ok: true, authType: "email", email: user.email, ...account });
         return;
       }
 
@@ -523,18 +538,40 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         return;
       }
 
-      // El código maestro no tiene límite diario; las cuentas y los códigos promocionales sí.
-      let quotaRef = null;
+      // El código maestro no tiene límite; las cuentas y los códigos promocionales sí.
+      //
+      // La cuenta con suscripción usa el cupo de su plan. El plan se resuelve en el
+      // servidor a partir del uid del token: nunca se toma de la petición, porque el
+      // navegador podría declarar cualquier plan.
+      let quotaRef = [];
       let quota = null;
-      const holder = emailUser ? emailUser.email : (codeAccess.limit ? `code:${codeAccess.code}` : null);
-      const holderLimit = emailUser ? DAILY_QUERY_LIMIT : codeAccess.limit;
-      if (holder) {
-        const consumed = await consumeQuota(holder, holderLimit);
+      if (emailUser) {
+        const entitlement = await entitlementFor(emailUser);
+        const consumed = await consumeUsage({
+          db,
+          holder: emailUser.email,
+          uid: emailUser.uid,
+          entitlement
+        });
+        if (!consumed.ok) {
+          const monthly = consumed.blockedBy === "monthly";
+          sendJson(response, 429, {
+            error: monthly ? "Monthly query limit reached." : "Daily query limit reached.",
+            code: monthly ? "MONTHLY_LIMIT" : "DAILY_LIMIT",
+            plan: entitlement.planId,
+            quota: consumed.quota
+          });
+          return;
+        }
+        quotaRef = consumed.refs;
+        quota = consumed.quota;
+      } else if (codeAccess.limit) {
+        const consumed = await consumeQuota(`code:${codeAccess.code}`, codeAccess.limit);
         if (!consumed.ok) {
           sendJson(response, 429, { error: "Daily query limit reached.", code: "DAILY_LIMIT", quota: consumed.quota });
           return;
         }
-        quotaRef = consumed.ref;
+        quotaRef = [consumed.ref];
         quota = consumed.quota;
       }
 

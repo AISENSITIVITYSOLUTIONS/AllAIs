@@ -8,6 +8,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { initializeApp, getApps } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -30,25 +31,36 @@ function plans() {
   return {
     lanzamiento: {
       id: "lanzamiento",
-      label: "AllAIs · Plan lanzamiento",
+      label: "AllAIs · Plan Lanzamiento",
       amount: Number(process.env.MP_PRICE_LANZAMIENTO_MXN || 0)
     },
     profesional_1: {
       id: "profesional_1",
-      label: "AllAIs · Plan profesional 1",
+      label: "AllAIs · Plan Esencial",
       amount: Number(process.env.MP_PRICE_PROFESIONAL_1_MXN || 0)
     },
     profesional_2: {
       id: "profesional_2",
-      label: "AllAIs · Plan profesional 2",
+      label: "AllAIs · Plan Profesional",
       amount: Number(process.env.MP_PRICE_PROFESIONAL_2_MXN || 0)
     },
     profesional_3: {
       id: "profesional_3",
-      label: "AllAIs · Plan profesional 3",
+      label: "AllAIs · Plan Avanzado",
       amount: Number(process.env.MP_PRICE_PROFESIONAL_3_MXN || 0)
     }
   };
+}
+
+// La vigencia de la promoción se decide aquí, en el servidor. El navegador puede
+// ocultar o mostrar el precio de Lanzamiento, pero no puede contratarlo fuera de fecha.
+function assertAvailable(planId) {
+  const verdict = canSubscribeTo(planId);
+  if (verdict.ok) return;
+  if (verdict.reason === "promo_closed") {
+    throw httpError(409, "El precio de lanzamiento ya terminó. Elige uno de los planes vigentes.");
+  }
+  throw httpError(400, "Plan no disponible.");
 }
 
 function httpError(status, message) {
@@ -83,6 +95,23 @@ async function mercadoPago(path, options = {}) {
   return data;
 }
 
+// Consulta de una suscripción en Mercado Pago. La API principal la usa para
+// revalidar el plan de una cuenta: el derecho de uso se confirma contra Mercado
+// Pago, nunca contra lo que declare el navegador.
+async function fetchPreapproval(preapprovalId) {
+  const data = await mercadoPago(`/preapproval/${encodeURIComponent(preapprovalId)}`, { method: "GET" });
+  // "status" sale tal cual lo manda Mercado Pago ("authorized", "paused"...),
+  // porque quien consume este dato lo traduce con su propio mapa de estados.
+  // Devolverlo ya traducido degradaría a "unknown" a un suscriptor al corriente.
+  return {
+    id: data.id,
+    status: data.status,
+    internalStatus: internalStatus(data.status),
+    externalReference: data.external_reference || null,
+    nextPaymentDate: data.next_payment_date || null
+  };
+}
+
 // Identidad del usuario por token de Firebase Auth (mismo criterio que la API principal).
 async function verifyUser(request) {
   const match = String(request.get("authorization") || "").match(/^Bearer\s+(.+)$/i);
@@ -115,6 +144,7 @@ async function createSubscription(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
+  assertAvailable(plan.id);
 
   // Una sola suscripción activa o pendiente por correo.
   const existing = await db.collection("subscriptions").doc(user.uid).get();
@@ -251,6 +281,7 @@ async function changePlan(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
+  assertAvailable(plan.id);
 
   const { ref, data } = await liveSubscription(user);
   if (data.plan === plan.id) throw httpError(409, "Ya tienes ese plan.");
@@ -356,3 +387,5 @@ exports.billing = onRequest({
     });
   }
 });
+
+exports.fetchPreapproval = fetchPreapproval;

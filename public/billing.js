@@ -18,7 +18,7 @@ const PLANS = [
     tagline: "Resuelve tus tareas del día a día.",
     icon: "cube",
     features: [
-      "100 consultas estándar al mes",
+      "300 consultas al mes",
       "Chat con los modelos habilitados",
       "Redacción, resumen y traducción",
       "Carga individual de documentos",
@@ -33,7 +33,7 @@ const PLANS = [
     icon: "layers",
     featured: true,
     features: [
-      "250 consultas estándar al mes",
+      "600 consultas al mes",
       "Todo lo incluido en Esencial",
       "Búsqueda web con fuentes",
       "Comparación de dos modelos",
@@ -47,7 +47,7 @@ const PLANS = [
     tagline: "Aborda proyectos más exigentes.",
     icon: "chart",
     features: [
-      "500 consultas estándar al mes",
+      "1000 consultas al mes",
       "Todo lo incluido en Profesional",
       "Comparación de tres modelos",
       "Análisis de CSV y JSON",
@@ -56,11 +56,14 @@ const PLANS = [
   }
 ];
 
+// Lanzamiento ofrece el mismo cupo que Esencial a precio promocional, no es un nivel aparte.
+// Por eso lleva fecha límite: sin ella, el plan más barato sería el de mejor relación.
 const LAUNCH = {
   id: "lanzamiento",
   name: "Lanzamiento",
   price: 99,
-  note: "Plan básico con 10 consultas diarias"
+  note: "300 consultas al mes, 10 al día.",
+  deadline: "Precio válido si contratas antes del 1 de noviembre."
 };
 
 const ALL_PLANS = [...PLANS, LAUNCH];
@@ -293,11 +296,14 @@ const STYLES = `
 .billing-launch .billing-launch-note {
   flex: 1;
   min-width: 0;
+  margin: 0;
   padding-left: 18px;
   border-left: 1px solid rgba(147,197,253,.3);
   font-size: .95rem;
+  line-height: 1.4;
   color: var(--bp-ink-2);
 }
+.billing-launch .billing-launch-note b { color: var(--bp-blue-3); font-weight: 700; }
 .billing-launch .billing-choose { width: auto; flex: none; margin: 0; padding: 10px 20px; font-size: .92rem; }
 
 .billing-manage { display: flex; justify-content: center; margin-top: 16px; }
@@ -426,7 +432,8 @@ function launchStrip() {
   amount.append(node("small", {}, " MXN/mes"));
   title.append(amount);
 
-  const note = node("p", { class: "billing-launch-note" }, LAUNCH.note);
+  const note = node("p", { class: "billing-launch-note" });
+  note.append(document.createTextNode(LAUNCH.note), node("b", {}, ` ${LAUNCH.deadline}`));
 
   const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, `Elegir ${LAUNCH.name}`);
   choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose));
@@ -468,7 +475,7 @@ function buildDialog() {
   const foot = node("footer", { class: "billing-foot" });
   foot.append(
     node("p", {}, "Propuesta comercial: funciones y cupos sujetos a validación técnica y de costos."),
-    node("p", {}, "Cada consulta estándar corresponde a una respuesta de un modelo. Búsqueda y archivos requieren límites propios."),
+    node("p", {}, "Cada consulta corresponde a una respuesta de un modelo; la búsqueda web y los archivos tienen límites propios."),
     node("p", {}, "Pagos seguros con Mercado Pago.")
   );
 

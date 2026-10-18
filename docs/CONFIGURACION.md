@@ -27,9 +27,13 @@ notepad functions\.env
 6. En `functions/.env`:
    ```
    SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
-   SHEETS_WEBHOOK_TOKEN=la-misma-clave-del-paso-3
    ```
-7. Las pestañas Visitas, Consultas y Usuarios se crean solas con el primer registro.
+7. Guarde el token como secreto de Firebase (no va en el `.env`):
+   ```powershell
+   firebase functions:secrets:set SHEETS_WEBHOOK_TOKEN
+   ```
+   Pegue la misma clave del paso 3 cuando lo pida.
+8. Las pestañas Visitas, Consultas y Usuarios se crean solas con el primer registro.
 
 ## 4. Firestore (recomendado)
 

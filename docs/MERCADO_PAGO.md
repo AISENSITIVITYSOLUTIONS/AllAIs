@@ -62,10 +62,48 @@ escriben en Firestore sin llamar a Mercado Pago.
    ```powershell
    cd "<carpeta-local-de-AllAIs>"  # la carpeta donde está package.json
    git checkout main
-   git pull
-   firebase deploy --only functions:billing,hosting
+   git pull origin main
+
+   cd functions
+   npm install
+   npm test            # debe decir: # pass 45  /  # fail 0
+   cd ..
+
+   firebase deploy --only functions:api,functions:billing,hosting
    ```
-   **Hosting va siempre junto con la función.** Ver la sección siguiente.
+   **Hosting va siempre junto con las funciones**, y `api` va junto con `billing`
+   porque el control de cuotas vive en `api`. Ver la sección siguiente.
+
+### Cómo saber qué versión subió
+
+El comando imprime una línea como esta:
+
+```
+i  functions: packaged ...\functions (75.15 KB) for uploading
+```
+
+Ese tamaño es la forma más rápida de verificar la versión: el código con el control
+de cuotas y sus pruebas pesa **~75 KB**; el anterior pesaba ~55 KB. Si el número es
+el chico, subió una versión vieja.
+
+Confirmación sin consola: abrir el sitio en una ventana privada e ir a la pantalla de
+planes. Debe decir **«Precio válido si contratas antes del 10 de noviembre de 2026»**.
+
+### Si hay que volver a la versión anterior
+
+> **Esto no es parte del despliegue.** Es un extintor: se usa **solo** si después de
+> desplegar el sitio queda roto. Si el despliegue salió bien, estos comandos no se
+> tocan — ejecutarlos «de pasada» vuelve a publicar el código viejo y deshace el
+> trabajo, sin ningún mensaje de error que lo advierta.
+
+```powershell
+git checkout <commit-anterior>
+firebase deploy --only functions:api,functions:billing,hosting
+git checkout main
+```
+
+Después de usarlo, el sitio queda en la versión vieja hasta que se vuelva a desplegar
+desde `main`. Conviene anotar el commit al que se regresó y por qué.
 
 ## Por qué hay que desplegar Hosting junto con la función
 
@@ -88,24 +126,91 @@ anterior, así que el sitio se comporta como si nada hubiera cambiado. El sínto
 desconcertante: el despliegue termina en `Deploy complete!`, el código y el `.env` son
 correctos, y aun así el comportamiento viejo persiste por más veces que se repita.
 
-Por eso, **cualquier cambio en `functions/billing.js` o en las variables de
-`functions/.env` exige desplegar Hosting en el mismo comando**:
+Por eso, **cualquier cambio en `functions/billing.js`, en `functions/index.js` o en las
+variables de `functions/.env` exige desplegar Hosting en el mismo comando**:
 
 ```powershell
-firebase deploy --only functions:billing,hosting
+firebase deploy --only functions:api,functions:billing,hosting
 ```
 
-Lo mismo aplica al endpoint `api`, que usa la misma configuración.
+`api` lleva la misma configuración `pinTag`, y es donde vive el control de cuotas, así
+que se despliega junto con `billing` aunque el cambio parezca ser solo de cobros.
+
+Si el despliegue salió bien, el comando imprime esta línea, que es la confirmación de
+que Hosting sí va a enrutar las revisiones nuevas:
+
+```
+i  hosting: The following function(s) are pinned to site allais-nni and will be deployed as well: api,billing
+```
+
+## Cuotas por plan
+
+Las cuotas no viven en el frontend. El plan de cada cuenta se resuelve en el servidor
+a partir del `uid` del token de Firebase Auth y se revalida contra Mercado Pago; la
+petición del navegador nunca declara su propio plan.
+
+| Plan | id en el backend | Precio | Al mes | Al día |
+|---|---|---|---|---|
+| Lanzamiento | `lanzamiento` | $99 | 300 | 10 |
+| Esencial | `profesional_1` | $199 | 300 | — |
+| Profesional | `profesional_2` | $299 | 600 | — |
+| Avanzado | `profesional_3` | $399 | 1 000 | — |
+
+Tres módulos, con una responsabilidad cada uno:
+
+- **`functions/plans.js`** — única fuente de las cuotas, los topes diarios, los ciclos
+  de facturación y la vigencia de la promoción. Lógica pura, sin red ni base de datos.
+  **Cualquier cambio de precio o de cuota se hace aquí**, no en el frontend ni en
+  `billing.js`, o las dos mitades se desalinean.
+- **`functions/entitlements.js`** — identifica el plan activo. Solo el estado `active`
+  concede cuota: una tarjeta `pending` no. Revalida contra Mercado Pago cada 6 horas;
+  si Mercado Pago no responde, conserva el estado conocido para no dejar sin servicio
+  a quien ya pagó.
+- **`functions/quota.js`** — registra el consumo. Verifica e incrementa el contador del
+  ciclo y el del día **dentro de una sola transacción**, de modo que las solicitudes
+  simultáneas no rebasan el límite. Reinicia por ciclo de facturación y por día.
+
+Documentos en la colección `usage`:
+
+```
+<correo>_<AAAA-MM-DD>     consumo del día
+<uid>_c_<claveDeCiclo>    consumo del ciclo de facturación
+```
+
+El ciclo se ancla en la fecha de contratación, no en el día 1 del mes, con aritmética
+ajustada a fin de mes (quien contrató un 31 de enero factura el 28 de febrero).
+
+Al agotarse el cupo, el endpoint de chat responde `429` con `MONTHLY_LIMIT` o
+`DAILY_LIMIT`. Si la respuesta falla a medio camino, la consulta se devuelve en todos
+los contadores que la registraron.
+
+### Pruebas
+
+```powershell
+cd functions
+npm test
+```
+
+45 pruebas en `functions/test/`, sobre un Firestore en memoria que lleva número de
+versión por documento y reintenta las transacciones igual que el real, para que las
+pruebas de concurrencia valgan algo. Cubren los cuatro planes, los cambios de
+suscripción, los vencimientos, las solicitudes simultáneas y la expiración de la
+promoción.
+
+> La promoción de Lanzamiento cierra a la medianoche del **10 de noviembre de 2026**,
+> hora de la Ciudad de México. La fecha está en `functions/plans.js` y, repetida solo
+> para lo que se muestra, en `public/billing.js`. Quien la tenga contratada conserva
+> su precio: la fecha limita la venta, no el servicio.
 
 ## Pruebas en sandbox
 
-Con credenciales de prueba, Mercado Pago solo acepta como comprador a un **usuario de prueba**. Define `MP_PAYER_EMAIL` en `functions/.env` con el correo del usuario de prueba (pestaña Cuentas de prueba) y vuelve a desplegar con `firebase deploy --only functions:billing,hosting`. En producción deja esa variable vacía.
+Con credenciales de prueba, Mercado Pago solo acepta como comprador a un **usuario de prueba**. Define `MP_PAYER_EMAIL` en `functions/.env` con el correo del usuario de prueba (pestaña Cuentas de prueba) y vuelve a desplegar con `firebase deploy --only functions:api,functions:billing,hosting`. En producción deja esa variable vacía.
 
 ## Modo de prueba interno (`BILLING_MOCK`)
 
 Para validar la interfaz y Firestore **sin llamar a Mercado Pago ni cobrar nada**, define
 `BILLING_MOCK=true` en `functions/.env` y despliega con
-`firebase deploy --only functions:billing,hosting`.
+`firebase deploy --only functions:api,functions:billing,hosting`.
 
 Con el modo activo, `/billing/subscribe` no contacta a Mercado Pago: escribe directamente
 `subscriptions/{uid}` con `status: "active"` y `mock: true`, y responde `{ mock: true }`.

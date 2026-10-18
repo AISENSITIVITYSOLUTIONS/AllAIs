@@ -810,7 +810,7 @@ function setLanguage(language) {
   elements.accessHint.textContent = copy.accessHint;
   elements.googleLabel.textContent = copy.google;
   elements.authDividerText.textContent = copy.orEmail;
-  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 20);
+  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 10);
   elements.consentText.innerHTML = copy.consentHtml;
   elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
   renderQuota();
@@ -882,7 +882,7 @@ function renderAccount() {
   elements.accountStatus.classList.toggle("is-active", signed);
   elements.accountButton.textContent = signed ? copy.signOut : copy.signIn;
   elements.accountAvatar.textContent = signed ? (state.email || "N").charAt(0).toUpperCase() : "";
-  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 20);
+  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 10);
   elements.accountAvatar.classList.toggle("is-guest", !signed);
   elements.googleButton.hidden = signed;
   elements.authDivider.hidden = signed;
@@ -1939,7 +1939,7 @@ async function sendPrompt(event) {
     if (response.status === 429 && data.code === "DAILY_LIMIT") {
       if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
       trackEvent("daily_limit_reached");
-      addMessage("assistant", copy.quotaExhausted(data.quota?.limit || 20, formatResetTime(data.quota?.resetAt)), "AllAIs");
+      addMessage("assistant", copy.quotaExhausted(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs");
       state.history.pop();
       return;
     }

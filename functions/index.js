@@ -9,7 +9,7 @@ const { listProviders, callProvider } = require("./providers");
 initializeApp();
 const db = getFirestore();
 
-const DAILY_QUERY_LIMIT = Number(process.env.DAILY_QUERY_LIMIT || 20);
+const DAILY_QUERY_LIMIT = Number(process.env.DAILY_QUERY_LIMIT || 10);
 const PROMO_DEFAULT_DAILY_LIMIT = Number(process.env.PROMO_DEFAULT_DAILY_LIMIT || 50);
 const QUOTA_TIME_ZONE = "America/Mexico_City";
 

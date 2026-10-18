@@ -56,9 +56,13 @@ escriben en Firestore sin llamar a Mercado Pago.
    ```powershell
    firebase functions:secrets:set MERCADOPAGO_ACCESS_TOKEN
    ```
-3. **Montos:** definir `MP_PRICE_LANZAMIENTO_MXN`, `MP_PRICE_PROFESIONAL_1_MXN`, `MP_PRICE_PROFESIONAL_2_MXN` y `MP_PRICE_PROFESIONAL_3_MXN` en `functions/.env` (por ejemplo 99, 199, 299 y 399) antes de desplegar. Mientras estén vacíos, el backend responde que el plan no tiene precio y **no cobra**.
-4. **Webhook:** en Mercado Pago Developers → Webhooks, registrar `https://allais.nni.ai/billing/webhook` y suscribirse al evento de **Planes y suscripciones**.
-5. **Despliegue:**
+3. **Secreto del webhook:** en Mercado Pago Developers → Webhooks → Configurar notificación, revelar el secreto y guardarlo:
+   ```powershell
+   firebase functions:secrets:set MP_WEBHOOK_SECRET
+   ```
+4. **Montos:** definir `MP_PRICE_LANZAMIENTO_MXN`, `MP_PRICE_PROFESIONAL_1_MXN`, `MP_PRICE_PROFESIONAL_2_MXN` y `MP_PRICE_PROFESIONAL_3_MXN` en `functions/.env` (por ejemplo 99, 199, 299 y 399) antes de desplegar. Mientras estén vacíos, el backend responde que el plan no tiene precio y **no cobra**.
+5. **Webhook:** en Mercado Pago Developers → Webhooks, registrar `https://allais.nni.ai/billing/webhook` y suscribirse al evento de **Planes y suscripciones**.
+6. **Despliegue:**
    ```powershell
    cd "<carpeta-local-de-AllAIs>"  # la carpeta donde está package.json
    git checkout main
@@ -66,7 +70,7 @@ escriben en Firestore sin llamar a Mercado Pago.
 
    cd functions
    npm install
-   npm test            # debe decir: # pass 45  /  # fail 0
+   npm test            # debe decir: # pass 57  /  # fail 0
    cd ..
 
    firebase deploy --only functions:api,functions:billing,hosting
@@ -104,6 +108,30 @@ git checkout main
 
 Después de usarlo, el sitio queda en la versión vieja hasta que se vuelva a desplegar
 desde `main`. Conviene anotar el commit al que se regresó y por qué.
+
+## Validación de firma del webhook (`x-signature`)
+
+Cada notificación de Mercado Pago lleva un header `x-signature` con una firma
+HMAC-SHA256. El backend la valida **antes** de procesar el evento; si la firma
+falta o no coincide, responde `401` y descarta la solicitud.
+
+El secreto se obtiene en **Mercado Pago Developers → Tu integración → Webhooks →
+Configurar notificación** (el botón "Revelar" lo muestra). Se guarda como secreto
+de Firebase:
+
+```powershell
+firebase functions:secrets:set MP_WEBHOOK_SECRET
+```
+
+Después de guardarlo, desplegar con el comando habitual. La función `billing` ya
+lo declara en su lista de secretos.
+
+Si `MP_WEBHOOK_SECRET` no está configurado, **todas** las notificaciones se
+rechazan, lo que impide activar suscripciones por webhook. En modo mock
+(`BILLING_MOCK=true`) la validación se salta porque no hay webhook real.
+
+La lógica vive en `functions/webhook-signature.js` y sus pruebas en
+`functions/test/webhook-signature.test.js`.
 
 ## Por qué hay que desplegar Hosting junto con la función
 
@@ -191,7 +219,7 @@ cd functions
 npm test
 ```
 
-45 pruebas en `functions/test/`, sobre un Firestore en memoria que lleva número de
+57 pruebas en `functions/test/`, sobre un Firestore en memoria que lleva número de
 versión por documento y reintenta las transacciones igual que el real, para que las
 pruebas de concurrencia valgan algo. Cubren los cuatro planes, los cambios de
 suscripción, los vencimientos, las solicitudes simultáneas y la expiración de la
@@ -232,4 +260,4 @@ Sirve sobre todo mientras no se tenga un comprador de prueba válido para el san
 - Confirmar que la cuenta puede cobrar en **USD** o fijar la conversión a MXN. Esta versión cobra solo en MXN.
 - Confirmar con Mercado Pago que la prueba gratuita por fecha de inicio diferido se comporta como se espera en producción.
 - Quitar `BILLING_MOCK` y `MP_PAYER_EMAIL` del `.env` de producción, cambiar el secreto al token de producción y registrar el webhook en modo productivo.
-- Validar la firma `x-signature` del webhook antes de aceptar notificaciones en producción.
+- ~~Validar la firma `x-signature` del webhook antes de aceptar notificaciones en producción.~~ ✅ Implementado: el webhook rechaza con 401 toda notificación sin firma válida. El secreto se guarda en Secret Manager como `MP_WEBHOOK_SECRET`.

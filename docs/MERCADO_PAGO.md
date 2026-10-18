@@ -5,6 +5,17 @@ Este documento describe la integración de suscripciones mensuales con Mercado P
 ## Flujo
 
 1. El usuario elige un plan. El frontend llama a `POST /billing/subscribe` con `{ "plan": "lanzamiento" }`, `profesional_1`, `profesional_2` o `profesional_3` y su token de Firebase Auth.
+
+   **Los identificadores no coinciden con los nombres comerciales.** Los ids son del backend
+   y no cambian; los nombres visibles viven solo en `public/billing.js`:
+
+   | id | nombre visible | precio |
+   |---|---|---|
+   | `lanzamiento` | Lanzamiento | $99 |
+   | `profesional_1` | Esencial | $199 |
+   | `profesional_2` | Profesional (recomendado) | $299 |
+   | `profesional_3` | Avanzado | $399 |
+
 2. El backend crea una suscripción (preapproval) en **estado pendiente**, con inicio dentro de **3 días** (prueba gratuita) y cobro mensual en **MXN**.
 3. El usuario es enviado a `init_point` de Mercado Pago, donde registra su tarjeta.
 4. Mercado Pago llama a `POST /billing/webhook`. El backend **vuelve a consultar** la suscripción en la API antes de cambiar nada.

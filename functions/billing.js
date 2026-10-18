@@ -30,22 +30,22 @@ function plans() {
   return {
     lanzamiento: {
       id: "lanzamiento",
-      label: "AllAIs · Plan lanzamiento",
+      label: "AllAIs · Plan Lanzamiento",
       amount: Number(process.env.MP_PRICE_LANZAMIENTO_MXN || 0)
     },
     profesional_1: {
       id: "profesional_1",
-      label: "AllAIs · Plan profesional 1",
+      label: "AllAIs · Plan Esencial",
       amount: Number(process.env.MP_PRICE_PROFESIONAL_1_MXN || 0)
     },
     profesional_2: {
       id: "profesional_2",
-      label: "AllAIs · Plan profesional 2",
+      label: "AllAIs · Plan Profesional",
       amount: Number(process.env.MP_PRICE_PROFESIONAL_2_MXN || 0)
     },
     profesional_3: {
       id: "profesional_3",
-      label: "AllAIs · Plan profesional 3",
+      label: "AllAIs · Plan Avanzado",
       amount: Number(process.env.MP_PRICE_PROFESIONAL_3_MXN || 0)
     }
   };

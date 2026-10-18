@@ -1,13 +1,70 @@
 // Suscripciones de AllAIs con Mercado Pago. Solo interfaz: el cobro y el estado viven en la función /billing.
 // Los montos mostrados deben coincidir con las variables MP_PRICE_* de functions/.env; el servidor es quien cobra.
+//
+// Los identificadores (lanzamiento, profesional_1..3) son los del backend y no cambian.
+// Los nombres comerciales viven solo aquí.
+
+const ICONS = {
+  cube: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  layers: '<path d="m12 2 9 5-9 5-9-5 9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+  chart: '<path d="M5 20V11"/><path d="M12 20V4"/><path d="M19 20v-6"/>'
+};
+
 const PLANS = [
-  { id: "lanzamiento", name: "Lanzamiento", price: 99, badge: "Precio de lanzamiento" },
-  { id: "profesional_1", name: "Profesional 1", price: 199, badge: "" },
-  { id: "profesional_2", name: "Profesional 2", price: 299, badge: "Recomendado" },
-  { id: "profesional_3", name: "Profesional 3", price: 399, badge: "" }
+  {
+    id: "profesional_1",
+    name: "Esencial",
+    price: 199,
+    tagline: "Resuelve tus tareas del día a día.",
+    icon: "cube",
+    features: [
+      "100 consultas estándar al mes",
+      "Chat con los modelos habilitados",
+      "Redacción, resumen y traducción",
+      "Carga individual de documentos",
+      "Exportación en PDF"
+    ]
+  },
+  {
+    id: "profesional_2",
+    name: "Profesional",
+    price: 299,
+    tagline: "Investiga, compara y entrega mejor.",
+    icon: "layers",
+    featured: true,
+    features: [
+      "250 consultas estándar al mes",
+      "Todo lo incluido en Esencial",
+      "Búsqueda web con fuentes",
+      "Comparación de dos modelos",
+      "Exportación en Word y PDF"
+    ]
+  },
+  {
+    id: "profesional_3",
+    name: "Avanzado",
+    price: 399,
+    tagline: "Aborda proyectos más exigentes.",
+    icon: "chart",
+    features: [
+      "500 consultas estándar al mes",
+      "Todo lo incluido en Profesional",
+      "Comparación de tres modelos",
+      "Análisis de CSV y JSON",
+      "Trabajo con varios documentos"
+    ]
+  }
 ];
 
-const PLAN_NAME = Object.fromEntries(PLANS.map((plan) => [plan.id, plan.name]));
+const LAUNCH = {
+  id: "lanzamiento",
+  name: "Lanzamiento",
+  price: 99,
+  note: "Plan básico con 10 consultas diarias"
+};
+
+const ALL_PLANS = [...PLANS, LAUNCH];
+const PLAN_NAME = Object.fromEntries(ALL_PLANS.map((plan) => [plan.id, plan.name]));
 
 const STATUS_TEXT = {
   none: "",
@@ -18,10 +75,18 @@ const STATUS_TEXT = {
   unknown: "Estamos revisando tu suscripción."
 };
 
-const INTRO_NEW = "3 días gratis. Primer cobro al cuarto día.";
-const INTRO_LIVE = "Puedes cambiar de plan o cancelar cuando quieras.";
+const HEAD_NEW = {
+  title: 'Elige el plan que impulse <em>tu trabajo</em>',
+  sub: "Desde tus primeras ideas hasta proyectos de mayor alcance."
+};
+const HEAD_LIVE = {
+  title: 'Tu suscripción en <em>AllAIs</em>',
+  sub: "Cambia de plan cuando quieras. La tarjeta registrada no se vuelve a pedir."
+};
 const CANCEL_LABEL = "Cancelar suscripción";
 
+// Paleta propia del panel: es una superficie de producto y se mantiene oscura en ambos temas,
+// para que el contraste de la propuesta no dependa del tema de la app.
 const STYLES = `
 .billing-cta {
   position: relative;
@@ -59,99 +124,220 @@ const STYLES = `
 }
 @keyframes billingShine { 0%{left:-75%} 60%,100%{left:125%} }
 
-.billing-dialog { width: min(460px, 92vw); max-width: 460px; max-height: 92vh; overflow: hidden; }
-.billing-dialog .auth-card {
+.billing-dialog {
+  width: min(1120px, 94vw);
+  max-height: 94vh;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.billing-dialog::backdrop { background: rgba(4,10,22,.72); backdrop-filter: blur(4px); }
+
+.billing-sheet {
+  --bp-ink: #eef4fd;
+  --bp-ink-2: #9db2ce;
+  --bp-ink-3: #7d93b1;
+  --bp-line: rgba(130,170,225,.20);
+  --bp-panel: #112543;
+  --bp-blue: #3b82f6;
+  --bp-blue-2: #60a5fa;
+  --bp-blue-3: #93c5fd;
+
   box-sizing: border-box;
   position: relative;
-  width: 100%;
-  overflow: hidden;
-  padding: 28px 26px 22px;
-  border-radius: var(--radius-l);
+  max-height: 94vh;
+  overflow-y: auto;
+  padding: 34px 34px 24px;
+  border: 1px solid var(--bp-line);
+  border-radius: 24px;
   background:
-    radial-gradient(120% 80% at 0% 0%, rgba(42,169,201,.22), transparent 55%),
-    radial-gradient(120% 80% at 100% 100%, rgba(23,50,77,.25), transparent 60%),
-    var(--surface);
-  box-shadow: var(--shadow-menu);
+    radial-gradient(90% 70% at 8% 0%, rgba(59,130,246,.20), transparent 60%),
+    radial-gradient(80% 70% at 100% 100%, rgba(37,99,235,.18), transparent 60%),
+    linear-gradient(160deg, #0d1e38, #091429 70%);
+  color: var(--bp-ink);
+  box-shadow: 0 40px 90px -30px rgba(0,0,0,.8);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(130,170,225,.3) transparent;
 }
-.billing-dialog h2 {
-  margin: 0 36px 6px 0;
-  font-family: var(--font-read);
-  font-size: 1.7rem;
+
+.billing-close {
+  position: absolute;
+  top: 20px; right: 20px;
+  display: grid;
+  place-items: center;
+  width: 40px; height: 40px;
+  padding: 0;
+  border: 1px solid var(--bp-line);
+  border-radius: 12px;
+  background: rgba(255,255,255,.04);
+  color: var(--bp-ink-2);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.billing-close:hover { color: var(--bp-ink); border-color: var(--bp-blue-2); background: rgba(59,130,246,.14); }
+.billing-close svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+
+.billing-eyebrow { margin: 0 0 18px; font-size: .82rem; font-weight: 600; letter-spacing: .04em; color: var(--bp-ink-3); }
+.billing-eyebrow b { color: var(--bp-ink); font-weight: 700; }
+.billing-eyebrow b i { color: var(--bp-blue-2); font-style: normal; }
+
+.billing-head { margin: 0 0 22px; text-align: center; }
+.billing-head h2 {
+  margin: 0 0 8px;
+  font-family: inherit;
+  font-size: clamp(1.5rem, 1rem + 1.7vw, 2.3rem);
+  font-weight: 800;
   line-height: 1.15;
-  color: var(--ink);
+  letter-spacing: -.02em;
+  color: #fff;
 }
-.billing-dialog .billing-intro { margin: 0; color: var(--ink-2); line-height: 1.5; font-size: .95rem; }
-.billing-dialog .billing-status { min-height: 1.2em; margin: 10px 0 0; color: var(--accent); font-weight: 600; font-size: .9rem; }
-.billing-plans { display: grid; gap: 10px; margin-top: 16px; }
-.billing-plan {
+.billing-head h2 em { font-style: normal; color: var(--bp-blue-3); }
+.billing-head .billing-sub { margin: 0; font-size: 1rem; color: var(--bp-ink-2); }
+.billing-head .billing-status { min-height: 1.1em; margin: 10px 0 0; font-size: .92rem; font-weight: 600; color: var(--bp-blue-3); }
+
+.billing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: stretch; }
+
+.billing-card {
   box-sizing: border-box;
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  padding: 24px 22px;
+  border: 1px solid var(--bp-line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(23,47,82,.72), rgba(14,30,55,.72));
+}
+.billing-card.is-featured {
+  /* Sobresale un poco por arriba y por abajo, como en la propuesta. */
+  margin: -14px 0;
+  padding-top: 44px;
+  border-color: rgba(96,165,250,.55);
+  background: linear-gradient(180deg, rgba(37,80,160,.5), rgba(14,32,66,.78));
+  box-shadow: 0 0 0 1px rgba(96,165,250,.25), 0 24px 50px -24px rgba(59,130,246,.75);
+}
+.billing-ribbon {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 7px 0;
+  border-radius: 17px 17px 0 0;
+  background: linear-gradient(90deg, var(--bp-blue), var(--bp-blue-2));
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-align: center;
+}
+
+.billing-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.billing-card h3 { margin: 0; font-family: inherit; font-size: 1.45rem; font-weight: 700; letter-spacing: -.01em; color: #fff; }
+.billing-card .billing-tagline { margin: 4px 0 0; font-size: .9rem; line-height: 1.4; color: var(--bp-ink-2); }
+.billing-icon { flex: none; width: 28px; height: 28px; stroke: var(--bp-blue-2); stroke-width: 1.7; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.billing-price { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 14px; }
+.billing-price strong { font-size: 2.6rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: #fff; }
+.billing-price span { font-size: .95rem; font-weight: 500; color: var(--bp-ink-2); }
+
+.billing-features { list-style: none; margin: 0 0 20px; padding: 18px 0 0; border-top: 1px solid var(--bp-line); display: grid; gap: 11px; }
+.billing-features li { display: flex; align-items: flex-start; gap: 10px; font-size: .92rem; line-height: 1.35; color: var(--bp-ink); }
+.billing-check { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--bp-blue-2); }
+
+.billing-choose {
+  margin-top: auto;
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid rgba(147,197,253,.45);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--bp-ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+}
+.billing-choose:hover:not(:disabled) { background: rgba(59,130,246,.18); border-color: var(--bp-blue-2); transform: translateY(-1px); }
+.billing-choose:focus-visible { outline: 3px solid rgba(96,165,250,.5); outline-offset: 2px; }
+.billing-card.is-featured .billing-choose {
+  border-color: transparent;
+  background: linear-gradient(90deg, var(--bp-blue), var(--bp-blue-2));
+  color: #fff;
+  box-shadow: 0 14px 30px -14px rgba(59,130,246,.9);
+}
+.billing-card.is-featured .billing-choose:hover:not(:disabled) { filter: brightness(1.08); }
+.billing-choose:disabled { cursor: default; }
+.billing-card.is-current { border-color: var(--bp-blue-2); }
+.billing-card.is-current .billing-choose {
+  background: rgba(96,165,250,.16);
+  border-color: var(--bp-blue-2);
+  color: var(--bp-blue-3);
+  box-shadow: none;
+}
+.billing-choose:disabled:not(.is-current-btn) { opacity: .45; }
+
+.billing-launch {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-m);
-  background: var(--surface-2);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 18px 22px;
+  border: 1px solid rgba(96,165,250,.38);
+  border-radius: 16px;
+  background: linear-gradient(90deg, rgba(37,99,235,.26), rgba(29,78,216,.14));
 }
-.billing-plan:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 12px 24px -14px rgba(23,107,135,.55);
-  background: var(--accent-soft);
+.billing-launch .billing-rocket { font-size: 1.5rem; line-height: 1; }
+.billing-launch .billing-launch-title { font-size: 1.15rem; font-weight: 700; color: #fff; white-space: nowrap; }
+.billing-launch .billing-launch-title b { color: var(--bp-blue-3); }
+.billing-launch .billing-launch-title small { font-size: .85rem; font-weight: 600; color: var(--bp-blue-3); }
+.billing-launch .billing-launch-note {
+  flex: 1;
+  min-width: 0;
+  padding-left: 18px;
+  border-left: 1px solid rgba(147,197,253,.3);
+  font-size: .95rem;
+  color: var(--bp-ink-2);
 }
-.billing-plan:disabled { cursor: not-allowed; }
-.billing-plan:disabled:not(.is-current) { opacity: .5; }
-.billing-plan:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
-.billing-plan .plan-name { display: block; font-weight: 700; font-size: 1rem; }
-.billing-plan .plan-badge,
-.billing-plan .plan-current {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: .72rem;
-  font-weight: 700;
-  letter-spacing: .02em;
-}
-.billing-plan .plan-badge { background: var(--accent); color: #fff; }
-.billing-plan .plan-current { background: var(--accent-strong); color: #fff; }
-.billing-plan .plan-price { font-size: 1.35rem; font-weight: 800; color: var(--accent-strong); white-space: nowrap; }
-.billing-plan .plan-price small { font-size: .75rem; font-weight: 600; color: var(--ink-3); }
-.billing-plan.is-featured { border-color: var(--accent); background: linear-gradient(180deg, var(--accent-soft), var(--surface-2)); }
-.billing-plan.is-current { border-color: var(--accent-strong); background: var(--accent-soft); }
-.billing-plan.is-current .plan-badge { display: none; }
-.billing-manage { display: flex; justify-content: flex-end; margin-top: 12px; }
+.billing-launch .billing-choose { width: auto; flex: none; margin: 0; padding: 10px 20px; font-size: .92rem; }
+
+.billing-manage { display: flex; justify-content: center; margin-top: 16px; }
 .billing-manage[hidden] { display: none; }
 .billing-cancel {
-  padding: 8px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-m);
+  padding: 9px 18px;
+  border: 1px solid var(--bp-line);
+  border-radius: 12px;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--bp-ink-3);
   font: inherit;
-  font-size: .85rem;
+  font-size: .88rem;
   cursor: pointer;
   transition: border-color .15s ease, color .15s ease;
 }
-.billing-cancel:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
-.billing-cancel.is-confirming { border-color: var(--danger); color: var(--danger); font-weight: 700; }
+.billing-cancel:hover:not(:disabled) { border-color: #f87171; color: #fca5a5; }
+.billing-cancel.is-confirming { border-color: #f87171; color: #fca5a5; font-weight: 700; }
 .billing-cancel:disabled { opacity: .5; cursor: not-allowed; }
-.billing-cancel:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
-.billing-legal { margin: 14px 0 0; font-size: .8rem; color: var(--ink-3); line-height: 1.4; }
-.billing-error { min-height: 1.2em; margin: 8px 0 0; color: var(--danger); font-size: .9rem; }
-.billing-error.is-ok { color: var(--accent-strong); font-weight: 600; }
-.billing-dialog .auth-close { position: absolute; top: 14px; right: 14px; }
-.billing-dialog { border: 0; background: transparent; padding: 0; }
-.billing-dialog::backdrop { background: rgba(6,16,30,.55); backdrop-filter: blur(3px); }
+.billing-cancel:focus-visible { outline: 3px solid rgba(248,113,113,.45); outline-offset: 2px; }
+
+.billing-message { min-height: 1.2em; margin: 14px 0 0; text-align: center; font-size: .92rem; color: #fca5a5; }
+.billing-message.is-ok { color: var(--bp-blue-3); font-weight: 600; }
+
+.billing-foot { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--bp-line); text-align: center; }
+.billing-foot p { margin: 0 0 5px; font-size: .82rem; line-height: 1.45; color: var(--bp-ink-3); }
+.billing-foot p:last-child { margin: 0; }
+
+@media (max-width: 900px) {
+  .billing-grid { grid-template-columns: 1fr; }
+  .billing-card.is-featured { order: -1; margin: 0; }
+  .billing-sheet { padding: 28px 20px 20px; border-radius: 20px; }
+  .billing-launch { flex-wrap: wrap; gap: 12px; }
+  .billing-launch .billing-launch-note { flex-basis: 100%; padding-left: 0; border-left: 0; }
+  .billing-launch .billing-choose { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .billing-cta { animation: none; }
+  .billing-cta::after { animation: none; }
+  .billing-choose:hover:not(:disabled) { transform: none; }
+}
 `;
 
 function node(tag, attrs = {}, text = "") {
@@ -159,6 +345,19 @@ function node(tag, attrs = {}, text = "") {
   for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
   if (text) element.textContent = text;
   return element;
+}
+
+function svg(className, inner, viewBox = "0 0 24 24") {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  element.setAttribute("viewBox", viewBox);
+  element.setAttribute("aria-hidden", "true");
+  element.setAttribute("class", className);
+  element.innerHTML = inner;
+  return element;
+}
+
+function checkIcon() {
+  return svg("billing-check", '<circle cx="12" cy="12" r="10" fill="currentColor" opacity=".2"/><path d="m8 12.4 2.6 2.6L16 9.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>');
 }
 
 async function billingRequest(path, options = {}) {
@@ -176,7 +375,7 @@ async function billingRequest(path, options = {}) {
 }
 
 let dialog = null;
-// Estado vigente de la suscripción. Decide si un clic en un plan contrata o cambia de plan.
+// Estado vigente de la suscripción. Decide si un clic contrata o cambia de plan.
 let current = { status: "none", plan: null };
 
 function hasLiveSubscription() {
@@ -190,42 +389,91 @@ function injectStyles() {
   document.head.append(style);
 }
 
-function buildDialog() {
-  dialog = node("dialog", { class: "auth-dialog billing-dialog", id: "billingDialog", "aria-labelledby": "billingTitle" });
+function planCard(plan) {
+  const card = node("article", { class: "billing-card" + (plan.featured ? " is-featured" : ""), "data-plan": plan.id });
+  if (plan.featured) card.append(node("p", { class: "billing-ribbon" }, "Recomendado"));
 
-  const card = node("div", { class: "auth-card" });
-  const close = node("button", { type: "button", class: "icon-button auth-close", "aria-label": "Cerrar" });
-  close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>';
-  close.addEventListener("click", () => dialog.close());
+  const top = node("div", { class: "billing-card-top" });
+  const heading = node("div", {});
+  heading.append(node("h3", {}, plan.name));
+  heading.append(node("p", { class: "billing-tagline" }, plan.tagline));
+  top.append(heading, svg("billing-icon", ICONS[plan.icon]));
 
-  const title = node("h2", { id: "billingTitle" }, "Elige tu plan");
-  const intro = node("p", { id: "billingIntro", class: "billing-intro" }, INTRO_NEW);
-  const status = node("p", { id: "billingStatus", class: "billing-status", role: "status" }, "");
-  const list = node("div", { class: "billing-plans", id: "billingPlans" });
+  const price = node("div", { class: "billing-price" });
+  price.append(node("strong", {}, `$${plan.price}`), node("span", {}, "MXN / mes"));
 
-  PLANS.forEach((plan) => {
-    const button = node("button", { type: "button", class: "billing-plan" + (plan.id === "profesional_2" ? " is-featured" : ""), "data-plan": plan.id });
-    const left = node("span", { class: "plan-labels" });
-    left.append(node("span", { class: "plan-name" }, plan.name));
-    if (plan.badge) left.append(node("span", { class: "plan-badge" }, plan.badge));
-    const price = node("span", { class: "plan-price" }, `$${plan.price}`);
-    price.append(node("small", {}, " MXN/mes"));
-    button.append(left, price);
-    button.addEventListener("click", () => choosePlan(plan.id, button));
-    list.append(button);
+  const list = node("ul", { class: "billing-features" });
+  plan.features.forEach((feature) => {
+    const item = node("li", {});
+    item.append(checkIcon(), node("span", {}, feature));
+    list.append(item);
   });
 
-  // Fila de administración: solo visible cuando hay una suscripción vigente.
+  const choose = node("button", { type: "button", class: "billing-choose", "data-choose": plan.id }, `Elegir ${plan.name}`);
+  choose.addEventListener("click", () => choosePlan(plan.id, choose));
+
+  card.append(top, price, list, choose);
+  return card;
+}
+
+function launchStrip() {
+  const strip = node("div", { class: "billing-launch", "data-plan": LAUNCH.id });
+  strip.append(node("span", { class: "billing-rocket", "aria-hidden": "true" }, "🚀"));
+
+  const title = node("p", { class: "billing-launch-title" });
+  title.append(document.createTextNode(`${LAUNCH.name} · `));
+  const amount = node("b", {}, `$${LAUNCH.price}`);
+  amount.append(node("small", {}, " MXN/mes"));
+  title.append(amount);
+
+  const note = node("p", { class: "billing-launch-note" }, LAUNCH.note);
+
+  const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, `Elegir ${LAUNCH.name}`);
+  choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose));
+
+  strip.append(title, note, choose);
+  return strip;
+}
+
+function buildDialog() {
+  dialog = node("dialog", { class: "billing-dialog", id: "billingDialog", "aria-labelledby": "billingTitle" });
+  const sheet = node("div", { class: "billing-sheet" });
+
+  const close = node("button", { type: "button", class: "billing-close", "aria-label": "Cerrar" });
+  close.append(svg("", '<path d="M6 6l12 12M18 6 6 18"/>'));
+  close.addEventListener("click", () => dialog.close());
+
+  const eyebrow = node("p", { class: "billing-eyebrow" });
+  const brand = node("b", {});
+  brand.append(document.createTextNode("All"), node("i", {}, "AI"), document.createTextNode("s"));
+  eyebrow.append(brand, document.createTextNode(" · Propuesta de planes"));
+
+  const head = node("header", { class: "billing-head" });
+  const title = node("h2", { id: "billingTitle" });
+  title.innerHTML = HEAD_NEW.title;
+  const sub = node("p", { id: "billingSub", class: "billing-sub" }, HEAD_NEW.sub);
+  const status = node("p", { id: "billingStatus", class: "billing-status", role: "status" }, "");
+  head.append(title, sub, status);
+
+  const grid = node("div", { class: "billing-grid" });
+  PLANS.forEach((plan) => grid.append(planCard(plan)));
+
   const manage = node("div", { class: "billing-manage", id: "billingManage", hidden: "" });
   const cancel = node("button", { type: "button", class: "billing-cancel", id: "billingCancel" }, CANCEL_LABEL);
   cancel.addEventListener("click", () => cancelSubscription(cancel));
   manage.append(cancel);
 
-  const error = node("p", { id: "billingMessage", class: "billing-error", role: "alert" }, "");
-  const legal = node("p", { class: "billing-legal" }, "Pagos procesados por Mercado Pago.");
+  const message = node("p", { id: "billingMessage", class: "billing-message", role: "alert" }, "");
 
-  card.append(close, title, intro, status, list, manage, error, legal);
-  dialog.append(card);
+  const foot = node("footer", { class: "billing-foot" });
+  foot.append(
+    node("p", {}, "Propuesta comercial: funciones y cupos sujetos a validación técnica y de costos."),
+    node("p", {}, "Cada consulta estándar corresponde a una respuesta de un modelo. Búsqueda y archivos requieren límites propios."),
+    node("p", {}, "Pagos seguros con Mercado Pago.")
+  );
+
+  sheet.append(close, eyebrow, head, grid, launchStrip(), manage, message, foot);
+  dialog.append(sheet);
   dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
   dialog.addEventListener("close", resetCancel);
   document.body.append(dialog);
@@ -250,21 +498,24 @@ function resetCancel() {
 function paintPlans({ signedIn = true } = {}) {
   const live = signedIn && hasLiveSubscription();
 
-  document.querySelectorAll(".billing-plan").forEach((button) => {
-    const isCurrent = live && button.dataset.plan === current.plan;
-    button.classList.toggle("is-current", isCurrent);
+  ALL_PLANS.forEach((plan) => {
+    const button = document.querySelector(`[data-choose="${plan.id}"]`);
+    const card = document.querySelector(`[data-plan="${plan.id}"]`);
+    if (!button || !card) return;
+
+    const isCurrent = live && plan.id === current.plan;
+    card.classList.toggle("is-current", isCurrent);
+    button.classList.toggle("is-current-btn", isCurrent);
     // Con una suscripción vigente, los demás planes siguen pulsables: cambian de plan.
     button.disabled = !signedIn || isCurrent;
-
-    const labels = button.querySelector(".plan-labels");
-    const tag = labels.querySelector(".plan-current");
-    if (isCurrent && !tag) labels.append(node("span", { class: "plan-current" }, "Tu plan actual"));
-    if (!isCurrent && tag) tag.remove();
+    button.textContent = isCurrent
+      ? "Tu plan actual"
+      : `${live ? "Cambiar a" : "Elegir"} ${plan.name}`;
   });
 
   document.getElementById("billingManage").hidden = !live;
-  document.getElementById("billingTitle").textContent = live ? "Tu suscripción" : "Elige tu plan";
-  document.getElementById("billingIntro").textContent = live ? INTRO_LIVE : INTRO_NEW;
+  document.getElementById("billingTitle").innerHTML = live ? HEAD_LIVE.title : HEAD_NEW.title;
+  document.getElementById("billingSub").textContent = live ? HEAD_LIVE.sub : HEAD_NEW.sub;
 }
 
 function statusLine(data) {
@@ -302,7 +553,7 @@ async function refreshStatus() {
   }
 }
 
-// Un clic en un plan contrata si no hay suscripción, o cambia de plan si ya la hay.
+// Un clic contrata si no hay suscripción, o cambia de plan si ya la hay.
 async function choosePlan(planId, button) {
   setMessage("");
   const user = await window.AllAIsAuth.currentUser().catch(() => null);
@@ -313,7 +564,9 @@ async function choosePlan(planId, button) {
   }
 
   const changing = hasLiveSubscription();
+  const label = button.textContent;
   button.disabled = true;
+  button.textContent = changing ? "Cambiando…" : "Un momento…";
   try {
     const data = await billingRequest(changing ? "/change" : "/subscribe", {
       method: "POST",
@@ -326,7 +579,7 @@ async function choosePlan(planId, button) {
       return;
     }
     if (data.mock) {
-      // El aviso va después de refrescar: refreshStatus limpia la fila de administración.
+      // El aviso va después de refrescar: refreshStatus repinta los botones.
       await refreshStatus();
       setMessage("Suscripción de prueba activada (sin cobro).", true);
       return;
@@ -335,6 +588,7 @@ async function choosePlan(planId, button) {
     window.location.href = data.initPoint;
   } catch (error) {
     setMessage(error.message);
+    button.textContent = label;
     button.disabled = false;
   }
 }

@@ -7,14 +7,20 @@ const PLANS = [
   { id: "profesional_3", name: "Profesional 3", price: 399, badge: "" }
 ];
 
+const PLAN_NAME = Object.fromEntries(PLANS.map((plan) => [plan.id, plan.name]));
+
 const STATUS_TEXT = {
   none: "",
   pending: "Tu suscripción está pendiente. Confirma tu tarjeta para activar la prueba.",
   active: "Tu suscripción está activa.",
   paused: "Tu suscripción está pausada.",
-  cancelled: "Tu suscripción fue cancelada.",
+  cancelled: "Tu suscripción fue cancelada. Puedes contratar de nuevo cuando quieras.",
   unknown: "Estamos revisando tu suscripción."
 };
+
+const INTRO_NEW = "3 días gratis. Primer cobro al cuarto día.";
+const INTRO_LIVE = "Puedes cambiar de plan o cancelar cuando quieras.";
+const CANCEL_LABEL = "Cancelar suscripción";
 
 const STYLES = `
 .billing-cta {
@@ -102,25 +108,47 @@ const STYLES = `
   box-shadow: 0 12px 24px -14px rgba(23,107,135,.55);
   background: var(--accent-soft);
 }
-.billing-plan:disabled { opacity: .5; cursor: not-allowed; }
+.billing-plan:disabled { cursor: not-allowed; }
+.billing-plan:disabled:not(.is-current) { opacity: .5; }
 .billing-plan:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
 .billing-plan .plan-name { display: block; font-weight: 700; font-size: 1rem; }
-.billing-plan .plan-badge {
+.billing-plan .plan-badge,
+.billing-plan .plan-current {
   display: inline-block;
   margin-top: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
   font-size: .72rem;
   font-weight: 700;
   letter-spacing: .02em;
 }
+.billing-plan .plan-badge { background: var(--accent); color: #fff; }
+.billing-plan .plan-current { background: var(--accent-strong); color: #fff; }
 .billing-plan .plan-price { font-size: 1.35rem; font-weight: 800; color: var(--accent-strong); white-space: nowrap; }
 .billing-plan .plan-price small { font-size: .75rem; font-weight: 600; color: var(--ink-3); }
 .billing-plan.is-featured { border-color: var(--accent); background: linear-gradient(180deg, var(--accent-soft), var(--surface-2)); }
+.billing-plan.is-current { border-color: var(--accent-strong); background: var(--accent-soft); }
+.billing-plan.is-current .plan-badge { display: none; }
+.billing-manage { display: flex; justify-content: flex-end; margin-top: 12px; }
+.billing-manage[hidden] { display: none; }
+.billing-cancel {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: .85rem;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+.billing-cancel:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.billing-cancel.is-confirming { border-color: var(--danger); color: var(--danger); font-weight: 700; }
+.billing-cancel:disabled { opacity: .5; cursor: not-allowed; }
+.billing-cancel:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
 .billing-legal { margin: 14px 0 0; font-size: .8rem; color: var(--ink-3); line-height: 1.4; }
 .billing-error { min-height: 1.2em; margin: 8px 0 0; color: var(--danger); font-size: .9rem; }
+.billing-error.is-ok { color: var(--accent-strong); font-weight: 600; }
 .billing-dialog .auth-close { position: absolute; top: 14px; right: 14px; }
 .billing-dialog { border: 0; background: transparent; padding: 0; }
 .billing-dialog::backdrop { background: rgba(6,16,30,.55); backdrop-filter: blur(3px); }
@@ -148,6 +176,12 @@ async function billingRequest(path, options = {}) {
 }
 
 let dialog = null;
+// Estado vigente de la suscripción. Decide si un clic en un plan contrata o cambia de plan.
+let current = { status: "none", plan: null };
+
+function hasLiveSubscription() {
+  return current.status === "active" || current.status === "pending";
+}
 
 function injectStyles() {
   if (document.getElementById("billingStyles")) return;
@@ -165,61 +199,111 @@ function buildDialog() {
   close.addEventListener("click", () => dialog.close());
 
   const title = node("h2", { id: "billingTitle" }, "Elige tu plan");
-  const intro = node("p", { class: "billing-intro" }, "3 días gratis. Primer cobro al cuarto día.");
+  const intro = node("p", { id: "billingIntro", class: "billing-intro" }, INTRO_NEW);
   const status = node("p", { id: "billingStatus", class: "billing-status", role: "status" }, "");
   const list = node("div", { class: "billing-plans", id: "billingPlans" });
 
-  PLANS.forEach((plan, index) => {
+  PLANS.forEach((plan) => {
     const button = node("button", { type: "button", class: "billing-plan" + (plan.id === "profesional_2" ? " is-featured" : ""), "data-plan": plan.id });
-    const left = node("span", {});
+    const left = node("span", { class: "plan-labels" });
     left.append(node("span", { class: "plan-name" }, plan.name));
     if (plan.badge) left.append(node("span", { class: "plan-badge" }, plan.badge));
     const price = node("span", { class: "plan-price" }, `$${plan.price}`);
     price.append(node("small", {}, " MXN/mes"));
     button.append(left, price);
-    button.addEventListener("click", () => subscribe(plan.id, button));
+    button.addEventListener("click", () => choosePlan(plan.id, button));
     list.append(button);
   });
+
+  // Fila de administración: solo visible cuando hay una suscripción vigente.
+  const manage = node("div", { class: "billing-manage", id: "billingManage", hidden: "" });
+  const cancel = node("button", { type: "button", class: "billing-cancel", id: "billingCancel" }, CANCEL_LABEL);
+  cancel.addEventListener("click", () => cancelSubscription(cancel));
+  manage.append(cancel);
 
   const error = node("p", { id: "billingMessage", class: "billing-error", role: "alert" }, "");
   const legal = node("p", { class: "billing-legal" }, "Pagos procesados por Mercado Pago.");
 
-  card.append(close, title, intro, status, list, error, legal);
+  card.append(close, title, intro, status, list, manage, error, legal);
   dialog.append(card);
   dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener("close", resetCancel);
   document.body.append(dialog);
 }
 
-function setMessage(text) {
+function setMessage(text, ok = false) {
   const message = document.getElementById("billingMessage");
-  if (message) message.textContent = text || "";
+  if (!message) return;
+  message.textContent = text || "";
+  message.classList.toggle("is-ok", Boolean(text) && ok);
+}
+
+// La cancelación pide confirmación en dos pasos, sin usar confirm() del navegador.
+function resetCancel() {
+  const cancel = document.getElementById("billingCancel");
+  if (!cancel) return;
+  cancel.classList.remove("is-confirming");
+  cancel.textContent = CANCEL_LABEL;
+  cancel.disabled = false;
+}
+
+function paintPlans({ signedIn = true } = {}) {
+  const live = signedIn && hasLiveSubscription();
+
+  document.querySelectorAll(".billing-plan").forEach((button) => {
+    const isCurrent = live && button.dataset.plan === current.plan;
+    button.classList.toggle("is-current", isCurrent);
+    // Con una suscripción vigente, los demás planes siguen pulsables: cambian de plan.
+    button.disabled = !signedIn || isCurrent;
+
+    const labels = button.querySelector(".plan-labels");
+    const tag = labels.querySelector(".plan-current");
+    if (isCurrent && !tag) labels.append(node("span", { class: "plan-current" }, "Tu plan actual"));
+    if (!isCurrent && tag) tag.remove();
+  });
+
+  document.getElementById("billingManage").hidden = !live;
+  document.getElementById("billingTitle").textContent = live ? "Tu suscripción" : "Elige tu plan";
+  document.getElementById("billingIntro").textContent = live ? INTRO_LIVE : INTRO_NEW;
+}
+
+function statusLine(data) {
+  const base = STATUS_TEXT[data.status] || "";
+  const name = PLAN_NAME[data.plan];
+  if (!name) return base;
+  if (data.status === "active") return `Plan ${name}. Tu suscripción está activa.`;
+  if (data.status === "pending") return `Plan ${name}. Falta confirmar tu tarjeta.`;
+  return base;
 }
 
 async function refreshStatus() {
   const statusEl = document.getElementById("billingStatus");
-  const buttons = document.querySelectorAll(".billing-plan");
   if (!statusEl) return;
-  setMessage("");
+  resetCancel();
 
   const user = await window.AllAIsAuth.currentUser().catch(() => null);
   if (!user) {
+    current = { status: "none", plan: null };
     statusEl.textContent = "Inicia sesión para elegir un plan.";
-    buttons.forEach((b) => { b.disabled = true; });
+    paintPlans({ signedIn: false });
     return;
   }
 
   try {
     const data = await billingRequest("/status");
-    statusEl.textContent = STATUS_TEXT[data.status] || "";
-    const blocked = data.status === "active" || data.status === "pending";
-    buttons.forEach((b) => { b.disabled = blocked; });
+    current = { status: data.status, plan: data.plan || null };
+    statusEl.textContent = statusLine(data);
+    paintPlans();
   } catch (error) {
+    current = { status: "none", plan: null };
     statusEl.textContent = "";
+    paintPlans();
     setMessage(error.message);
   }
 }
 
-async function subscribe(planId, button) {
+// Un clic en un plan contrata si no hay suscripción, o cambia de plan si ya la hay.
+async function choosePlan(planId, button) {
   setMessage("");
   const user = await window.AllAIsAuth.currentUser().catch(() => null);
   if (!user) {
@@ -227,16 +311,24 @@ async function subscribe(planId, button) {
     document.getElementById("accountButton")?.click();
     return;
   }
+
+  const changing = hasLiveSubscription();
   button.disabled = true;
   try {
-    const data = await billingRequest("/subscribe", {
+    const data = await billingRequest(changing ? "/change" : "/subscribe", {
       method: "POST",
       body: JSON.stringify({ plan: planId })
     });
-    if (data.mock) {
-      setMessage("Suscripción de prueba activada (sin cobro).");
-      button.disabled = false;
+
+    if (changing) {
       await refreshStatus();
+      setMessage(`Cambiaste al plan ${PLAN_NAME[planId]}.`, true);
+      return;
+    }
+    if (data.mock) {
+      // El aviso va después de refrescar: refreshStatus limpia la fila de administración.
+      await refreshStatus();
+      setMessage("Suscripción de prueba activada (sin cobro).", true);
       return;
     }
     if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago.");
@@ -244,6 +336,26 @@ async function subscribe(planId, button) {
   } catch (error) {
     setMessage(error.message);
     button.disabled = false;
+  }
+}
+
+async function cancelSubscription(button) {
+  setMessage("");
+  if (!button.classList.contains("is-confirming")) {
+    button.classList.add("is-confirming");
+    button.textContent = "¿Seguro? Pulsa para confirmar";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Cancelando…";
+  try {
+    await billingRequest("/cancel", { method: "POST" });
+    await refreshStatus();
+    setMessage("Tu suscripción quedó cancelada.", true);
+  } catch (error) {
+    resetCancel();
+    setMessage(error.message);
   }
 }
 
@@ -255,6 +367,7 @@ function mountButton() {
   panel.querySelector("#platformDescription")?.remove();
   const open = node("button", { type: "button", id: "billingOpen", class: "billing-cta" }, "Suscríbete aquí!");
   open.addEventListener("click", () => {
+    setMessage("");
     dialog.showModal();
     refreshStatus();
   });

@@ -9,6 +9,7 @@ const { initializeApp, getApps } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
+const { verify: verifySignature } = require("./webhook-signature");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -312,6 +313,22 @@ async function changePlan(request) {
   return { plan: plan.id };
 }
 
+// Validación de la firma x-signature del webhook de Mercado Pago.
+// La lógica vive en webhook-signature.js; aquí solo se extraen los datos del request.
+function verifyWebhookSignature(request) {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error("AllAIs webhook: MP_WEBHOOK_SECRET no está configurado — se rechazan todas las notificaciones.");
+    return false;
+  }
+  return verifySignature({
+    signatureHeader: request.get("x-signature") || "",
+    requestId: request.get("x-request-id") || "",
+    dataId: request.query?.["data.id"] || request.body?.data?.id || "",
+    secret
+  });
+}
+
 // Mercado Pago envía { type, data: { id } } o parámetros en la URL. Solo se usa el id; el estado se consulta a la API.
 async function handleWebhook(request) {
   const type = request.body?.type || request.query?.type || request.query?.topic || "";
@@ -339,7 +356,7 @@ async function handleWebhook(request) {
 exports.billing = onRequest({
   region: "us-central1",
   timeoutSeconds: 60,
-  secrets: ["MERCADOPAGO_ACCESS_TOKEN"]
+  secrets: ["MERCADOPAGO_ACCESS_TOKEN", "MP_WEBHOOK_SECRET"]
 }, async (request, response) => {
   const origin = request.get("origin");
   if (allowedOrigins.has(origin)) {
@@ -373,6 +390,13 @@ exports.billing = onRequest({
       return;
     }
     if (path === "/webhook" && request.method === "POST") {
+      // Validar la firma antes de procesar. Sin firma válida, se rechaza con 401.
+      // En modo mock no hay webhook real, pero la firma se valida igual si llega.
+      if (!MOCK_MODE && !verifyWebhookSignature(request)) {
+        console.warn("AllAIs webhook: firma x-signature inválida o ausente — solicitud rechazada.");
+        sendJson(response, 401, { ok: false, error: "Firma inválida." });
+        return;
+      }
       // Mercado Pago reintenta si no recibe 200/201; los eventos ignorados también responden 200.
       await handleWebhook(request);
       response.status(200).send("ok");
@@ -389,3 +413,4 @@ exports.billing = onRequest({
 });
 
 exports.fetchPreapproval = fetchPreapproval;
+exports.verifyWebhookSignature = verifyWebhookSignature;

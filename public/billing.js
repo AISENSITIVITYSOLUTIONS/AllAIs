@@ -739,9 +739,26 @@ function handleReturn() {
   refreshStatus({ fromReturn: true });
 }
 
+// API pública para que otras partes de la app abran el diálogo de planes sin
+// depender de simular un click sobre #billingOpen. El click sintético falla en
+// algunos contextos (por ejemplo cuando se dispara desde el handler de otro
+// botón) y además deja al diálogo buscando una activación de usuario válida
+// para `dialog.showModal()`. Esta API es idéntica a `window.AllAIsAuth`.
+function publishPublicApi() {
+  window.AllAIsBilling = window.AllAIsBilling || {};
+  window.AllAIsBilling.openDialog = () => {
+    if (!dialog) return;
+    setMessage("");
+    trackEvent("pricing_viewed");
+    dialog.showModal();
+    refreshStatus();
+  };
+}
+
 function start() {
   injectStyles();
   buildDialog();
+  publishPublicApi();
   mountButton();
   handleReturn();
 }

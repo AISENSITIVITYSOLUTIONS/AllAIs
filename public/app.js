@@ -1099,8 +1099,15 @@ function appendUpgradeOffer(responseContent, planId, isMonthly) {
   btn.className = "quota-upgrade-btn";
   btn.textContent = copy.quotaUpgradeBtn;
   btn.addEventListener("click", () => {
-    const billingBtn = document.getElementById("billingOpen");
-    if (billingBtn) billingBtn.click();
+    // Preferimos la API pública de billing.js (window.AllAIsBilling.openDialog)
+    // porque un click sintético sobre #billingOpen no siempre dispara
+    // dialog.showModal() de forma confiable. El click al botón del sidebar
+    // queda como fallback por si billing.js aún no cargó.
+    if (window.AllAIsBilling?.openDialog) {
+      window.AllAIsBilling.openDialog();
+    } else {
+      document.getElementById("billingOpen")?.click();
+    }
   });
   wrap.appendChild(text);
   wrap.appendChild(btn);

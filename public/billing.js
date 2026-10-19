@@ -352,6 +352,81 @@ const STYLES = `
   .billing-cta::after { animation: none; }
   .billing-choose:hover:not(:disabled) { transform: none; }
 }
+
+/* Aviso previo al checkout de Mercado Pago: le dice al usuario qué correo
+   exacto debe usar y lo copia al portapapeles. Evita el rechazo de MP por
+   "El e-mail no coincide con el de la suscripción". */
+.billing-notice-overlay {
+  position: fixed; inset: 0; z-index: 2147483647;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 10, 20, 0.72); backdrop-filter: blur(4px);
+  padding: 20px;
+}
+.billing-notice-card {
+  background: #0b1220; color: #e6ecf5;
+  max-width: 460px; width: 100%;
+  border: 1px solid rgba(104, 160, 255, 0.3);
+  border-radius: 16px;
+  padding: 28px 24px 22px;
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.7);
+  font-family: var(--font-ui, system-ui, sans-serif);
+}
+.billing-notice-title {
+  margin: 0 0 12px;
+  font-size: 18px; font-weight: 600;
+  color: #68a0ff;
+}
+.billing-notice-text {
+  margin: 0 0 14px;
+  font-size: 14.5px; line-height: 1.5;
+  color: #cbd5e1;
+}
+.billing-notice-email {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  background: rgba(104, 160, 255, 0.12);
+  border: 1px solid rgba(104, 160, 255, 0.4);
+  border-radius: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 15px; font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
+.billing-notice-hint {
+  margin: 0 0 20px;
+  font-size: 13px; line-height: 1.45;
+  color: #94a3b8;
+}
+.billing-notice-actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+.billing-notice-cancel, .billing-notice-go {
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px; font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.billing-notice-cancel {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+.billing-notice-cancel:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+}
+.billing-notice-go {
+  background: linear-gradient(120deg, #68a0ff, #4b7bd4);
+  color: #ffffff;
+  border: 1px solid rgba(104, 160, 255, 0.5);
+}
+.billing-notice-go:hover {
+  opacity: 0.92;
+}
 `;
 
 function node(tag, attrs = {}, text = "") {
@@ -640,6 +715,52 @@ async function refreshStatus({ fromReturn = false } = {}) {
   }
 }
 
+// Overlay que se muestra ANTES de redirigir al checkout de Mercado Pago.
+// Explica al usuario que debe usar su correo exacto, lo copia al portapapeles,
+// y le da dos botones: ir ya o cancelar. Si no hay interacción en 8 segundos,
+// se redirige automáticamente (para no bloquear al usuario que ya entendió).
+function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
+  return new Promise((resolve) => {
+    const overlay = node("div", { class: "billing-notice-overlay" });
+    const card = node("div", { class: "billing-notice-card" });
+
+    const title = node("h3", { class: "billing-notice-title" }, "Un paso importante antes del pago");
+    const p1 = node("p", { class: "billing-notice-text" },
+      "Mercado Pago te va a pedir tu correo en el siguiente paso. Debe ser EXACTAMENTE este:");
+
+    const emailBox = node("div", { class: "billing-notice-email" }, email);
+    const copyHint = node("p", { class: "billing-notice-hint" },
+      "Ya lo copiamos a tu portapapeles — solo pégalo con Ctrl+V (o Cmd+V en Mac). Si escribes otro, Mercado Pago rechazará todas las tarjetas.");
+
+    const actions = node("div", { class: "billing-notice-actions" });
+    const goBtn = node("button", { type: "button", class: "billing-notice-go" }, "Ir al pago");
+    const cancelBtn = node("button", { type: "button", class: "billing-notice-cancel" }, "Cancelar");
+    actions.append(cancelBtn, goBtn);
+
+    card.append(title, p1, emailBox, copyHint, actions);
+    overlay.append(card);
+    document.body.append(overlay);
+
+    // Copiar el correo al portapapeles (silencioso: si falla, no bloqueamos).
+    try {
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(email).catch(() => {});
+    } catch { /* clipboard puede fallar en algunos contextos */ }
+
+    const cleanupAndGo = () => {
+      try { overlay.remove(); } catch { /* ya removido */ }
+      window.location.href = initPoint;
+      resolve();
+    };
+    const cleanupAndCancel = () => {
+      try { overlay.remove(); } catch { /* ya removido */ }
+      resolve();
+    };
+
+    goBtn.addEventListener("click", cleanupAndGo);
+    cancelBtn.addEventListener("click", cleanupAndCancel);
+  });
+}
+
 // Un clic contrata si no hay suscripción, o cambia de plan si ya la hay.
 async function choosePlan(planId, button) {
   setMessage("");
@@ -683,7 +804,13 @@ async function choosePlan(planId, button) {
       value: chosenPlan ? chosenPlan.price : 0,
       currency: "MXN"
     });
-    window.location.href = data.initPoint;
+    // Antes de ir a Mercado Pago, mostrar al usuario el correo exacto que
+    // debe usar en el campo "Ingresa tu e-mail" del checkout. Mercado Pago
+    // valida que coincida con el payer_email del preapproval; si no coincide,
+    // rechaza TODAS las tarjetas con "Tu e-mail no coincide con el de la
+    // suscripción". El correo también se copia al portapapeles para que el
+    // usuario solo tenga que pegarlo.
+    await showPayerEmailNoticeBeforeRedirect(user.email, data.initPoint);
   } catch (error) {
     setMessage(error.message);
     button.textContent = label;

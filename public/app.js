@@ -3,6 +3,7 @@ const state = {
   authMode: "",
   email: "",
   quota: null,
+  plan: null,
   language: localStorage.getItem("nni_language") || "es",
   providers: [],
   selectedTask: "write",
@@ -153,6 +154,9 @@ const translations = {
     quotaEmptyNote: (time) => `Sin consultas por hoy · se renuevan ${time}`,
     quotaExhausted: (limit, time) => `Alcanzaste tu límite de ${limit} consultas de hoy. Se renovará ${time}.`,
     quotaExhaustedMonthly: (limit, time) => `Alcanzaste tu límite de ${limit} consultas de este periodo. Se renovará ${time}.`,
+    quotaUpgradeSubscribe: "Suscríbete y obtén más consultas al mes.",
+    quotaUpgradeNext: (planName) => `Actualiza al Plan ${planName} para obtener más consultas al mes.`,
+    quotaUpgradeBtn: "Ver planes",
     resetTomorrow: (time) => `mañana a las ${time}`,
     resetToday: (time) => `hoy a las ${time}`,
     showCode: "Mostrar código",
@@ -327,6 +331,9 @@ const translations = {
     quotaEmptyNote: (time) => `No queries left today · renews ${time}`,
     quotaExhausted: (limit, time) => `You reached your limit of ${limit} queries for today. It renews ${time}.`,
     quotaExhaustedMonthly: (limit, time) => `You reached your limit of ${limit} queries for this period. It renews ${time}.`,
+    quotaUpgradeSubscribe: "Subscribe to get more queries per month.",
+    quotaUpgradeNext: (planName) => `Upgrade to the ${planName} Plan to get more queries per month.`,
+    quotaUpgradeBtn: "View plans",
     resetTomorrow: (time) => `tomorrow at ${time}`,
     resetToday: (time) => `today at ${time}`,
     showCode: "Show code",
@@ -501,6 +508,9 @@ const translations = {
     quotaEmptyNote: (time) => `Plus de requêtes aujourd'hui · renouvellement ${time}`,
     quotaExhausted: (limit, time) => `Vous avez atteint votre limite de ${limit} requêtes pour aujourd'hui. Elle sera renouvelée ${time}.`,
     quotaExhaustedMonthly: (limit, time) => `Vous avez atteint votre limite de ${limit} requêtes pour cette période. Elle sera renouvelée ${time}.`,
+    quotaUpgradeSubscribe: "Abonnez-vous pour plus de requêtes par mois.",
+    quotaUpgradeNext: (planName) => `Passez au Plan ${planName} pour plus de requêtes par mois.`,
+    quotaUpgradeBtn: "Voir les plans",
     resetTomorrow: (time) => `demain à ${time}`,
     resetToday: (time) => `aujourd'hui à ${time}`,
     showCode: "Afficher le code",
@@ -1053,6 +1063,50 @@ function formatResetTime(resetAt) {
   return sameDay ? copy.resetToday(time) : copy.resetTomorrow(time);
 }
 
+// Elige qué plan sugerir al usuario cuando se le agota el cupo.
+// Para el plan Lanzamiento diferencia si el límite agotado es diario (día a día)
+// o mensual: en el diario basta con pasarse a Esencial (sin límite diario);
+// en el mensual conviene saltar al Profesional para subir también el tope mensual.
+// Devuelve null si ya está en el plan máximo (profesional_3).
+function nextPlanSuggestion(planId, isMonthly) {
+  if (!planId) return { kind: "subscribe" };
+  if (planId === "lanzamiento") {
+    return isMonthly
+      ? { kind: "upgrade", planName: "Profesional" }
+      : { kind: "upgrade", planName: "Esencial" };
+  }
+  if (planId === "profesional_1") return { kind: "upgrade", planName: "Profesional" };
+  if (planId === "profesional_2") return { kind: "upgrade", planName: "Avanzado" };
+  return null; // profesional_3 ya es el máximo
+}
+
+// Agrega al mensaje de cuota agotada un texto y un botón que abre el diálogo de planes.
+// Se usa tanto en el pre-chequeo del navegador como en la respuesta 429 del backend.
+function appendUpgradeOffer(responseContent, planId, isMonthly) {
+  if (!responseContent) return;
+  const suggestion = nextPlanSuggestion(planId, isMonthly);
+  if (!suggestion) return;
+  const copy = translations[state.language];
+  const wrap = document.createElement("div");
+  wrap.className = "quota-upgrade-offer";
+  const text = document.createElement("p");
+  text.className = "quota-upgrade-text";
+  text.textContent = suggestion.kind === "subscribe"
+    ? copy.quotaUpgradeSubscribe
+    : copy.quotaUpgradeNext(suggestion.planName);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "quota-upgrade-btn";
+  btn.textContent = copy.quotaUpgradeBtn;
+  btn.addEventListener("click", () => {
+    const billingBtn = document.getElementById("billingOpen");
+    if (billingBtn) billingBtn.click();
+  });
+  wrap.appendChild(text);
+  wrap.appendChild(btn);
+  responseContent.appendChild(wrap);
+}
+
 function renderQuota() {
   const note = elements.quotaNote;
   if (!note) return;
@@ -1120,6 +1174,7 @@ async function startEmailSession() {
   }
   state.email = data.email;
   state.quota = data.quota || null;
+  state.plan = data.plan || null;
   clearAccessError();
   elements.accessCodeInput.value = "";
   elements.loginBox.classList.add("authenticated");
@@ -1997,8 +2052,10 @@ async function sendPrompt(event) {
   const copy = translations[state.language];
   if (state.authMode === "email" && state.quota && state.quota.remaining <= 0) {
     // El cupo agotado puede ser el del periodo o el del día: el backend indica cuál manda.
-    const text = state.quota.scope === "monthly" ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
-    addMessage("assistant", text(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs");
+    const isMonthly = state.quota.scope === "monthly";
+    const text = isMonthly ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
+    const rendered = addMessage("assistant", text(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs");
+    appendUpgradeOffer(rendered?.responseContent, state.plan, isMonthly);
     return;
   }
   const capabilities = selectedCapabilities();
@@ -2086,8 +2143,11 @@ async function sendPrompt(event) {
       if (pendingPdfWindow && !pendingPdfWindow.closed) pendingPdfWindow.close();
       const monthly = data.code === "MONTHLY_LIMIT";
       trackEvent(monthly ? "monthly_limit_reached" : "daily_limit_reached", { plan: data.plan || "free" });
+      // Mantener state.plan sincronizado con la respuesta autoritativa del backend.
+      state.plan = typeof data.plan !== "undefined" ? data.plan : state.plan;
       const text = monthly ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
-      addMessage("assistant", text(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs");
+      const rendered = addMessage("assistant", text(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs");
+      appendUpgradeOffer(rendered?.responseContent, data.plan, monthly);
       state.history.pop();
       return;
     }

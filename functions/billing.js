@@ -178,10 +178,16 @@ async function createSubscription(request) {
   const payerEmail = process.env.MP_PAYER_EMAIL || user.email;
   const preapproval = await mercadoPago("/preapproval", {
     method: "POST",
+    // payer_email (plano) y payer.email (objeto): algunas versiones del SDK y
+    // partes del checkout de Mercado Pago leen una u otra. Pasar ambas da la
+    // mejor chance de que MP pre-llene el campo "Ingresa tu e-mail" en el
+    // checkout, evitando que el usuario tenga que recordar y escribir su
+    // correo exacto (y que MP rechace el pago por "El e-mail no coincide").
     body: JSON.stringify({
       reason: plan.label,
       external_reference: `${user.uid}|${plan.id}`,
       payer_email: payerEmail,
+      payer: { email: payerEmail },
       back_url: BACK_URL,
       status: "pending",
       auto_recurring: {

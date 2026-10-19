@@ -10,6 +10,7 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
 const { verify: verifySignature } = require("./webhook-signature");
+const { handleWebhook: handleWebhookPure } = require("./webhook-handler");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -334,28 +335,19 @@ function verifyWebhookSignature(request) {
   });
 }
 
-// Mercado Pago envía { type, data: { id } } o parámetros en la URL. Solo se usa el id; el estado se consulta a la API.
-async function handleWebhook(request) {
-  const type = request.body?.type || request.query?.type || request.query?.topic || "";
-  const id = request.body?.data?.id || request.query?.["data.id"] || request.query?.id || "";
-  if (type !== "subscription_preapproval" || !id) return { ignored: true };
-
-  const preapproval = await mercadoPago(`/preapproval/${encodeURIComponent(String(id))}`);
-  const [uid = "", planId = ""] = String(preapproval.external_reference || "").split("|");
-  if (!uid) return { ignored: true };
-
-  await db.collection("subscriptions").doc(uid).set({
-    uid,
-    payerEmail: String(preapproval.payer_email || "").toLowerCase(),
-    plan: planId || null,
-    preapprovalId: String(preapproval.id),
-    status: internalStatus(preapproval.status),
-    mpStatus: preapproval.status || "unknown",
-    nextPaymentAt: preapproval.next_payment_date || null,
-    updatedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-
-  return { ok: true };
+// Delegación al handler puro (webhook-handler.js), cableando las dependencias
+// de producción: Firestore real, consulta a Mercado Pago vía mercadoPago(), y
+// el sentinel de serverTimestamp para updatedAt.
+function handleWebhook(request) {
+  return handleWebhookPure(request, {
+    dbInstance: db,
+    verifyPreapproval: (id) => mercadoPago(`/preapproval/${encodeURIComponent(id)}`),
+    resolvePaymentPreapproval: async (paymentId) => {
+      const payment = await mercadoPago(`/authorized_payments/${encodeURIComponent(String(paymentId))}`);
+      return payment?.preapproval_id ? String(payment.preapproval_id) : null;
+    },
+    updatedAtSentinel: FieldValue.serverTimestamp()
+  });
 }
 
 exports.billing = onRequest({
@@ -419,3 +411,5 @@ exports.billing = onRequest({
 
 exports.fetchPreapproval = fetchPreapproval;
 exports.verifyWebhookSignature = verifyWebhookSignature;
+exports.handleWebhook = handleWebhook;
+exports.internalStatus = internalStatus;

@@ -28,7 +28,8 @@ const runtimeOptions = {
     "DEEPSEEK_API_KEY",
     "QWEN_API_KEY",
     "QWEN_BASE_URL",
-    "QWEN_MODEL"
+    "QWEN_MODEL",
+    "SHEETS_WEBHOOK_TOKEN"
   ]
 };
 
@@ -326,7 +327,8 @@ async function saveCode(body, adminUser) {
 }
 
 // ---------- Registro en Google Sheets (Apps Script) ----------
-// SHEETS_WEBHOOK_URL y SHEETS_WEBHOOK_TOKEN se configuran en functions/.env. Si faltan, no se envía nada.
+// SHEETS_WEBHOOK_URL se configura en functions/.env. SHEETS_WEBHOOK_TOKEN va en Secret Manager
+// (firebase functions:secrets:set SHEETS_WEBHOOK_TOKEN). Si falta la URL, no se envía nada.
 async function logToSheet(type, row) {
   const url = process.env.SHEETS_WEBHOOK_URL;
   if (!url) return;

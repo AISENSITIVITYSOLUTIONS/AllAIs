@@ -374,6 +374,21 @@ function checkIcon() {
   return svg("billing-check", '<circle cx="12" cy="12" r="10" fill="currentColor" opacity=".2"/><path d="m8 12.4 2.6 2.6L16 9.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>');
 }
 
+// Dispara un evento a Google Analytics 4 si gtag está cargado.
+// Se usa para marcar los puntos de embudo que importan para Google Ads:
+// pricing_viewed, subscription_started (con value+currency), subscription_mock,
+// subscription_completed (cuando el backend confirma activa), billing_return.
+// Los nombres se importan en GA4 como conversiones; subscription_started dispara al
+// obtener el init_point; subscription_completed dispara al confirmar el plan activo.
+function trackEvent(name, params) {
+  if (typeof window.gtag !== "function") return;
+  try {
+    window.gtag("event", name, params || {});
+  } catch (_) {
+    // La analítica nunca debe romper el flujo de pago.
+  }
+}
+
 async function billingRequest(path, options = {}) {
   const token = await window.AllAIsAuth.idToken();
   const response = await fetch(`/billing${path}`, {
@@ -391,6 +406,9 @@ async function billingRequest(path, options = {}) {
 let dialog = null;
 // Estado vigente de la suscripción. Decide si un clic contrata o cambia de plan.
 let current = { status: "none", plan: null };
+// Guarda el último status enviado a updateCtaButton para evitar disparar
+// subscription_completed más de una vez por sesión.
+let _lastCtaStatus = null;
 
 function hasLiveSubscription() {
   return current.status === "active" || current.status === "pending";
@@ -401,6 +419,49 @@ function injectStyles() {
   const style = node("style", { id: "billingStyles" });
   style.textContent = STYLES;
   document.head.append(style);
+}
+
+// Actualiza el botón de la barra lateral según el estado de suscripción.
+// Si el estado pasa a "active" por primera vez en la sesión y venía de una
+// transición real (el usuario acaba de contratar), dispara subscription_completed.
+function updateCtaButton({ fromReturn = false, isMockSub = false, planId = null } = {}) {
+  const btn = document.getElementById("billingOpen");
+  if (!btn) return;
+
+  const status = current.status;
+  const name = PLAN_NAME[current.plan] || current.plan || "";
+
+  // Emitir subscription_completed solo cuando el status cambia a active y
+  // viene de un retorno de MP o de una suscripción mock — nunca al cargar la página.
+  const isNewActivation = (fromReturn || isMockSub) && status === "active" && _lastCtaStatus !== "active";
+  if (isNewActivation) {
+    const chosenPlan = ALL_PLANS.find((p) => p.id === (planId || current.plan));
+    trackEvent("subscription_completed", {
+      plan: current.plan || planId,
+      plan_name: chosenPlan ? chosenPlan.name : (current.plan || planId),
+      value: isMockSub ? 0 : (chosenPlan ? chosenPlan.price : 0),
+      currency: "MXN",
+      is_trial: isMockSub || false
+    });
+  }
+  _lastCtaStatus = status;
+
+  if (status === "active") {
+    btn.textContent = name ? `Plan ${name} ✓` : "Suscripción activa ✓";
+    btn.style.animation = "none";
+    btn.style.background = "linear-gradient(120deg, #166534, #15803d, #14532d)";
+    btn.style.boxShadow = "0 8px 24px -8px rgba(21,128,61,.7)";
+  } else if (status === "pending") {
+    btn.textContent = "Completar suscripción →";
+    btn.style.animation = "";
+    btn.style.background = "";
+    btn.style.boxShadow = "";
+  } else {
+    btn.textContent = "Suscríbete aquí!";
+    btn.style.animation = "";
+    btn.style.background = "";
+    btn.style.boxShadow = "";
+  }
 }
 
 function planCard(plan) {
@@ -549,7 +610,8 @@ function statusLine(data) {
   return base;
 }
 
-async function refreshStatus() {
+// opts.fromReturn: true cuando se llama desde handleReturn (el usuario volvió de MP).
+async function refreshStatus({ fromReturn = false } = {}) {
   const statusEl = document.getElementById("billingStatus");
   if (!statusEl) return;
   resetCancel();
@@ -559,6 +621,7 @@ async function refreshStatus() {
     current = { status: "none", plan: null };
     statusEl.textContent = "Inicia sesión para elegir un plan.";
     paintPlans({ signedIn: false });
+    updateCtaButton();
     return;
   }
 
@@ -567,10 +630,12 @@ async function refreshStatus() {
     current = { status: data.status, plan: data.plan || null };
     statusEl.textContent = statusLine(data);
     paintPlans();
+    updateCtaButton({ fromReturn });
   } catch (error) {
     current = { status: "none", plan: null };
     statusEl.textContent = "";
     paintPlans();
+    updateCtaButton();
     setMessage(error.message);
   }
 }
@@ -602,11 +667,22 @@ async function choosePlan(planId, button) {
     }
     if (data.mock) {
       // El aviso va después de refrescar: refreshStatus repinta los botones.
+      trackEvent("subscription_mock", { plan: planId });
       await refreshStatus();
+      // subscription_completed con is_trial=true para diferenciar prueba de pago real.
+      updateCtaButton({ isMockSub: true, planId });
       setMessage("Suscripción de prueba activada (sin cobro).", true);
       return;
     }
     if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago.");
+    // Conversión principal para Google Ads: value y currency habilitan optimización por ROAS.
+    const chosenPlan = ALL_PLANS.find((p) => p.id === planId);
+    trackEvent("subscription_started", {
+      plan: planId,
+      plan_name: chosenPlan ? chosenPlan.name : planId,
+      value: chosenPlan ? chosenPlan.price : 0,
+      currency: "MXN"
+    });
     window.location.href = data.initPoint;
   } catch (error) {
     setMessage(error.message);
@@ -644,6 +720,7 @@ function mountButton() {
   const open = node("button", { type: "button", id: "billingOpen", class: "billing-cta" }, "Suscríbete aquí!");
   open.addEventListener("click", () => {
     setMessage("");
+    trackEvent("pricing_viewed");
     dialog.showModal();
     refreshStatus();
   });
@@ -654,9 +731,12 @@ function mountButton() {
 function handleReturn() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("pago") !== "retorno") return;
+  trackEvent("billing_return");
   window.history.replaceState(null, "", window.location.pathname);
   dialog.showModal();
-  refreshStatus();
+  // fromReturn=true para que refreshStatus pueda emitir subscription_completed
+  // si el webhook ya confirmó la suscripción antes de que el usuario regresara.
+  refreshStatus({ fromReturn: true });
 }
 
 function start() {

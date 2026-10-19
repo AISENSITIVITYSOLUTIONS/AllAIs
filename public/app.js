@@ -69,6 +69,7 @@ const elements = {
   accountAvatar: $("#accountAvatar"),
   topbarAccount: $("#topbarAccount"),
   sessionState: $("#sessionState"),
+  accountSubscription: $("#accountSubscription"),
   sendButton: $("#sendButton"),
   sendLabel: $("#sendLabel"),
   heroSubtitle: $("#heroSubtitle"),
@@ -204,6 +205,17 @@ const translations = {
     providerFallback: "modelo",
     taskPrefix: "Tarea",
     objectivePrefix: "Objetivo del usuario",
+    subPayerEmail: "Correo MP",
+    subNextPayment: "Próximo cobro",
+    subFirstCharge: "Primer cobro",
+    subManage: "Administrar suscripción",
+    subDemo: "Demo",
+    subTrial: "En prueba",
+    subActive: "Activo",
+    subPending: "Pendiente",
+    subPaused: "Pausada",
+    subCancelled: "Cancelada",
+    subAmount: (amount) => `$${amount} MXN/mes`,
     tasks: {
       write: {
         label: "Escribir",
@@ -367,6 +379,17 @@ const translations = {
     providerFallback: "model",
     taskPrefix: "Task",
     objectivePrefix: "User objective",
+    subPayerEmail: "MP email",
+    subNextPayment: "Next payment",
+    subFirstCharge: "First charge",
+    subManage: "Manage subscription",
+    subDemo: "Demo",
+    subTrial: "Trial",
+    subActive: "Active",
+    subPending: "Pending",
+    subPaused: "Paused",
+    subCancelled: "Cancelled",
+    subAmount: (amount) => `$${amount} MXN/mo`,
     tasks: {
       write: {
         label: "Write",
@@ -530,6 +553,17 @@ const translations = {
     providerFallback: "modèle",
     taskPrefix: "Tâche",
     objectivePrefix: "Objectif de l'utilisateur",
+    subPayerEmail: "Email MP",
+    subNextPayment: "Prochain paiement",
+    subFirstCharge: "Premier paiement",
+    subManage: "Gérer l'abonnement",
+    subDemo: "Démo",
+    subTrial: "Essai",
+    subActive: "Actif",
+    subPending: "En attente",
+    subPaused: "Suspendu",
+    subCancelled: "Annulé",
+    subAmount: (amount) => `${amount} MXN/mois`,
     tasks: {
       write: {
         label: "Écrire",
@@ -866,6 +900,8 @@ function openAuthDialog() {
     if (!isAuthenticated()) elements.accessCodeInput.focus({ preventScroll: true });
     else elements.loginButton.focus({ preventScroll: true });
   }, 60);
+  // Cargar info de suscripción al abrir el diálogo (solo para usuarios con sesión Firebase)
+  if (state.authMode === "email") loadSubscriptionInfo();
 }
 
 function closeAuthDialog() {
@@ -895,6 +931,111 @@ function renderAccount() {
   elements.topbarAccount.querySelector(".topbar-account-label").textContent = signed ? (state.email ? state.email.charAt(0).toUpperCase() : "N") : copy.signIn;
   elements.authTitle.textContent = signed ? copy.accountLabel : copy.authTitle;
   elements.authSubtitle.textContent = signed ? copy.signedInAs(name) : copy.authSubtitle;
+  // Ocultar sección de suscripción al desautenticar; los datos se cargan en openAuthDialog
+  if (!signed && elements.accountSubscription) {
+    elements.accountSubscription.hidden = true;
+    elements.accountSubscription.innerHTML = "";
+  }
+}
+
+// Muestra la info de suscripción en el div #accountSubscription.
+// data: respuesta de /billing/status, o null para ocultar la sección.
+function renderSubscriptionInfo(data) {
+  const el = elements.accountSubscription;
+  if (!el) return;
+  if (!data || data.status === "none" || !data.status) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+
+  const copy = translations[state.language];
+  const locale = state.language === "es" ? "es-MX" : state.language === "fr" ? "fr-FR" : "en-US";
+
+  const formatDate = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric" }).format(d);
+  };
+
+  // Badge de estado
+  let badgeClass = "sub-badge--active";
+  let badgeText = copy.subActive;
+  const isTrial = data.status === "active" && data.trialEndsAt && new Date(data.trialEndsAt) > new Date();
+
+  if (data.mock) {
+    badgeClass = "sub-badge--demo";
+    badgeText = copy.subDemo;
+  } else if (isTrial) {
+    badgeClass = "sub-badge--trial";
+    badgeText = copy.subTrial;
+  } else if (data.status === "pending") {
+    badgeClass = "sub-badge--pending";
+    badgeText = copy.subPending;
+  } else if (data.status === "paused") {
+    badgeClass = "sub-badge--pending";
+    badgeText = copy.subPaused;
+  } else if (data.status === "cancelled") {
+    badgeClass = "sub-badge--cancelled";
+    badgeText = copy.subCancelled;
+  }
+
+  const planName = data.planLabel || data.plan || "—";
+  let html = `<div class="sub-header"><span class="sub-plan-name">${planName}</span><span class="sub-badge ${badgeClass}">${badgeText}</span></div>`;
+
+  // Correo del titular de MP
+  if (data.payerEmail && !data.mock) {
+    html += `<div class="sub-detail"><span class="sub-label">${copy.subPayerEmail}</span><span class="sub-value">${data.payerEmail}</span></div>`;
+  }
+
+  // Fecha del próximo cobro / primer cobro
+  if (!data.mock) {
+    const dateIso = isTrial ? data.trialEndsAt : data.nextPaymentAt;
+    const dateStr = formatDate(dateIso);
+    const label = isTrial ? copy.subFirstCharge : copy.subNextPayment;
+    const amountStr = data.amount ? copy.subAmount(data.amount) : null;
+    if (dateStr || amountStr) {
+      const value = [dateStr, amountStr].filter(Boolean).join(" · ");
+      html += `<div class="sub-detail"><span class="sub-label">${label}</span><span class="sub-value">${value}</span></div>`;
+    }
+  }
+
+  // Botón "Administrar suscripción" (solo para suscripciones reales activas o pendientes)
+  const canManage = !data.mock && ["active", "pending"].includes(data.status);
+  if (canManage) {
+    html += `<button type="button" class="sub-manage-btn">${copy.subManage}</button>`;
+  }
+
+  el.innerHTML = html;
+  el.hidden = false;
+
+  if (canManage) {
+    el.querySelector(".sub-manage-btn")?.addEventListener("click", () => {
+      closeAuthDialog();
+      window.setTimeout(() => { document.getElementById("billingOpen")?.click(); }, 120);
+    });
+  }
+}
+
+// Carga la info de suscripción desde /billing/status y la renderiza.
+// Solo para usuarios autenticados con Firebase (authMode === "email").
+async function loadSubscriptionInfo() {
+  if (state.authMode !== "email") {
+    renderSubscriptionInfo(null);
+    return;
+  }
+  try {
+    const token = await window.AllAIsAuth?.idToken?.();
+    const response = await fetch("/billing/status", {
+      headers: token ? { authorization: `Bearer ${token}` } : {}
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    renderSubscriptionInfo(data);
+  } catch (_) {
+    // La info de suscripción no es crítica; si falla, no interrumpir la UX
+  }
 }
 
 function syncConsentVisibility() {

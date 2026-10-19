@@ -215,11 +215,16 @@ async function subscriptionStatus(request) {
   if (!snapshot.exists) return { status: "none" };
   const data = snapshot.data();
   const toIso = (value) => (value?.toDate ? value.toDate().toISOString() : value || null);
+  const planDef = plans()[data.plan] || null;
   return {
     status: data.status || "unknown",
     plan: data.plan || null,
+    planLabel: planDef ? planDef.label : null,
+    amount: planDef ? planDef.amount : null,
     mock: data.mock === true,
     trialEndsAt: toIso(data.trialEndsAt),
+    nextPaymentAt: toIso(data.nextPaymentAt),
+    payerEmail: data.payerEmail || null,
     updatedAt: toIso(data.updatedAt)
   };
 }

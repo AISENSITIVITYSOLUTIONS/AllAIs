@@ -2417,3 +2417,118 @@ img {
   .topbar-new-chat #topbarNewChatLabel { display: none; }
   .topbar-new-chat { padding: 0 10px; }
 }
+
+/* ---------- Sección de suscripción en "Tu cuenta" ---------- */
+.account-subscription {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sub-plan-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.sub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  flex: none;
+}
+
+.sub-badge::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.sub-badge--active {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.sub-badge--trial {
+  background: color-mix(in srgb, #8b5cf6 14%, transparent);
+  color: #8b5cf6;
+}
+
+.sub-badge--pending {
+  background: color-mix(in srgb, #d97706 16%, transparent);
+  color: #d97706;
+}
+
+.sub-badge--cancelled {
+  background: color-mix(in srgb, var(--ink-3) 14%, transparent);
+  color: var(--ink-3);
+}
+
+.sub-badge--demo {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.sub-detail {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.sub-label {
+  color: var(--ink-3);
+  white-space: nowrap;
+  flex: none;
+}
+
+.sub-label::after {
+  content: ":";
+}
+
+.sub-value {
+  color: var(--ink-2);
+  word-break: break-all;
+}
+
+.sub-manage-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sub-manage-btn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  color: var(--accent);
+}

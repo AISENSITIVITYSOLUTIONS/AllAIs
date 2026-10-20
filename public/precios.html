@@ -313,6 +313,88 @@
         border-top: 1px solid var(--border);
       }
       footer a { color: var(--muted); }
+
+      /* Lista de espera "Reservar mi lugar" (Tarea #6) */
+      .waitlist { margin-top: 44px; }
+      .waitlist-card {
+        display: grid;
+        grid-template-columns: 1fr 1.2fr;
+        gap: 32px;
+        align-items: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 32px 34px;
+      }
+      @media (max-width: 760px) { .waitlist-card { grid-template-columns: 1fr; gap: 22px; padding: 26px 22px; } }
+      .waitlist-intro .eyebrow {
+        color: var(--accent);
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin: 0 0 10px;
+      }
+      .waitlist-intro h2 {
+        font-family: "Newsreader", Georgia, serif;
+        font-weight: 500;
+        font-size: clamp(26px, 3.6vw, 34px);
+        line-height: 1.12;
+        margin: 0 0 10px;
+      }
+      .waitlist-intro p { color: var(--muted); font-size: 15px; margin: 0; }
+
+      .waitlist-form { display: grid; gap: 14px; }
+      .wl-row { display: grid; gap: 14px; }
+      .wl-row--2 { grid-template-columns: 1fr 1fr; }
+      @media (max-width: 480px) { .wl-row--2 { grid-template-columns: 1fr; } }
+      .wl-field { display: grid; gap: 6px; }
+      .wl-label { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+      .wl-field input, .wl-field select {
+        width: 100%;
+        padding: 11px 13px;
+        background: var(--surface-strong);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font: inherit;
+        font-size: 14.5px;
+      }
+      .wl-field input:focus, .wl-field select:focus {
+        outline: 2px solid var(--border-strong);
+        outline-offset: 1px;
+        border-color: var(--border-strong);
+      }
+      .wl-field select { appearance: none; cursor: pointer; }
+      .wl-consent {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .wl-consent input { margin-top: 3px; flex: none; accent-color: var(--accent); }
+      .wl-consent a { color: var(--accent); }
+      .wl-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+      .wl-submit {
+        appearance: none;
+        border: 0;
+        background: var(--accent);
+        color: #06111f;
+        font: inherit;
+        font-weight: 600;
+        font-size: 15px;
+        padding: 12px 22px;
+        border-radius: 11px;
+        cursor: pointer;
+        transition: filter 160ms ease, opacity 160ms ease;
+      }
+      .wl-submit:hover { filter: brightness(1.06); }
+      .wl-submit:disabled { opacity: 0.6; cursor: default; }
+      .wl-msg { margin: 0; font-size: 13.5px; }
+      .wl-msg.is-ok { color: #8fe3b0; }
+      .wl-msg.is-error { color: #ff9c9c; }
     </style>
   </head>
   <body>
@@ -401,6 +483,56 @@
         <p>Los precios están en pesos mexicanos (MXN). El cobro se realiza con <strong>Mercado Pago</strong>; puedes cancelar en cualquier momento desde "Tu cuenta".</p>
         <p>¿Dudas sobre el plan correcto? <a href="/">Entra a la app</a> y empieza con el modo gratuito. Puedes cambiar o cancelar más tarde sin pérdida de datos.</p>
       </section>
+
+      <section class="waitlist" id="waitlist" aria-labelledby="waitlistTitle">
+        <div class="waitlist-card">
+          <div class="waitlist-intro">
+            <p class="eyebrow">Reserva tu lugar</p>
+            <h2 id="waitlistTitle">¿Aún no te decides?</h2>
+            <p>Déjanos tu correo y te avisamos de novedades, el lanzamiento y las ofertas de preventa. Sin compromiso: no registras tarjeta ni pagas nada.</p>
+          </div>
+          <form class="waitlist-form" id="waitlistForm" novalidate>
+            <div class="wl-row">
+              <label class="wl-field">
+                <span class="wl-label">Tu correo</span>
+                <input type="email" id="wlEmail" name="email" placeholder="tu@email.com" autocomplete="email" required />
+              </label>
+            </div>
+            <div class="wl-row wl-row--2">
+              <label class="wl-field">
+                <span class="wl-label">¿A qué te dedicas?</span>
+                <select id="wlRole" name="role">
+                  <option value="investigador">Investigador(a)</option>
+                  <option value="docente">Docente</option>
+                  <option value="estudiante">Estudiante</option>
+                  <option value="consultor">Consultor(a) / Independiente</option>
+                  <option value="empresa">Empresa / Equipo</option>
+                  <option value="otro" selected>Otro</option>
+                </select>
+              </label>
+              <label class="wl-field">
+                <span class="wl-label">¿Cuánto pagarías al mes?</span>
+                <select id="wlPrice" name="priceRange">
+                  <option value="lt_99">Menos de $99 MXN</option>
+                  <option value="99_199">$99 – $199 MXN</option>
+                  <option value="199_299">$199 – $299 MXN</option>
+                  <option value="299_399">$299 – $399 MXN</option>
+                  <option value="gt_399">Más de $399 MXN</option>
+                  <option value="ns_nc" selected>Aún no lo sé</option>
+                </select>
+              </label>
+            </div>
+            <label class="wl-consent">
+              <input type="checkbox" id="wlConsent" name="consent" />
+              <span>Acepto el <a href="/privacidad.html" target="_blank" rel="noopener">aviso de privacidad</a> y que me contacten sobre AllAIs.</span>
+            </label>
+            <div class="wl-actions">
+              <button type="submit" class="wl-submit" id="wlSubmit">Reservar mi lugar</button>
+              <p class="wl-msg" id="wlMsg" role="status" aria-live="polite"></p>
+            </div>
+          </form>
+        </div>
+      </section>
     </main>
 
     <footer>
@@ -426,6 +558,84 @@
           }
         }
       } catch (_e) { /* silencio */ }
+    </script>
+
+    <script>
+      // Lista de espera "Reservar mi lugar" (Tarea #6). Envía a /api/waitlist,
+      // dispara signup_intent en GA4 y muestra confirmación en pantalla.
+      (function () {
+        var form = document.getElementById("waitlistForm");
+        if (!form) return;
+        var emailEl = document.getElementById("wlEmail");
+        var roleEl = document.getElementById("wlRole");
+        var priceEl = document.getElementById("wlPrice");
+        var consentEl = document.getElementById("wlConsent");
+        var submitEl = document.getElementById("wlSubmit");
+        var msgEl = document.getElementById("wlMsg");
+
+        var setMsg = function (text, kind) {
+          msgEl.textContent = text || "";
+          msgEl.className = "wl-msg" + (kind ? " is-" + kind : "");
+        };
+        var emailOk = function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || "").trim()); };
+
+        form.addEventListener("submit", async function (e) {
+          e.preventDefault();
+          var email = (emailEl.value || "").trim().toLowerCase();
+          if (!emailOk(email)) { setMsg("Escribe un correo válido.", "error"); emailEl.focus(); return; }
+          if (!consentEl.checked) { setMsg("Marca la casilla del aviso de privacidad.", "error"); return; }
+
+          submitEl.disabled = true;
+          var original = submitEl.textContent;
+          submitEl.textContent = "Enviando…";
+          setMsg("", null);
+
+          var utm = "";
+          try {
+            var p = new URLSearchParams(window.location.search);
+            utm = ["utm_source", "utm_medium", "utm_campaign"]
+              .map(function (k) { return p.get(k) ? k + "=" + p.get(k) : ""; })
+              .filter(Boolean).join("&");
+          } catch (_e) { /* */ }
+
+          try {
+            var resp = await fetch("/api/waitlist", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                email: email,
+                role: roleEl.value,
+                priceRange: priceEl.value,
+                consent: true,
+                client: {
+                  source: "precios",
+                  referrer: document.referrer || "",
+                  utm: utm,
+                  language: (navigator.language || "").slice(0, 2)
+                }
+              })
+            });
+            var data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok || !data.ok) throw new Error(data.error || "No pudimos guardar tu correo.");
+
+            // GA4 — signup_intent: conversión de valor comercial (ALLAIS_05 §2).
+            if (typeof window.gtag === "function") {
+              window.gtag("event", "signup_intent", {
+                role: roleEl.value,
+                price_range: priceEl.value,
+                language: (navigator.language || "").slice(0, 2)
+              });
+            }
+            form.reset();
+            setMsg("¡Listo! Te avisaremos a " + email + ". Gracias por tu interés.", "ok");
+            submitEl.textContent = "Reservado ✓";
+          } catch (err) {
+            setMsg(err.message || "No pudimos guardar tu correo. Inténtalo de nuevo.", "error");
+            submitEl.disabled = false;
+            submitEl.textContent = original;
+          }
+        });
+      })();
     </script>
   </body>
 </html>

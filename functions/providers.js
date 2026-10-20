@@ -626,13 +626,35 @@ const providers = {
   }
 };
 
+// Proveedores ocultos de la interfaz aunque tengan clave: reservados para
+// desarrollos futuros. Qwen entra aquí hasta que se active formalmente.
+const HIDDEN_PROVIDERS = new Set(["qwen", "happyhorse"]);
+
+// Variable de entorno con la API key de cada proveedor. Sirve para no listar
+// (ni ofrecer en el selector) un modelo que no puede responder por falta de clave.
+const PROVIDER_KEY_ENV = {
+  openai: "OPENAI_API_KEY",
+  claude: "ANTHROPIC_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  qwen: "QWEN_API_KEY"
+};
+
+function providerHasKey(id) {
+  const env = PROVIDER_KEY_ENV[id];
+  if (!env) return true; // sin mapeo conocido, no lo bloqueamos
+  return Boolean(cleanSecret(process.env[env]));
+}
+
 function listProviders() {
-  return Object.entries(providers).map(([id, provider]) => ({
-    id,
-    name: provider.name,
-    description: provider.description,
-    capabilities: providerCapabilities(id)
-  }));
+  return Object.entries(providers)
+    .filter(([id]) => !HIDDEN_PROVIDERS.has(id) && providerHasKey(id))
+    .map(([id, provider]) => ({
+      id,
+      name: provider.name,
+      description: provider.description,
+      capabilities: providerCapabilities(id)
+    }));
 }
 
 function getProvider(providerId) {

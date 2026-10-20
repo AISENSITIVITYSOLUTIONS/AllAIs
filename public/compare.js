@@ -96,7 +96,7 @@
   // --------------------------------------------------------------------------
   //  UI: toggle en el composer + panel selector de modelos
   // --------------------------------------------------------------------------
-  let toggleBtn, selectorPanel, modeSwitch;
+  let toggleBtn, selectorPanel;
 
   function mountUI() {
     const tools = document.querySelector(".composer-tools");
@@ -120,23 +120,6 @@
     selectorPanel.append(hint, chips);
     if (footer && footer.parentNode) footer.parentNode.insertBefore(selectorPanel, footer);
     renderChips();
-
-    mountModeSwitch();
-  }
-
-  // Fase 3: segmented control en el topbar, más visible que el toggle del
-  // composer. Ambos reflejan el mismo estado (setActive sincroniza los dos).
-  function mountModeSwitch() {
-    if (document.getElementById("modeSwitch")) return;
-    const newChat = document.getElementById("topbarNewChat");
-    if (!newChat || !newChat.parentNode) return;
-    modeSwitch = el("div", { class: "mode-switch", id: "modeSwitch", role: "group", "aria-label": t("toggle") },
-      el("button", { type: "button", class: "mode-btn is-on", "data-mode": "single" }, t("mode_single")),
-      el("button", { type: "button", class: "mode-btn", "data-mode": "multi" }, t("mode_multi"))
-    );
-    modeSwitch.querySelector('[data-mode="single"]').addEventListener("click", () => setActive(false));
-    modeSwitch.querySelector('[data-mode="multi"]').addEventListener("click", () => setActive(true));
-    newChat.parentNode.insertBefore(modeSwitch, newChat.nextSibling);
   }
 
   function renderChips() {
@@ -185,11 +168,6 @@
       toggleBtn.setAttribute("aria-checked", on ? "true" : "false");
     }
     if (selectorPanel) selectorPanel.hidden = !on;
-    // Sincronizar el segmented del topbar.
-    if (modeSwitch) {
-      modeSwitch.querySelector('[data-mode="single"]')?.classList.toggle("is-on", !on);
-      modeSwitch.querySelector('[data-mode="multi"]')?.classList.toggle("is-on", on);
-    }
     // Ocultar la nota de "ChatGPT / OpenAI" del modo single cuando está multi.
     const single = document.getElementById("selectedProviderNote");
     if (single) single.style.display = on ? "none" : "";

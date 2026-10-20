@@ -1026,6 +1026,14 @@ img {
   letter-spacing: -0.01em;
   line-height: 1.2;
 }
+.hero-hl {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--accent-ring);
+}
 .hero-mode-desc {
   color: var(--ink-2);
   font-size: 13.5px;

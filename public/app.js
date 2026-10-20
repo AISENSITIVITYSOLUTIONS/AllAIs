@@ -2441,17 +2441,23 @@ function bindEvents() {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));
   });
 
-  elements.taskGrid.addEventListener("click", (event) => {
-    const moreButton = event.target.closest("#taskMoreButton");
-    if (moreButton) {
-      toggleTaskMoreMenu();
-      return;
-    }
+  // El menú de tipo de tarea (Escribir/Investigar/…) se retiró del composer.
+  // El código tolera su ausencia: el tipo por defecto (state.selectedTask)
+  // sigue alimentando el system prompt. El listener solo se engancha si el
+  // grid existe, por si se reactiva en el futuro.
+  if (elements.taskGrid) {
+    elements.taskGrid.addEventListener("click", (event) => {
+      const moreButton = event.target.closest("#taskMoreButton");
+      if (moreButton) {
+        toggleTaskMoreMenu();
+        return;
+      }
 
-    const button = event.target.closest("[data-task]");
-    if (!button || !elements.taskGrid.contains(button)) return;
-    updateTaskUI(button.dataset.task);
-  });
+      const button = event.target.closest("[data-task]");
+      if (!button || !elements.taskGrid.contains(button)) return;
+      updateTaskUI(button.dataset.task);
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // GA4 — tracking declarativo (Tarea #2 del backlog)

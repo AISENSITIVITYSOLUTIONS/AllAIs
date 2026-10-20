@@ -873,7 +873,7 @@ function setLanguage(language) {
 
   const copy = translations[state.language];
   document.documentElement.lang = state.language;
-  elements.newChatButton.innerHTML = `
+  if (elements.newChatButton) elements.newChatButton.innerHTML = `
     <span class="new-chat-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="img">
         <path d="M5 19h11.5" />
@@ -884,10 +884,10 @@ function setLanguage(language) {
     ${copy.newChat}
   `;
   if (elements.topbarNewChatLabel) elements.topbarNewChatLabel.textContent = copy.newChat;
-  elements.providersPanelLabel.textContent = copy.providers;
-  elements.platformPanelLabel.textContent = copy.platform;
-  elements.platformDescription.textContent = copy.platformDescription;
-  elements.heroTitle.textContent = copy.heroTitle;
+  if (elements.providersPanelLabel) elements.providersPanelLabel.textContent = copy.providers;
+  if (elements.platformPanelLabel) elements.platformPanelLabel.textContent = copy.platform;
+  if (elements.platformDescription) elements.platformDescription.textContent = copy.platformDescription;
+  if (elements.heroTitle) elements.heroTitle.textContent = copy.heroTitle;
   // Hero split (Tarea #5): dos formas de trabajar. Los textos se setean por
   // id porque viven dentro de los botones del hero.
   const setText = (id, value) => { const n = document.getElementById(id); if (n) n.textContent = value; };
@@ -895,30 +895,30 @@ function setLanguage(language) {
   setHTML("heroModeSingleTitle", copy.heroModeSingleTitle);
   setHTML("heroModeMultiTitle", copy.heroModeMultiTitle);
   setText("heroModeMultiBadge", copy.heroModeMultiBadge);
-  elements.composerHint.textContent = copy.composerHint;
-  elements.webSearchLabel.textContent = copy.webSearch;
-  elements.accessCodeInput.placeholder = copy.accessPlaceholder;
-  if (!elements.sendButton.disabled) elements.sendLabel.textContent = copy.send;
-  elements.themeToggle.setAttribute("aria-label", copy.themeToggle);
-  elements.themeToggle.setAttribute("title", copy.themeToggle);
-  elements.menuButton.setAttribute("aria-label", copy.openPanel);
-  elements.sidebarClose.setAttribute("aria-label", copy.closePanel);
-  elements.attachButton.setAttribute("aria-label", copy.attach);
-  elements.attachButton.setAttribute("title", copy.attach);
-  elements.accessLabel.textContent = copy.accessLabel;
-  elements.accessHint.textContent = copy.accessHint;
-  elements.googleLabel.textContent = copy.google;
-  elements.authDividerText.textContent = copy.orEmail;
-  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 10);
-  elements.consentText.innerHTML = copy.consentHtml;
-  elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
+  if (elements.composerHint) elements.composerHint.textContent = copy.composerHint;
+  if (elements.webSearchLabel) elements.webSearchLabel.textContent = copy.webSearch;
+  if (elements.accessCodeInput) elements.accessCodeInput.placeholder = copy.accessPlaceholder;
+  if (elements.sendButton && !elements.sendButton.disabled && elements.sendLabel) elements.sendLabel.textContent = copy.send;
+  if (elements.themeToggle) elements.themeToggle.setAttribute("aria-label", copy.themeToggle);
+  if (elements.themeToggle) elements.themeToggle.setAttribute("title", copy.themeToggle);
+  if (elements.menuButton) elements.menuButton.setAttribute("aria-label", copy.openPanel);
+  if (elements.sidebarClose) elements.sidebarClose.setAttribute("aria-label", copy.closePanel);
+  if (elements.attachButton) elements.attachButton.setAttribute("aria-label", copy.attach);
+  if (elements.attachButton) elements.attachButton.setAttribute("title", copy.attach);
+  if (elements.accessLabel) elements.accessLabel.textContent = copy.accessLabel;
+  if (elements.accessHint) elements.accessHint.textContent = copy.accessHint;
+  if (elements.googleLabel) elements.googleLabel.textContent = copy.google;
+  if (elements.authDividerText) elements.authDividerText.textContent = copy.orEmail;
+  if (elements.limitNote) elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 10);
+  if (elements.consentText) elements.consentText.innerHTML = copy.consentHtml;
+  if (elements.loginButton) elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
   renderQuota();
   renderAccount();
 
   updateTaskUI(state.selectedTask);
   renderProviders();
 
-  elements.languageButtons.forEach((button) => {
+  (elements.languageButtons || []).forEach((button) => {
     const active = button.dataset.lang === state.language;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
@@ -926,7 +926,7 @@ function setLanguage(language) {
   syncAttachmentMenu();
   renderAttachmentList();
 
-  if (!isAuthenticated() && !elements.sessionState.classList.contains("error")) {
+  if (!isAuthenticated() && elements.sessionState && !elements.sessionState.classList.contains("error")) {
     setSessionState(false, copy.signedOut);
   } else if (state.authMode === "email") {
     setSessionState(true, copy.signedInAs(state.email));

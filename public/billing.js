@@ -764,6 +764,18 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
 // Un clic contrata si no hay suscripción, o cambia de plan si ya la hay.
 async function choosePlan(planId, button) {
   setMessage("");
+  // GA4 — `pricing_click` (Tarea #2): intención comercial en el diálogo de
+  // planes. Se dispara ANTES del request al backend para capturar también los
+  // casos donde el usuario no está autenticado (y por tanto no llegará a
+  // `subscription_started`). Es el evento de valor comercial de ALLAIS_05 §2.
+  const chosenPlanForTrack = ALL_PLANS.find((p) => p.id === planId);
+  trackEvent("pricing_click", {
+    plan: planId,
+    plan_name: chosenPlanForTrack ? chosenPlanForTrack.name : planId,
+    value: chosenPlanForTrack ? chosenPlanForTrack.price : 0,
+    currency: "MXN",
+    changing: hasLiveSubscription()
+  });
   const user = await window.AllAIsAuth.currentUser().catch(() => null);
   if (!user) {
     dialog.close();

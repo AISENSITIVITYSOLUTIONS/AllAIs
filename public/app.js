@@ -906,6 +906,14 @@ function openAuthDialog() {
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
   document.body.classList.add("auth-open");
+  // GA4 — `access_code_view`: el campo del código es ahora un input dentro del
+  // diálogo, no un elemento del landing. El evento se dispara cuando el diálogo
+  // abre y el usuario ve el campo. Lo marcamos una sola vez por sesión para no
+  // inflarlo con reaperturas del mismo visitante.
+  if (!sessionStorage.getItem("allais_access_code_viewed")) {
+    sessionStorage.setItem("allais_access_code_viewed", "1");
+    trackEvent("access_code_view", { language: state.language });
+  }
   window.setTimeout(() => {
     if (!isAuthenticated()) elements.accessCodeInput.focus({ preventScroll: true });
     else elements.loginButton.focus({ preventScroll: true });
@@ -2345,6 +2353,84 @@ function bindEvents() {
     if (!button || !elements.taskGrid.contains(button)) return;
     updateTaskUI(button.dataset.task);
   });
+
+  // ---------------------------------------------------------------------------
+  // GA4 — tracking declarativo (Tarea #2 del backlog)
+  // ---------------------------------------------------------------------------
+  // Estos listeners globales disparan eventos de analítica basándose en
+  // atributos `data-*` del DOM. La ventaja de este enfoque: cuando se añadan
+  // nuevos CTAs (Tarea #5 — hero split), demos (Tarea #7 — video) o formularios
+  // de registro (Tarea #6 — "Reservar mi lugar"), bastará con añadir los
+  // atributos al HTML; no habrá que tocar este JS.
+  //
+  // Atributos reconocidos:
+  //   data-track-cta="primary"              → dispara `cta_primary_click`
+  //   data-cta-source="google|email|..."    → parámetro `source` del evento
+  //   data-cta-location="hero|dialog|..."   → parámetro `location` del evento
+  //   data-track-event="demo_play"          → sobre un <video>: dispara en play
+  //   data-track-event="signup_intent"      → sobre un <form>: dispara en submit
+  //   data-track-event="<nombre>"           → sobre cualquier otro: dispara al click
+  //   data-track-params='{"foo":"bar"}'     → parámetros adicionales (JSON)
+  // ---------------------------------------------------------------------------
+  const parseTrackParams = (el) => {
+    const raw = el?.dataset?.trackParams;
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === "object") ? parsed : {};
+    } catch (_err) {
+      return {};
+    }
+  };
+
+  // Click delegate — `cta_primary_click` y `data-track-event` sobre elementos
+  // clickeables que no son <form> ni <video> (esos tienen handlers propios).
+  document.addEventListener("click", (event) => {
+    const cta = event.target.closest("[data-track-cta=\"primary\"]");
+    if (cta) {
+      trackEvent("cta_primary_click", {
+        source: cta.dataset.ctaSource || cta.id || "unknown",
+        location: cta.dataset.ctaLocation || "unknown",
+        language: state.language,
+        ...parseTrackParams(cta)
+      });
+    }
+    const trackable = event.target.closest("[data-track-event]");
+    if (trackable && !trackable.matches("form, video")) {
+      trackEvent(trackable.dataset.trackEvent, {
+        language: state.language,
+        ...parseTrackParams(trackable)
+      });
+    }
+  });
+
+  // Submit delegate — `signup_intent` y cualquier otro form marcado.
+  document.addEventListener("submit", (event) => {
+    const form = event.target.closest("form[data-track-event]");
+    if (!form) return;
+    trackEvent(form.dataset.trackEvent, {
+      form_id: form.id || "unknown",
+      language: state.language,
+      ...parseTrackParams(form)
+    });
+  }, true);
+
+  // Play delegate — `demo_play` y cualquier otro <video> marcado. Captura en
+  // fase bubbling es suficiente aquí (los <video> emiten `play` normalmente).
+  document.addEventListener("play", (event) => {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement)) return;
+    const eventName = video.dataset.trackEvent;
+    if (!eventName) return;
+    // Dispara una sola vez por video para no inflar con pause/resume.
+    if (video.dataset.trackFired === "1") return;
+    video.dataset.trackFired = "1";
+    trackEvent(eventName, {
+      video_src: video.currentSrc || video.src || "unknown",
+      language: state.language,
+      ...parseTrackParams(video)
+    });
+  }, true);
 }
 
 async function init() {

@@ -389,8 +389,8 @@ async function resolveCode(rawCode, { activate = false } = {}) {
 // Una consulta que no llegó a entregarse se devuelve en todos los contadores
 // que la registraron: el del ciclo y, si aplica, el del día.
 // La resta vive en quota.js para no tener dos implementaciones del mismo descuento.
-async function refundQuota(refs) {
-  await refundUsage([].concat(refs || []).filter(Boolean), FieldValue.increment);
+async function refundQuota(refs, units = 1) {
+  await refundUsage([].concat(refs || []).filter(Boolean), FieldValue.increment, units);
 }
 
 // Consulta a Mercado Pago usada para revalidar una suscripción guardada.
@@ -698,6 +698,128 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         elapsedMs: Date.now() - startedAt,
         ...(quota ? { quota } : {})
       });
+      return;
+    }
+
+    // ---------- Comparación multi-modelo (Tarea #9) ----------
+    // Un prompt a 2-4 modelos a la vez. Respuesta NDJSON multiplexada por
+    // `provider`: el frontend demultiplexa las columnas. Consume una consulta
+    // de cuota por modelo. Solo para cuentas (email): comparar es premium y la
+    // cuota por unidades vive en la ruta de cuentas.
+    if (path === "/compare" && request.method === "POST") {
+      if (!(await appCheckOk(request))) {
+        sendJson(response, 401, { error: "App verification failed.", code: "APP_CHECK" });
+        return;
+      }
+      if (await rateLimited(request, "chat")) {
+        sendJson(response, 429, { error: "Demasiados intentos. Espera unos minutos.", code: "RATE_LIMIT" });
+        return;
+      }
+
+      const emailUser = await verifyEmailUser(request);
+      if (!emailUser) {
+        sendJson(response, 401, { error: "Inicia sesión para comparar varios modelos.", code: "UNAUTHORIZED" });
+        return;
+      }
+
+      const prompt = String(request.body?.prompt || "").trim();
+      if (!prompt) {
+        sendJson(response, 400, { error: "Prompt is required." });
+        return;
+      }
+
+      const available = new Set(listProviders().map((p) => p.id));
+      const requested = Array.isArray(request.body?.providers) ? request.body.providers.map(String) : [];
+      // Lista blanca + sin duplicados + máximo 4.
+      const providerIds = [...new Set(requested.filter((id) => available.has(id)))].slice(0, 4);
+      if (providerIds.length < 2) {
+        sendJson(response, 400, { error: "Elige al menos 2 modelos para comparar.", code: "COMPARE_MIN" });
+        return;
+      }
+
+      const system = String(request.body?.system || "").trim();
+      const temperature = Math.min(Math.max(Number(request.body?.temperature ?? 0.4), 0), 1.2);
+      const history = Array.isArray(request.body?.history) ? request.body.history.slice(-30) : [];
+      const attachments = Array.isArray(request.body?.attachments) ? request.body.attachments : [];
+      const attachmentError = validateAttachments(attachments);
+      if (attachmentError) {
+        sendJson(response, 413, { error: attachmentError });
+        return;
+      }
+      const webSearch = request.body?.webSearch === true;
+
+      // Cuota: una consulta por modelo. Se consume de golpe (units = n) y se
+      // devuelve lo correspondiente a los modelos que fallen.
+      const entitlement = await entitlementFor(emailUser);
+      const consumed = await consumeUsage({
+        db,
+        holder: emailUser.email,
+        uid: emailUser.uid,
+        entitlement,
+        units: providerIds.length
+      });
+      if (!consumed.ok) {
+        const monthly = consumed.blockedBy === "monthly";
+        sendJson(response, 429, {
+          error: monthly ? "Monthly query limit reached." : "Daily query limit reached.",
+          code: monthly ? "MONTHLY_LIMIT" : "DAILY_LIMIT",
+          needed: providerIds.length,
+          plan: entitlement.planId,
+          quota: consumed.quota
+        });
+        return;
+      }
+
+      // Stream NDJSON multiplexado. response.write serializa las escrituras, así
+      // que los deltas de los distintos modelos se intercalan de forma segura;
+      // cada línea lleva su `provider` para que el frontend arme las columnas.
+      response.status(200).set({
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "cache-control": "no-store",
+        "x-accel-buffering": "no"
+      });
+      if (typeof response.flushHeaders === "function") response.flushHeaders();
+      const writeLine = (event) => response.write(`${JSON.stringify(event)}\n`);
+
+      writeLine({ t: "start", providers: providerIds, quota: consumed.quota });
+
+      const basePayload = { prompt, system, temperature, history, webSearch, attachments };
+      let failed = 0;
+      await Promise.allSettled(providerIds.map(async (pid) => {
+        const startedAt = Date.now();
+        let streamed = false;
+        try {
+          const result = await callProvider(pid, {
+            ...basePayload,
+            onDelta: (text) => { streamed = true; writeLine({ t: "delta", provider: pid, text }); }
+          });
+          if (!streamed && result.text) writeLine({ t: "delta", provider: pid, text: result.text });
+          writeLine({
+            t: "done",
+            provider: pid,
+            answer: result.text,
+            model: result.rawModel,
+            sources: result.sources || [],
+            elapsedMs: Date.now() - startedAt
+          });
+          await logToSheet("comparacion", { email: emailUser.email, modelo: pid, resultado: "ok" });
+        } catch (error) {
+          failed += 1;
+          console.error("AllAIs compare error", { provider: pid, message: error?.message });
+          writeLine({ t: "error", provider: pid, error: error?.message || "No se pudo completar la consulta." });
+          await logToSheet("comparacion", { email: emailUser.email, modelo: pid, resultado: "error", detalle: cleanText(error?.message, 200) });
+        }
+      }));
+
+      // Devuelve la cuota de los modelos que fallaron.
+      let finalQuota = consumed.quota;
+      if (failed > 0 && consumed.refs.length) {
+        await refundQuota(consumed.refs, failed);
+        if (finalQuota) finalQuota.remaining = Math.min((finalQuota.remaining || 0) + failed, finalQuota.limit || Infinity);
+      }
+
+      writeLine({ t: "all_done", failed, total: providerIds.length, ...(finalQuota ? { quota: finalQuota } : {}) });
+      response.end();
       return;
     }
 

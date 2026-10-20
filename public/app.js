@@ -2445,7 +2445,31 @@ async function init() {
   setSessionState(null, translations[state.language].signedOut);
   renderAccount();
   await restoreEmailSession();
-  if (!isAuthenticated() && !sessionStorage.getItem("allais_auth_prompted")) {
+
+  // Deep link desde /precios.html: `?plan=lanzamiento|profesional_1|
+  // profesional_2|profesional_3` abre automáticamente el diálogo de planes
+  // para que el visitante no tenga que buscar el botón "Suscríbete aquí".
+  // Si el usuario no está autenticado, el diálogo pedirá sesión primero, y
+  // la flag preserva la intención entre pasos. Validamos contra una lista
+  // blanca para evitar valores arbitrarios desde el query string.
+  const planParam = new URLSearchParams(window.location.search).get("plan");
+  const VALID_PLANS = new Set(["lanzamiento", "profesional_1", "profesional_2", "profesional_3"]);
+  if (planParam && VALID_PLANS.has(planParam)) {
+    sessionStorage.setItem("allais_plan_intent", planParam);
+    // Limpia el query string para no ensuciar refreshes posteriores.
+    try {
+      const clean = window.location.pathname + window.location.hash;
+      window.history.replaceState(null, "", clean);
+    } catch (_e) { /* silencio */ }
+    trackEvent("plan_deeplink", { plan: planParam });
+    // Da un ciclo al event loop para que billing.js termine de registrar
+    // su API pública (publishPublicApi) antes de intentar abrir el diálogo.
+    window.setTimeout(() => {
+      if (window.AllAIsBilling?.openDialog) {
+        window.AllAIsBilling.openDialog();
+      }
+    }, 60);
+  } else if (!isAuthenticated() && !sessionStorage.getItem("allais_auth_prompted")) {
     sessionStorage.setItem("allais_auth_prompted", "1");
     openAuthDialog();
   }

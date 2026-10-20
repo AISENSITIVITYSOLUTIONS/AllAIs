@@ -58,11 +58,15 @@ async function readUsage({ db, holder, uid, entitlement, now = new Date() }) {
  * Devuelve { ok, quota, blockedBy, refs } — refs sirve para devolver el consumo
  * si después falla el proveedor y la consulta no llegó a entregarse.
  */
-async function consumeUsage({ db, holder, uid, entitlement, now = new Date() }) {
+// units: cuántas consultas consume esta operación. Una comparación multi-modelo
+// (Tarea #9) consume una por proveedor, así que pasa units = n.º de modelos.
+// El valor por defecto 1 mantiene el comportamiento del chat de un solo modelo.
+async function consumeUsage({ db, holder, uid, entitlement, now = new Date(), units = 1 }) {
   const { day, monthlyRef, dailyRef } = usageRefs({ db, holder, uid, entitlement, now });
+  const n = Math.max(1, Math.floor(units));
 
   // Sin límites aplicables (por ejemplo el código maestro) no se registra nada.
-  if (!monthlyRef && !dailyRef) return { ok: true, quota: null, blockedBy: null, refs: [] };
+  if (!monthlyRef && !dailyRef) return { ok: true, quota: null, blockedBy: null, refs: [], units: n };
 
   return db.runTransaction(async (transaction) => {
     // Firestore exige todas las lecturas antes de cualquier escritura.
@@ -72,18 +76,19 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date() }) 
     const monthlyUsed = countOf(monthlySnap);
     const dailyUsed = countOf(dailySnap);
 
-    const blockedBy = exceeded({
-      monthly: entitlement.monthly,
-      daily: entitlement.daily,
-      monthlyUsed,
-      dailyUsed
-    });
+    // ¿Caben `n` consultas más? Para n=1 equivale a exceeded() (used >= limit).
+    const wouldExceed = (used, limit) =>
+      Number.isFinite(limit) && limit > 0 && (used + n) > limit;
+    let blockedBy = null;
+    if (wouldExceed(monthlyUsed, entitlement.monthly)) blockedBy = "monthly";
+    else if (wouldExceed(dailyUsed, entitlement.daily)) blockedBy = "daily";
 
     if (blockedBy) {
       return {
         ok: false,
         blockedBy,
         refs: [],
+        units: n,
         quota: quotaView({
           monthly: entitlement.monthly,
           daily: entitlement.daily,
@@ -105,7 +110,7 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date() }) 
         cycleKey: entitlement.cycle.key,
         cycleStart: entitlement.cycle.startIso,
         cycleEnd: entitlement.cycle.endIso,
-        count: monthlyUsed + 1,
+        count: monthlyUsed + n,
         updatedAt: stamp
       }, { merge: true });
       refs.push(monthlyRef);
@@ -115,7 +120,7 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date() }) 
         holder,
         email: holder && holder.startsWith("code:") ? null : holder,
         day,
-        count: dailyUsed + 1,
+        count: dailyUsed + n,
         updatedAt: stamp
       }, { merge: true });
       refs.push(dailyRef);
@@ -125,11 +130,12 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date() }) 
       ok: true,
       blockedBy: null,
       refs,
+      units: n,
       quota: quotaView({
         monthly: entitlement.monthly,
         daily: entitlement.daily,
-        monthlyUsed: monthlyUsed + 1,
-        dailyUsed: dailyUsed + 1,
+        monthlyUsed: monthlyUsed + n,
+        dailyUsed: dailyUsed + n,
         cycle: entitlement.cycle,
         now
       })
@@ -137,11 +143,13 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date() }) 
   });
 }
 
-// Devuelve el consumo cuando la consulta no llegó a entregarse.
-async function refundUsage(refs, increment) {
+// Devuelve el consumo cuando la consulta no llegó a entregarse. units permite
+// devolver más de una (p. ej. los modelos que fallaron en una comparación).
+async function refundUsage(refs, increment, units = 1) {
+  const n = Math.max(1, Math.floor(units));
   for (const ref of refs || []) {
     try {
-      await ref.update({ count: increment(-1) });
+      await ref.update({ count: increment(-n) });
     } catch (error) {
       console.warn("AllAIs quota refund failed", error?.message);
     }

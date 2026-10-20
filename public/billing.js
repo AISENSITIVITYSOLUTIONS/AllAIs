@@ -783,6 +783,36 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
   });
 }
 
+// Confirmación explícita antes de cambiar de plan: avisa el nuevo monto y que
+// se aplicará en el próximo cobro de Mercado Pago. Sin esto, el cambio era un
+// solo clic y el usuario solo se enteraba del nuevo monto por el correo de MP.
+// Devuelve una promesa que resuelve true (confirmó) o false (canceló).
+function confirmPlanChange(plan) {
+  return new Promise((resolve) => {
+    const overlay = node("div", { class: "billing-notice-overlay" });
+    const card = node("div", { class: "billing-notice-card" });
+    const title = node("h3", { class: "billing-notice-title" }, "Confirma el cambio de plan");
+    const p1 = node("p", { class: "billing-notice-text" },
+      `Vas a cambiar al plan ${plan.name}.`);
+    const amount = node("div", { class: "billing-notice-email" }, `$${plan.price} MXN al mes`);
+    const p2 = node("p", { class: "billing-notice-hint" },
+      "El nuevo monto se aplicará en tu próximo cobro con Mercado Pago. No se cobra nada en este momento.");
+
+    const actions = node("div", { class: "billing-notice-actions" });
+    const goBtn = node("button", { type: "button", class: "billing-notice-go" }, "Sí, cambiar de plan");
+    const cancelBtn = node("button", { type: "button", class: "billing-notice-cancel" }, "Cancelar");
+    actions.append(cancelBtn, goBtn);
+
+    card.append(title, p1, amount, p2, actions);
+    overlay.append(card);
+    document.body.append(overlay);
+
+    const close = (result) => { try { overlay.remove(); } catch { /* ya removido */ } resolve(result); };
+    goBtn.addEventListener("click", () => close(true));
+    cancelBtn.addEventListener("click", () => close(false));
+  });
+}
+
 // Un clic contrata si no hay suscripción, o cambia de plan si ya la hay.
 // opts.launchFreeTrial activa el flujo trial-with-card (Tarea #4b): se registra
 // la tarjeta hoy pero el primer cobro se difiere al cierre de la promo (11-nov).
@@ -808,6 +838,16 @@ async function choosePlan(planId, button, opts = {}) {
   }
 
   const changing = hasLiveSubscription();
+  // Transparencia de cobros: si el usuario ya tiene plan y está cambiando a
+  // otro, confirmamos el nuevo monto ANTES de ejecutar el cambio. Así la
+  // plataforma avisa el cobro, no solo el correo de Mercado Pago.
+  if (changing) {
+    const target = ALL_PLANS.find((p) => p.id === planId);
+    if (target) {
+      const confirmed = await confirmPlanChange(target);
+      if (!confirmed) return { ok: false, reason: "cancelled" };
+    }
+  }
   const label = button.textContent;
   button.disabled = true;
   button.textContent = changing ? "Cambiando…" : "Un momento…";

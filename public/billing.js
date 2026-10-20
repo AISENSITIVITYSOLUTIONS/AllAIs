@@ -656,7 +656,7 @@ function buildDialog() {
   foot.append(
     node("p", {}, "Propuesta comercial: funciones y cupos sujetos a validación técnica y de costos."),
     node("p", {}, "Cada consulta corresponde a una respuesta de un modelo; la búsqueda web y los archivos tienen límites propios."),
-    node("p", {}, "Pagos seguros con Mercado Pago.")
+    node("p", {}, "Pagos seguros con PayPal o Mercado Pago.")
   );
 
   sheet.append(close, eyebrow, head, grid, launchStrip(), manage, message, foot);
@@ -805,9 +805,42 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
   });
 }
 
+// Diálogo para seleccionar plataforma de pago: PayPal o Mercado Pago.
+// Devuelve una promesa que resuelve "paypal", "mercado_pago" o null (canceló).
+function selectPaymentGateway() {
+  return new Promise((resolve) => {
+    const overlay = node("dialog", { class: "billing-notice-overlay" });
+    const card = node("div", { class: "billing-notice-card" });
+    const title = node("h3", { class: "billing-notice-title" }, "Elige tu método de pago");
+    const p1 = node("p", { class: "billing-notice-text" },
+      "Selecciona dónde prefieres pagar tu suscripción:");
+
+    const actions = node("div", { class: "billing-notice-actions" });
+    const paypalBtn = node("button", { type: "button", class: "billing-notice-go" }, "PayPal");
+    const mpBtn = node("button", { type: "button", class: "billing-notice-go" }, "Mercado Pago");
+    const cancelBtn = node("button", { type: "button", class: "billing-notice-cancel" }, "Cancelar");
+    actions.append(cancelBtn, paypalBtn, mpBtn);
+
+    card.append(title, p1, actions);
+    overlay.append(card);
+    document.body.append(overlay);
+    overlay.showModal();
+
+    const close = (result) => {
+      try { if (overlay.open) overlay.close(); } catch { /* ya cerrado */ }
+      try { overlay.remove(); } catch { /* ya removido */ }
+      resolve(result);
+    };
+    paypalBtn.addEventListener("click", () => close("paypal"));
+    mpBtn.addEventListener("click", () => close("mercado_pago"));
+    cancelBtn.addEventListener("click", () => close(null));
+    overlay.addEventListener("cancel", () => close(null));
+  });
+}
+
 // Confirmación explícita antes de cambiar de plan: avisa el nuevo monto y que
-// se aplicará en el próximo cobro de Mercado Pago. Sin esto, el cambio era un
-// solo clic y el usuario solo se enteraba del nuevo monto por el correo de MP.
+// se aplicará en el próximo cobro. Sin esto, el cambio era un
+// solo clic y el usuario solo se enteraba del nuevo monto por el correo.
 // Devuelve una promesa que resuelve true (confirmó) o false (canceló).
 function confirmPlanChange(plan) {
   return new Promise((resolve) => {
@@ -818,7 +851,7 @@ function confirmPlanChange(plan) {
       `Vas a cambiar al plan ${plan.name}.`);
     const amount = node("div", { class: "billing-notice-email" }, `$${plan.price} MXN al mes`);
     const p2 = node("p", { class: "billing-notice-hint" },
-      "El nuevo monto se aplicará en tu próximo cobro con Mercado Pago. No se cobra nada en este momento.");
+      "El nuevo monto se aplicará en tu próximo cobro. No se cobra nada en este momento.");
 
     const actions = node("div", { class: "billing-notice-actions" });
     const goBtn = node("button", { type: "button", class: "billing-notice-go" }, "Sí, cambiar de plan");
@@ -886,9 +919,19 @@ async function choosePlan(planId, button, opts = {}) {
   // atascado para siempre.
   const restore = () => { button.textContent = label; button.disabled = false; };
   try {
+    // Seleccionar plataforma de pago antes de proseguir (solo para nuevas suscripciones)
+    let gateway = "mercado_pago"; // default
+    if (!changing) {
+      restore(); // Restaurar antes de mostrar el diálogo
+      gateway = await selectPaymentGateway();
+      if (!gateway) return { ok: false, reason: "gateway_cancelled" };
+      button.disabled = true;
+      button.textContent = "Un momento…";
+    }
+
     // Tarea #4b — trial-with-card: el banner de Lanzamiento pasa
     // launchFreeTrial para que el backend difiera el primer cobro al 11-nov.
-    const body = { plan: planId };
+    const body = { plan: planId, gateway };
     if (opts.launchFreeTrial) body.launchFreeTrial = true;
     const data = await billingRequest(changing ? "/change" : "/subscribe", {
       method: "POST",

@@ -356,12 +356,26 @@ const STYLES = `
 /* Aviso previo al checkout de Mercado Pago: le dice al usuario qué correo
    exacto debe usar y lo copia al portapapeles. Evita el rechazo de MP por
    "El e-mail no coincide con el de la suscripción". */
+/* Es un <dialog> abierto con showModal(), no un div: el dialogo de planes
+   tambien usa showModal() y vive en el "top layer" del navegador, una capa
+   que ignora por completo el z-index. Un div normal queda SIEMPRE detras,
+   aunque tenga z-index maximo — por eso este aviso parecia no aparecer. Dos
+   elementos en el top layer se apilan por orden de showModal(), asi que al
+   abrirse despues queda encima. */
 .billing-notice-overlay {
   position: fixed; inset: 0; z-index: 2147483647;
-  display: flex; align-items: center; justify-content: center;
+  display: none;
+  align-items: center; justify-content: center;
   background: rgba(5, 10, 20, 0.72); backdrop-filter: blur(4px);
   padding: 20px;
+  /* Anular los valores por defecto de <dialog> */
+  width: 100%; height: 100%;
+  max-width: none; max-height: none;
+  border: 0; margin: 0;
+  overflow: auto;
 }
+.billing-notice-overlay[open] { display: flex; }
+.billing-notice-overlay::backdrop { background: transparent; }
 .billing-notice-card {
   background: #0b1220; color: #e6ecf5;
   max-width: 460px; width: 100%;
@@ -743,7 +757,7 @@ async function refreshStatus({ fromReturn = false } = {}) {
 // se redirige automáticamente (para no bloquear al usuario que ya entendió).
 function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
   return new Promise((resolve) => {
-    const overlay = node("div", { class: "billing-notice-overlay" });
+    const overlay = node("dialog", { class: "billing-notice-overlay" });
     const card = node("div", { class: "billing-notice-card" });
 
     const title = node("h3", { class: "billing-notice-title" }, "Un paso importante antes del pago");
@@ -762,24 +776,32 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
     card.append(title, p1, emailBox, copyHint, actions);
     overlay.append(card);
     document.body.append(overlay);
+    overlay.showModal();
 
     // Copiar el correo al portapapeles (silencioso: si falla, no bloqueamos).
     try {
       if (navigator.clipboard?.writeText) navigator.clipboard.writeText(email).catch(() => {});
     } catch { /* clipboard puede fallar en algunos contextos */ }
 
-    const cleanupAndGo = () => {
+    const dismiss = () => {
+      try { if (overlay.open) overlay.close(); } catch { /* ya cerrado */ }
       try { overlay.remove(); } catch { /* ya removido */ }
+    };
+    const cleanupAndGo = () => {
+      dismiss();
       window.location.href = initPoint;
       resolve();
     };
     const cleanupAndCancel = () => {
-      try { overlay.remove(); } catch { /* ya removido */ }
+      dismiss();
       resolve();
     };
 
     goBtn.addEventListener("click", cleanupAndGo);
     cancelBtn.addEventListener("click", cleanupAndCancel);
+    // Escape cierra el <dialog> por su cuenta: resolvemos la promesa para no
+    // dejarla colgada y que el boton del plan se restaure.
+    overlay.addEventListener("cancel", cleanupAndCancel);
   });
 }
 
@@ -789,7 +811,7 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
 // Devuelve una promesa que resuelve true (confirmó) o false (canceló).
 function confirmPlanChange(plan) {
   return new Promise((resolve) => {
-    const overlay = node("div", { class: "billing-notice-overlay" });
+    const overlay = node("dialog", { class: "billing-notice-overlay" });
     const card = node("div", { class: "billing-notice-card" });
     const title = node("h3", { class: "billing-notice-title" }, "Confirma el cambio de plan");
     const p1 = node("p", { class: "billing-notice-text" },
@@ -806,10 +828,16 @@ function confirmPlanChange(plan) {
     card.append(title, p1, amount, p2, actions);
     overlay.append(card);
     document.body.append(overlay);
+    overlay.showModal();
 
-    const close = (result) => { try { overlay.remove(); } catch { /* ya removido */ } resolve(result); };
+    const close = (result) => {
+      try { if (overlay.open) overlay.close(); } catch { /* ya cerrado */ }
+      try { overlay.remove(); } catch { /* ya removido */ }
+      resolve(result);
+    };
     goBtn.addEventListener("click", () => close(true));
     cancelBtn.addEventListener("click", () => close(false));
+    overlay.addEventListener("cancel", () => close(false));
   });
 }
 

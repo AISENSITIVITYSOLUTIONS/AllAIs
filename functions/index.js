@@ -189,7 +189,8 @@ async function consumeQuota(holder, limit = DAILY_QUERY_LIMIT) {
 // Límite de solicitudes por IP (la IP se guarda cifrada con hash, nunca en claro).
 const RATE_LIMITS = {
   session: { max: Number(process.env.RATE_SESSION_PER_15MIN || 10), windowMs: 15 * 60 * 1000 },
-  chat: { max: Number(process.env.RATE_CHAT_PER_MIN || 20), windowMs: 60 * 1000 }
+  chat: { max: Number(process.env.RATE_CHAT_PER_MIN || 20), windowMs: 60 * 1000 },
+  waitlist: { max: Number(process.env.RATE_WAITLIST_PER_15MIN || 5), windowMs: 15 * 60 * 1000 }
 };
 
 async function rateLimited(request, kind) {
@@ -416,6 +417,56 @@ async function accountQuota(user) {
   return { quota, plan: entitlement.planId, planName: entitlement.planName };
 }
 
+// ---------- Lista de espera "Reservar mi lugar" (Tarea #6) ----------
+// Captura de demanda sin cobrar: un visitante deja su correo, rol y cuánto
+// pagaría. Es un fake-door ético (ALLAIS_06). No requiere sesión: la idea es
+// capturar justo a quien aún no se registra.
+const WAITLIST_ROLES = new Set(["investigador", "docente", "estudiante", "consultor", "empresa", "otro"]);
+const WAITLIST_PRICE_RANGES = new Set(["lt_99", "99_199", "199_299", "299_399", "gt_399", "ns_nc"]);
+
+function isValidEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  // Validación conservadora: un @, algo antes, dominio con punto. No pretende
+  // cubrir todos los RFC, solo descartar basura evidente.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 254 ? email : null;
+}
+
+async function saveWaitlist(request) {
+  const email = isValidEmail(request.body?.email);
+  if (!email) {
+    return { status: 400, body: { ok: false, error: "Escribe un correo válido." } };
+  }
+  if (request.body?.consent !== true) {
+    return { status: 400, body: { ok: false, error: "Necesitamos tu consentimiento del aviso de privacidad." } };
+  }
+  const role = WAITLIST_ROLES.has(String(request.body?.role)) ? String(request.body.role) : "otro";
+  const priceRange = WAITLIST_PRICE_RANGES.has(String(request.body?.priceRange)) ? String(request.body.priceRange) : "ns_nc";
+  const client = request.body?.client || {};
+  const now = FieldValue.serverTimestamp();
+
+  // Doc id = correo en minúsculas: una entrada por persona, reenviar actualiza.
+  const ref = db.collection("waitlist").doc(email);
+  // createdAt solo en el primer alta: create() falla si el doc ya existe, y lo
+  // ignoramos para que un reenvío no sobreescriba la fecha original.
+  await ref.create({ email, createdAt: now }).catch(() => {});
+  await ref.set({
+    email,
+    role,
+    priceRange,
+    consentAt: now,
+    updatedAt: now,
+    source: cleanText(client.source || "precios", 40),
+    referrer: cleanText(client.referrer),
+    utm: cleanText(client.utm),
+    browserLanguage: cleanText(client.language, 32)
+  }, { merge: true });
+
+  // Registro también en Google Sheets (si está configurado el webhook).
+  await logToSheet("waitlist", { email, rol: role, rango_precio: priceRange, idioma: cleanText(client.language, 32), utm: cleanText(client.utm) });
+
+  return { status: 200, body: { ok: true } };
+}
+
 
 exports.api = onRequest(runtimeOptions, async (request, response) => {
   const origin = request.get("origin");
@@ -478,6 +529,22 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 
     if (path === "/health" && request.method === "GET") {
       sendJson(response, 200, { ok: true, service: "allais-api", version: "2026-10-15-streaming-codes-appcheck" });
+      return;
+    }
+
+    // Lista de espera "Reservar mi lugar" (Tarea #6). Público, sin sesión.
+    if (path === "/waitlist" && request.method === "POST") {
+      if (await rateLimited(request, "waitlist")) {
+        sendJson(response, 429, { ok: false, error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." });
+        return;
+      }
+      try {
+        const result = await saveWaitlist(request);
+        sendJson(response, result.status, result.body);
+      } catch (error) {
+        console.error("AllAIs waitlist error", error?.message);
+        sendJson(response, 500, { ok: false, error: "No pudimos guardar tu correo. Inténtalo de nuevo." });
+      }
       return;
     }
 

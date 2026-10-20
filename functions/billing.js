@@ -1,8 +1,10 @@
-// Cobros de AllAIs con Mercado Pago (suscripciones mensuales en MXN).
-// Flujo: el usuario elige plan -> /billing/subscribe crea una suscripción (preapproval) en estado pendiente
-// con inicio diferido a 3 días (prueba gratuita) -> Mercado Pago pide la tarjeta en init_point ->
-// Mercado Pago avisa a /billing/webhook -> el backend consulta la suscripción en la API y actualiza Firestore.
-// El webhook nunca confía en el contenido de la notificación: siempre vuelve a consultar a Mercado Pago.
+// Cobros de AllAIs con Mercado Pago y PayPal (suscripciones mensuales en MXN).
+// Flujo MP: usuario elige plan -> /billing/subscribe crea preapproval en MP en estado pendiente
+// con inicio diferido 3 días (prueba gratuita) -> MP pide tarjeta en init_point ->
+// MP avisa a /billing/webhook -> backend consulta suscripción en API y actualiza Firestore.
+// Flujo PayPal: usuario elige plan -> /billing/paypal/subscribe crea suscripción en PayPal
+// en estado pending -> PayPal avisa a /billing/paypal/webhook -> backend consulta en API y actualiza Firestore.
+// Ambas pasarelas nunca confían en la notificación: siempre revalidan contra sus APIs.
 
 const { onRequest } = require("firebase-functions/v2/https");
 const { initializeApp, getApps } = require("firebase-admin/app");
@@ -12,6 +14,9 @@ const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
 const { verify: verifySignature } = require("./webhook-signature");
 const { handleWebhook: handleWebhookPure } = require("./webhook-handler");
 const { resolveTrialSchedule } = require("./trial-schedule");
+const { isConfigured: isPayPalConfigured, getOAuthToken: getPayPalToken, createSubscription: createPayPalSubscriptionRemote, getSubscription: getPayPalSubscriptionRemote, verifyWebhookSignature: verifyPayPalWebhookSignature } = require("./paypal");
+const { handlePayPalWebhook } = require("./paypal-webhook-handler");
+const { planIdFor, buildCustomId, parseCustomId } = require("./paypal-status");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -377,10 +382,118 @@ function handleWebhook(request) {
   });
 }
 
+// ============================================================================
+// PayPal Subscriptions API
+// ============================================================================
+
+async function createPayPalSubscription(request) {
+  if (!isPayPalConfigured()) {
+    throw httpError(503, "PayPal no está configurado (credenciales faltantes).");
+  }
+
+  const user = await verifyUser(request);
+  if (!user) throw httpError(401, "Inicia sesión con tu correo verificado para suscribirte.");
+
+  const planId = String(request.body?.plan || "");
+  const plan = plans()[planId];
+  if (!plan) throw httpError(400, "Plan no válido.");
+  if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
+  assertAvailable(plan.id);
+
+  // Validar que el plan existe en PayPal (su PAYPAL_PLAN_* está definida)
+  const paypalPlanId = planIdFor(planId);
+  if (!paypalPlanId) {
+    throw httpError(503, `Este plan no está disponible en PayPal aún. Plan: ${planId}`);
+  }
+
+  // Una sola suscripción activa o pendiente por uid.
+  const existing = await db.collection("subscriptions").doc(user.uid).get();
+  if (existing.exists && ["active", "pending"].includes(existing.get("status"))) {
+    throw httpError(409, "Ya tienes una suscripción activa o pendiente.");
+  }
+
+  // Resuelve las fechas de prueba igual que MP: 3 días o hasta el cierre de la promo.
+  const launchFreeTrial = Boolean(request.body?.launchFreeTrial);
+  const schedule = resolveTrialSchedule({ launchFreeTrial, planId: plan.id, trialDays: TRIAL_DAYS });
+  if (schedule.error) throw httpError(schedule.error.status, schedule.error.message);
+  const { startDate, trialType } = schedule;
+
+  // Crea la suscripción en PayPal.
+  let subscriptionId;
+  try {
+    const result = await createPayPalSubscriptionRemote({
+      planId: plan.id,
+      startDate,
+      customerId: user.uid,
+      planName: plan.label,
+      subscriberEmail: user.email
+    });
+    subscriptionId = result.subscriptionId;
+  } catch (error) {
+    console.error("PayPal createSubscription error:", error.message);
+    throw httpError(502, "No pudimos crear tu suscripción en PayPal. Inténtalo de nuevo.");
+  }
+
+  // Guarda el documento en Firestore en estado "pending" (a la espera del webhook).
+  await db.collection("subscriptions").doc(user.uid).set({
+    email: user.email,
+    uid: user.uid,
+    plan: plan.id,
+    subscriptionId: String(subscriptionId),
+    gateway: "paypal",
+    status: "pending",
+    paypalStatus: "APPROVAL_PENDING",
+    trialEndsAt: startDate,
+    trialType,
+    firstChargeAt: startDate,
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  // El cliente redirige a PayPal con este id de suscripción.
+  // En el front, podría aparecer en un iframe de aprobación o redirigirse directamente.
+  return { subscriptionId, trialType };
+}
+
+// Webhook de PayPal. La firma se verifica contra la API de PayPal misma
+// (no localmente como en MP): enviamos los headers y el body, PayPal confirma.
+async function handlePayPalWebhookRequest(request) {
+  if (!isPayPalConfigured()) {
+    console.warn("PayPal webhook: no configurado — rechazando evento.");
+    return { ignored: true, reason: "not_configured" };
+  }
+
+  const eventBody = request.body || {};
+  const transmissionId = request.get("paypal-transmission-id") || "";
+  const transmissionTime = request.get("paypal-transmission-time") || "";
+  const signature = request.get("paypal-transmission-sig") || "";
+  const webhookId = process.env.PAYPAL_WEBHOOK_ID || "";
+
+  // Verifica la firma contra PayPal.
+  const isValid = await verifyPayPalWebhookSignature(
+    transmissionId,
+    transmissionTime,
+    signature,
+    webhookId,
+    eventBody
+  );
+
+  if (!isValid) {
+    console.warn("PayPal webhook: firma inválida o PAYPAL_WEBHOOK_ID no configurado.");
+    return { ignored: true, reason: "invalid_signature" };
+  }
+
+  // Delega al handler puro.
+  return await handlePayPalWebhook(eventBody, {
+    dbInstance: db,
+    getPayPalSubscription: (id) => getPayPalSubscriptionRemote(id),
+    updatedAtSentinel: FieldValue.serverTimestamp()
+  });
+}
+
 exports.billing = onRequest({
   region: "us-central1",
   timeoutSeconds: 60,
-  secrets: ["MERCADOPAGO_ACCESS_TOKEN", "MP_WEBHOOK_SECRET"]
+  secrets: ["MERCADOPAGO_ACCESS_TOKEN", "MP_WEBHOOK_SECRET", "PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET"]
 }, async (request, response) => {
   const origin = request.get("origin");
   if (allowedOrigins.has(origin)) {
@@ -426,6 +539,17 @@ exports.billing = onRequest({
       response.status(200).send("ok");
       return;
     }
+    if (path === "/paypal/subscribe" && request.method === "POST") {
+      sendJson(response, 200, { ok: true, ...(await createPayPalSubscription(request)) });
+      return;
+    }
+    if (path === "/paypal/webhook" && request.method === "POST") {
+      // Validar la firma contra PayPal. La respuesta va siempre en 200 para que PayPal no reintente.
+      // Los eventos ignorados (no relevantes, sin custom_id, etc.) se descartan silenciosamente.
+      await handlePayPalWebhookRequest(request);
+      response.status(200).send("ok");
+      return;
+    }
     sendJson(response, 404, { ok: false, error: "Ruta de cobros no encontrada." });
   } catch (error) {
     console.error("AllAIs billing error", { message: error?.message, path: request.path });
@@ -440,3 +564,4 @@ exports.fetchPreapproval = fetchPreapproval;
 exports.verifyWebhookSignature = verifyWebhookSignature;
 exports.handleWebhook = handleWebhook;
 exports.internalStatus = internalStatus;
+exports.handlePayPalWebhookRequest = handlePayPalWebhookRequest;

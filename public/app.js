@@ -2570,4 +2570,17 @@ async function init() {
   }
 }
 
+// API mínima para el módulo de comparación multi-modelo (compare.js, Tarea #9).
+// Le damos solo lo que necesita: ajustar el alto del textarea y reflejar la
+// cuota que el backend devuelve tras una comparación.
+window.AllAIsApp = {
+  resizePrompt: () => resizePromptInput(),
+  setQuota: (quota) => {
+    if (!quota) return;
+    state.quota = quota;
+    renderQuota();
+  },
+  getLanguage: () => state.language
+};
+
 init();

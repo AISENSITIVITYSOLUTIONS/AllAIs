@@ -377,30 +377,36 @@ const STYLES = `
 .billing-notice-overlay[open] { display: flex; }
 .billing-notice-overlay::backdrop { background: transparent; }
 .billing-notice-card {
-  background: #0b1220; color: #e6ecf5;
-  max-width: 460px; width: 100%;
-  border: 1px solid rgba(104, 160, 255, 0.3);
-  border-radius: 16px;
-  padding: 28px 24px 22px;
-  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.7);
+  background: linear-gradient(135deg, #0f1621 0%, #1a2637 100%);
+  color: #e6ecf5;
+  max-width: 520px; width: 100%;
+  border: 1px solid rgba(104, 160, 255, 0.4);
+  border-radius: 20px;
+  padding: 40px 32px;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   font-family: var(--font-ui, system-ui, sans-serif);
 }
 .billing-notice-title {
-  margin: 0 0 12px;
-  font-size: 18px; font-weight: 600;
-  color: #68a0ff;
+  margin: 0 0 16px;
+  font-size: 22px; font-weight: 700;
+  background: linear-gradient(120deg, #68a0ff 0%, #5a95ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.3px;
 }
 .billing-notice-text {
-  margin: 0 0 14px;
-  font-size: 14.5px; line-height: 1.5;
+  margin: 0 0 28px;
+  font-size: 15px; line-height: 1.6;
   color: #cbd5e1;
+  font-weight: 500;
 }
 .billing-notice-email {
-  margin: 0 0 10px;
-  padding: 12px 14px;
-  background: rgba(104, 160, 255, 0.12);
-  border: 1px solid rgba(104, 160, 255, 0.4);
-  border-radius: 10px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  background: rgba(104, 160, 255, 0.15);
+  border: 1px solid rgba(104, 160, 255, 0.5);
+  border-radius: 12px;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 15px; font-weight: 500;
   color: #ffffff;
@@ -409,37 +415,45 @@ const STYLES = `
   user-select: all;
 }
 .billing-notice-hint {
-  margin: 0 0 20px;
-  font-size: 13px; line-height: 1.45;
+  margin: 0 0 24px;
+  font-size: 13px; line-height: 1.5;
   color: #94a3b8;
 }
 .billing-notice-actions {
-  display: flex; gap: 10px; justify-content: flex-end;
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
 }
 .billing-notice-cancel, .billing-notice-go {
-  padding: 10px 18px;
-  border-radius: 10px;
-  font-size: 14px; font-weight: 600;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-size: 15px; font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition: all 0.2s ease;
+  flex: 1; min-width: 140px;
+  text-align: center;
+  letter-spacing: 0.3px;
 }
 .billing-notice-cancel {
-  background: transparent;
-  color: #94a3b8;
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+  border: 1.5px solid rgba(148, 163, 184, 0.4);
 }
 .billing-notice-cancel:hover {
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.15);
+  color: #e6ecf5;
+  border-color: rgba(148, 163, 184, 0.6);
+  transform: translateY(-2px);
 }
 .billing-notice-go {
-  background: linear-gradient(120deg, #68a0ff, #4b7bd4);
+  background: linear-gradient(120deg, #68a0ff 0%, #4b7bd4 100%);
   color: #ffffff;
-  border: 1px solid rgba(104, 160, 255, 0.5);
+  border: 1.5px solid rgba(104, 160, 255, 0.6);
+  box-shadow: 0 8px 20px rgba(104, 160, 255, 0.25);
 }
 .billing-notice-go:hover {
-  opacity: 0.92;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(104, 160, 255, 0.35);
+  filter: brightness(1.05);
 }
 `;
 

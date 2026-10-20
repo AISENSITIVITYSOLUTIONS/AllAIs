@@ -177,35 +177,6 @@
   margin-top: 12px;
 }
 
-/* Segmented control del topbar (Un modelo / Varios modelos) */
-.mode-switch {
-  display: inline-flex;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  gap: 2px;
-}
-.mode-btn {
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 150ms ease, color 150ms ease;
-}
-.mode-btn:hover { color: var(--ink-2); }
-.mode-btn.is-on {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-@media (max-width: 720px) { .mode-switch { display: none; } } /* en móvil queda el toggle del composer */
-
 /* Botón "Consolidar" */
 .compare-consolidate-wrap { text-align: center; margin-top: 16px; }
 .compare-consolidate-btn {

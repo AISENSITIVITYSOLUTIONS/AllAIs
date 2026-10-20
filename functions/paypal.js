@@ -135,7 +135,11 @@ async function createSubscription({
     throw new Error("PayPal: suscripción creada pero sin id");
   }
 
-  return { subscriptionId: data.id };
+  // Extraer la URL de aprobación del usuario (rel: "approve")
+  const approvalLink = (data.links || []).find(l => l.rel === "approve");
+  const approvalUrl = approvalLink ? approvalLink.href : null;
+
+  return { subscriptionId: data.id, approvalUrl };
 }
 
 // Recupera el estado actual de una suscripción desde PayPal. El backend lo usa

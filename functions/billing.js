@@ -435,7 +435,7 @@ async function createPayPalSubscription(request) {
   const { startDate, trialType } = schedule;
 
   // Crea la suscripción en PayPal.
-  let subscriptionId;
+  let subscriptionId, approvalUrl;
   try {
     const result = await createPayPalSubscriptionRemote({
       planId: plan.id,
@@ -445,6 +445,7 @@ async function createPayPalSubscription(request) {
       subscriberEmail: user.email
     });
     subscriptionId = result.subscriptionId;
+    approvalUrl = result.approvalUrl;
   } catch (error) {
     console.error("PayPal createSubscription error:", error.message);
     throw httpError(502, "No pudimos crear tu suscripción en PayPal. Inténtalo de nuevo.");
@@ -465,9 +466,8 @@ async function createPayPalSubscription(request) {
     updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
 
-  // El cliente redirige a PayPal con este id de suscripción.
-  // En el front, podría aparecer en un iframe de aprobación o redirigirse directamente.
-  return { subscriptionId, trialType };
+  // Devolver approvalUrl para que el frontend redirija al usuario a PayPal.
+  return { subscriptionId, approvalUrl, trialType };
 }
 
 // Webhook de PayPal. La firma se verifica contra la API de PayPal misma

@@ -362,6 +362,126 @@ const STYLES = `
    aunque tenga z-index maximo — por eso este aviso parecia no aparecer. Dos
    elementos en el top layer se apilan por orden de showModal(), asi que al
    abrirse despues queda encima. */
+/* Payment Gateway Screen - Pantalla completa para seleccionar método de pago */
+.payment-gateway-screen {
+  position: fixed; inset: 0; z-index: 2147483647;
+  background: linear-gradient(135deg, #0a0f18 0%, #151d2d 50%, #0d1420 100%);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+.payment-gateway-container {
+  width: 100%; max-width: 900px;
+  display: flex; flex-direction: column; gap: 48px;
+}
+.payment-gateway-header {
+  text-align: center;
+}
+.payment-gateway-title {
+  margin: 0 0 12px;
+  font-size: 36px; font-weight: 800;
+  background: linear-gradient(120deg, #68a0ff, #5a95ff, #7bb3ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+.payment-gateway-subtitle {
+  margin: 0;
+  font-size: 16px; line-height: 1.6;
+  color: #cbd5e1;
+}
+.payment-gateway-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px;
+}
+.payment-gateway-option {
+  background: linear-gradient(135deg, rgba(15, 22, 33, 0.8) 0%, rgba(26, 38, 55, 0.8) 100%);
+  border: 1.5px solid rgba(104, 160, 255, 0.3);
+  border-radius: 20px;
+  padding: 40px 32px;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+.payment-gateway-option:hover {
+  border-color: rgba(104, 160, 255, 0.6);
+  background: linear-gradient(135deg, rgba(15, 22, 33, 0.95) 0%, rgba(26, 38, 55, 0.95) 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 60px rgba(104, 160, 255, 0.2);
+}
+.payment-gateway-icon {
+  font-size: 64px; line-height: 1;
+  animation: bounce 0.6s ease;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.payment-gateway-name {
+  margin: 0;
+  font-size: 24px; font-weight: 700;
+  color: #e6ecf5;
+  letter-spacing: -0.3px;
+}
+.payment-gateway-description {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+.payment-gateway-button {
+  width: 100%;
+  padding: 14px 24px;
+  margin-top: 12px;
+  background: linear-gradient(120deg, #68a0ff 0%, #4b7bd4 100%);
+  color: #ffffff;
+  border: 1.5px solid rgba(104, 160, 255, 0.6);
+  border-radius: 12px;
+  font-size: 15px; font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 8px 20px rgba(104, 160, 255, 0.25);
+}
+.payment-gateway-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(104, 160, 255, 0.35);
+  filter: brightness(1.05);
+}
+.payment-gateway-button:active {
+  transform: translateY(0);
+}
+.payment-gateway-footer {
+  display: flex; justify-content: center;
+}
+.payment-gateway-cancel {
+  padding: 12px 32px;
+  background: transparent;
+  color: #cbd5e1;
+  border: 1.5px solid rgba(148, 163, 184, 0.4);
+  border-radius: 12px;
+  font-size: 15px; font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.payment-gateway-cancel:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #e6ecf5;
+  border-color: rgba(148, 163, 184, 0.6);
+}
+@media (max-width: 768px) {
+  .payment-gateway-title { font-size: 28px; }
+  .payment-gateway-grid { grid-template-columns: 1fr; gap: 24px; }
+  .payment-gateway-option { padding: 32px 24px; }
+  .payment-gateway-icon { font-size: 48px; }
+  .payment-gateway-name { font-size: 20px; }
+}
+
 .billing-notice-overlay {
   position: fixed; inset: 0; z-index: 2147483647;
   display: none;
@@ -823,32 +943,59 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
 // Devuelve una promesa que resuelve "paypal", "mercado_pago" o null (canceló).
 function selectPaymentGateway() {
   return new Promise((resolve) => {
-    const overlay = node("dialog", { class: "billing-notice-overlay" });
-    const card = node("div", { class: "billing-notice-card" });
-    const title = node("h3", { class: "billing-notice-title" }, "Elige tu método de pago");
-    const p1 = node("p", { class: "billing-notice-text" },
-      "Selecciona dónde prefieres pagar tu suscripción:");
+    const screen = node("div", { class: "payment-gateway-screen" });
+    const container = node("div", { class: "payment-gateway-container" });
 
-    const actions = node("div", { class: "billing-notice-actions" });
-    const paypalBtn = node("button", { type: "button", class: "billing-notice-go" }, "PayPal");
-    const mpBtn = node("button", { type: "button", class: "billing-notice-go" }, "Mercado Pago");
-    const cancelBtn = node("button", { type: "button", class: "billing-notice-cancel" }, "Cancelar");
-    actions.append(cancelBtn, paypalBtn, mpBtn);
+    const header = node("div", { class: "payment-gateway-header" });
+    const title = node("h2", { class: "payment-gateway-title" }, "Elige tu método de pago");
+    const subtitle = node("p", { class: "payment-gateway-subtitle" }, "Selecciona la opción que prefieras para tu suscripción");
+    header.append(title, subtitle);
 
-    card.append(title, p1, actions);
-    overlay.append(card);
-    document.body.append(overlay);
-    overlay.showModal();
+    const optionsGrid = node("div", { class: "payment-gateway-grid" });
+
+    // PayPal option
+    const paypalCard = node("div", { class: "payment-gateway-option" });
+    const paypalIcon = node("div", { class: "payment-gateway-icon paypal-icon" }, "🅿️");
+    const paypalName = node("h3", { class: "payment-gateway-name" }, "PayPal");
+    const paypalDesc = node("p", { class: "payment-gateway-description" }, "Rápido y seguro con tu cuenta PayPal");
+    const paypalBtn = node("button", { type: "button", class: "payment-gateway-button" }, "Seleccionar PayPal");
+    paypalCard.append(paypalIcon, paypalName, paypalDesc, paypalBtn);
+
+    // Mercado Pago option
+    const mpCard = node("div", { class: "payment-gateway-option" });
+    const mpIcon = node("div", { class: "payment-gateway-icon mp-icon" }, "💳");
+    const mpName = node("h3", { class: "payment-gateway-name" }, "Mercado Pago");
+    const mpDesc = node("p", { class: "payment-gateway-description" }, "Paga con tarjeta, transferencia o billetera");
+    const mpBtn = node("button", { type: "button", class: "payment-gateway-button" }, "Seleccionar Mercado Pago");
+    mpCard.append(mpIcon, mpName, mpDesc, mpBtn);
+
+    optionsGrid.append(paypalCard, mpCard);
+
+    const footer = node("div", { class: "payment-gateway-footer" });
+    const cancelBtn = node("button", { type: "button", class: "payment-gateway-cancel" }, "Cancelar");
+    footer.append(cancelBtn);
+
+    container.append(header, optionsGrid, footer);
+    screen.append(container);
+    document.body.append(screen);
 
     const close = (result) => {
-      try { if (overlay.open) overlay.close(); } catch { /* ya cerrado */ }
-      try { overlay.remove(); } catch { /* ya removido */ }
+      try { screen.remove(); } catch { /* ya removido */ }
       resolve(result);
     };
+
     paypalBtn.addEventListener("click", () => close("paypal"));
     mpBtn.addEventListener("click", () => close("mercado_pago"));
     cancelBtn.addEventListener("click", () => close(null));
-    overlay.addEventListener("cancel", () => close(null));
+
+    // Cerrar con ESC
+    const escHandler = (e) => {
+      if (e.key === "Escape") {
+        document.removeEventListener("keydown", escHandler);
+        close(null);
+      }
+    };
+    document.addEventListener("keydown", escHandler);
   });
 }
 

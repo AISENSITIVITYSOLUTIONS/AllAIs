@@ -466,16 +466,31 @@ function trackEvent(name, params) {
 
 async function billingRequest(path, options = {}) {
   const token = await window.AllAIsAuth.idToken();
-  const response = await fetch(`/billing${path}`, {
-    ...options,
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {})
+  // Timeout defensivo: sin esto, un fetch que nunca responde deja el botón
+  // "Un momento…" congelado para siempre. 20 s es holgado para crear un
+  // preapproval en Mercado Pago.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(`/billing${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {})
+      }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "No se pudo completar la operación.");
+    return data;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("La operación tardó demasiado. Revisa tu conexión e inténtalo de nuevo.");
     }
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "No se pudo completar la operación.");
-  return data;
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 let dialog = null;
@@ -576,11 +591,18 @@ function launchStrip() {
   amount.append(node("small", {}, " MXN/mes"));
   title.append(amount);
 
+  // Tarea #4b — trial-with-card: el banner de Lanzamiento registra la tarjeta
+  // hoy pero no cobra hasta el 11-nov. El texto lo dice con claridad para que
+  // nadie se sorprenda en el checkout de Mercado Pago.
   const note = node("p", { class: "billing-launch-note" });
-  note.append(document.createTextNode(LAUNCH.note), node("b", {}, ` ${LAUNCH.deadline}`));
+  note.append(
+    document.createTextNode(`${LAUNCH.note} Registras tu tarjeta ahora y `),
+    node("b", {}, "no se cobra nada hasta el 11 de noviembre de 2026"),
+    document.createTextNode(". Cancela antes sin ningún cargo.")
+  );
 
-  const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, `Elegir ${LAUNCH.name}`);
-  choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose));
+  const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, "Empezar prueba gratis");
+  choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose, { launchFreeTrial: true }));
 
   strip.append(title, note, choose);
   return strip;
@@ -762,7 +784,9 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
 }
 
 // Un clic contrata si no hay suscripción, o cambia de plan si ya la hay.
-async function choosePlan(planId, button) {
+// opts.launchFreeTrial activa el flujo trial-with-card (Tarea #4b): se registra
+// la tarjeta hoy pero el primer cobro se difiere al cierre de la promo (11-nov).
+async function choosePlan(planId, button, opts = {}) {
   setMessage("");
   // GA4 — `pricing_click` (Tarea #2): intención comercial en el diálogo de
   // planes. Se dispara ANTES del request al backend para capturar también los
@@ -787,24 +811,36 @@ async function choosePlan(planId, button) {
   const label = button.textContent;
   button.disabled = true;
   button.textContent = changing ? "Cambiando…" : "Un momento…";
+  // Restaura el botón a su estado original. Lo llamamos tanto en error como
+  // ANTES del overlay de aviso: el bug "Un momento…" congelado ocurría porque
+  // el label solo se restauraba en el catch, así que si el preapproval se creaba
+  // bien y el usuario cerraba el overlay sin ir al pago, el botón se quedaba
+  // atascado para siempre.
+  const restore = () => { button.textContent = label; button.disabled = false; };
   try {
+    // Tarea #4b — trial-with-card: el banner de Lanzamiento pasa
+    // launchFreeTrial para que el backend difiera el primer cobro al 11-nov.
+    const body = { plan: planId };
+    if (opts.launchFreeTrial) body.launchFreeTrial = true;
     const data = await billingRequest(changing ? "/change" : "/subscribe", {
       method: "POST",
-      body: JSON.stringify({ plan: planId })
+      body: JSON.stringify(body)
     });
 
     if (changing) {
       await refreshStatus();
       setMessage(`Cambiaste al plan ${PLAN_NAME[planId]}.`, true);
+      restore();
       return;
     }
     if (data.mock) {
       // El aviso va después de refrescar: refreshStatus repinta los botones.
-      trackEvent("subscription_mock", { plan: planId });
+      trackEvent("subscription_mock", { plan: planId, trial_type: data.trialType || "standard" });
       await refreshStatus();
       // subscription_completed con is_trial=true para diferenciar prueba de pago real.
       updateCtaButton({ isMockSub: true, planId });
       setMessage("Suscripción de prueba activada (sin cobro).", true);
+      restore();
       return;
     }
     if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago.");
@@ -814,8 +850,12 @@ async function choosePlan(planId, button) {
       plan: planId,
       plan_name: chosenPlan ? chosenPlan.name : planId,
       value: chosenPlan ? chosenPlan.price : 0,
-      currency: "MXN"
+      currency: "MXN",
+      trial_type: data.trialType || "standard"
     });
+    // El preapproval ya está creado: restauramos el botón ANTES del overlay para
+    // que no se quede congelado si el usuario cierra el aviso sin ir al pago.
+    restore();
     // Antes de ir a Mercado Pago, mostrar al usuario el correo exacto que
     // debe usar en el campo "Ingresa tu e-mail" del checkout. Mercado Pago
     // valida que coincida con el payer_email del preapproval; si no coincide,
@@ -825,8 +865,7 @@ async function choosePlan(planId, button) {
     await showPayerEmailNoticeBeforeRedirect(user.email, data.initPoint);
   } catch (error) {
     setMessage(error.message);
-    button.textContent = label;
-    button.disabled = false;
+    restore();
   }
 }
 

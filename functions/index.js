@@ -823,6 +823,80 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       return;
     }
 
+    // ---------- Consolidar respuestas de una comparación (Tarea #9, fase 4) ----------
+    // Toma las N respuestas de una comparación y pide a Claude una síntesis
+    // crítica. Es el momento "wow": una decisión a partir de varias opiniones.
+    // Consume 1 consulta de cuota (es una llamada más, a Claude).
+    if (path === "/consolidate" && request.method === "POST") {
+      if (!(await appCheckOk(request))) {
+        sendJson(response, 401, { error: "App verification failed.", code: "APP_CHECK" });
+        return;
+      }
+      const emailUser = await verifyEmailUser(request);
+      if (!emailUser) {
+        sendJson(response, 401, { error: "Inicia sesión para consolidar.", code: "UNAUTHORIZED" });
+        return;
+      }
+      const basePrompt = String(request.body?.prompt || "").trim();
+      const answers = Array.isArray(request.body?.answers) ? request.body.answers : [];
+      const clean = answers
+        .map((a) => ({ provider: cleanText(a?.provider, 40), text: String(a?.text || "").trim() }))
+        .filter((a) => a.provider && a.text)
+        .slice(0, 4);
+      if (clean.length < 2) {
+        sendJson(response, 400, { error: "Se necesitan al menos 2 respuestas para consolidar." });
+        return;
+      }
+
+      const entitlement = await entitlementFor(emailUser);
+      const consumed = await consumeUsage({ db, holder: emailUser.email, uid: emailUser.uid, entitlement });
+      if (!consumed.ok) {
+        const monthly = consumed.blockedBy === "monthly";
+        sendJson(response, 429, {
+          error: monthly ? "Monthly query limit reached." : "Daily query limit reached.",
+          code: monthly ? "MONTHLY_LIMIT" : "DAILY_LIMIT",
+          quota: consumed.quota
+        });
+        return;
+      }
+
+      const PROVIDER_NAMES = { openai: "ChatGPT", claude: "Claude", gemini: "Gemini", deepseek: "DeepSeek", qwen: "Qwen" };
+      const bloques = clean
+        .map((a, i) => `--- Respuesta ${i + 1} (${PROVIDER_NAMES[a.provider] || a.provider}) ---\n${a.text}`)
+        .join("\n\n");
+      const system = "Eres un analista crítico y neutral. El usuario hizo una misma pregunta a varios modelos de IA y te entrega sus respuestas. Tu tarea es ayudarle a decidir, no repetir. Entrega: (1) lo esencial en que coinciden, (2) las diferencias relevantes y quién aporta qué, (3) señales de calidad o posibles errores en cada respuesta si los hay, y (4) una recomendación final clara sobre cómo combinarlas o cuál seguir. Sé conciso, honesto y útil. Usa Markdown con encabezados breves. No inventes contenido que no esté en las respuestas.";
+      const consolidationPrompt = `Pregunta original:\n${basePrompt}\n\nRespuestas de los modelos:\n\n${bloques}\n\nSintetiza y recomienda según las instrucciones.`;
+
+      response.status(200).set({
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "cache-control": "no-store",
+        "x-accel-buffering": "no"
+      });
+      if (typeof response.flushHeaders === "function") response.flushHeaders();
+      const writeLine = (event) => response.write(`${JSON.stringify(event)}\n`);
+
+      const startedAt = Date.now();
+      let streamed = false;
+      try {
+        const result = await callProvider("claude", {
+          prompt: consolidationPrompt,
+          system,
+          temperature: 0.3,
+          history: [],
+          onDelta: (text) => { streamed = true; writeLine({ t: "delta", text }); }
+        });
+        if (!streamed && result.text) writeLine({ t: "delta", text: result.text });
+        writeLine({ t: "done", answer: result.text, elapsedMs: Date.now() - startedAt, quota: consumed.quota });
+        await logToSheet("consolidacion", { email: emailUser.email, modelos: clean.map((a) => a.provider).join(","), resultado: "ok" });
+      } catch (error) {
+        await refundQuota(consumed.refs);
+        console.error("AllAIs consolidate error", { message: error?.message });
+        writeLine({ t: "error", error: error?.message || "No se pudo consolidar." });
+      }
+      response.end();
+      return;
+    }
+
     sendJson(response, 404, { error: "API route not found." });
   } catch (error) {
     console.error("AllAIs API error", {

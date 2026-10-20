@@ -177,6 +177,99 @@
   margin-top: 12px;
 }
 
+/* Segmented control del topbar (Un modelo / Varios modelos) */
+.mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  gap: 2px;
+}
+.mode-btn {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease;
+}
+.mode-btn:hover { color: var(--ink-2); }
+.mode-btn.is-on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+@media (max-width: 720px) { .mode-switch { display: none; } } /* en móvil queda el toggle del composer */
+
+/* Botón "Consolidar" */
+.compare-consolidate-wrap { text-align: center; margin-top: 16px; }
+.compare-consolidate-btn {
+  appearance: none;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 11px 22px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 160ms ease, filter 160ms ease;
+}
+:root[data-theme="dark"] .compare-consolidate-btn { background: rgba(110,198,230,.14); color: var(--ink); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .compare-consolidate-btn { background: rgba(110,198,230,.14); color: var(--ink); }
+}
+.compare-consolidate-btn:hover { filter: brightness(1.04); }
+.compare-consolidate-btn:disabled { opacity: .6; cursor: default; }
+
+/* Panel de síntesis consolidada */
+.compare-consolidated {
+  margin-top: 16px;
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface) 42%);
+  border: 1px solid var(--accent-ring);
+  border-radius: 16px;
+  padding: 18px 20px 20px;
+}
+:root[data-theme="dark"] .compare-consolidated {
+  background: linear-gradient(180deg, rgba(110,198,230,.1) 0%, var(--surface) 46%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .compare-consolidated {
+    background: linear-gradient(180deg, rgba(110,198,230,.1) 0%, var(--surface) 46%);
+  }
+}
+.compare-consolidated-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-read);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.compare-consolidated-badge {
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+}
+.compare-consolidated-body {
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.compare-consolidated-body strong { color: var(--ink); }
+
 @media (prefers-reduced-motion: reduce) {
   .compare-caret { animation: none; }
 }

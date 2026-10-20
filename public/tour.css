@@ -26,11 +26,16 @@
   background: radial-gradient(1200px 700px at 50% 50%, rgba(10, 22, 40, 0.84), rgba(5, 7, 11, 0.94));
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  pointer-events: auto;
+  /* Solo intercepta clics mientras la guia esta abierta. Antes era `auto`
+     siempre, de modo que al cerrar quedaba un panel invisible (opacity: 0)
+     cubriendo la pantalla y tragandose todos los clics hasta que el
+     setTimeout de tour.js marcaba `hidden` 240 ms despues; si ese temporizador
+     se retrasaba (pestana en segundo plano), el bloqueo era permanente. */
+  pointer-events: none;
   opacity: 0;
   transition: opacity 220ms ease;
 }
-.allais-tour-root.is-open .allais-tour-backdrop { opacity: 1; }
+.allais-tour-root.is-open .allais-tour-backdrop { opacity: 1; pointer-events: auto; }
 
 /* ============================================================================
  *  Highlight (si el paso apunta a un target)

@@ -492,6 +492,7 @@
     if (!root) buildRoot();
     state.lang = detectLang();
     state.isOpen = true;
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     root.hidden = false;
     requestAnimationFrame(() => root.classList.add("is-open"));
     emit("onboarding_tour_started", { lang: state.lang });
@@ -499,14 +500,22 @@
     hideReopenChip();
   };
 
+  // Temporizador que oculta la raiz tras la transicion de salida. Se guarda
+  // para poder cancelarlo si la guia se reabre antes de que dispare.
+  let hideTimer = null;
+
   const close = (reason) => {
     if (!state.isOpen) return;
     cancelTypewriter();
     clearPanel();
     hideHighlight();
     root.classList.remove("is-open");
-    setTimeout(() => { if (root) root.hidden = true; }, 240);
     state.isOpen = false;
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      hideTimer = null;
+      if (root && !state.isOpen) root.hidden = true;
+    }, 240);
 
     if (reason === "completed") {
       safeLocalStorage.set(STORAGE_KEY_COMPLETED, "1");

@@ -171,10 +171,10 @@ const translations = {
     platform: "Plataforma",
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
     heroTitle: "¿Qué quieres hacer?",
-    heroModeSingleTitle: "Usa un solo modelo",
+    heroModeSingleTitle: 'Usa <span class="hero-hl">un solo</span> modelo',
     heroModeSingleDesc: "Pregunta a la IA de tu preferencia y recibe una respuesta directa.",
     heroModeSingleCta: "Trabajar con un modelo",
-    heroModeMultiTitle: "Usa varios modelos al mismo tiempo",
+    heroModeMultiTitle: 'Usa <span class="hero-hl">varios</span> modelos al mismo tiempo',
     heroModeMultiDesc: "Lanza una pregunta a varios modelos y compara para decidir mejor.",
     heroModeMultiCta: "Comparar modelos",
     heroModeMultiBadge: "Recomendado",
@@ -357,10 +357,10 @@ const translations = {
     platform: "Platform",
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
     heroTitle: "What do you want to do?",
-    heroModeSingleTitle: "Use a single model",
+    heroModeSingleTitle: 'Use <span class="hero-hl">a single</span> model',
     heroModeSingleDesc: "Ask the AI of your choice and get a direct answer.",
     heroModeSingleCta: "Work with one model",
-    heroModeMultiTitle: "Use several models at once",
+    heroModeMultiTitle: 'Use <span class="hero-hl">several</span> models at once',
     heroModeMultiDesc: "Send one question to several models and compare to decide better.",
     heroModeMultiCta: "Compare models",
     heroModeMultiBadge: "Recommended",
@@ -543,10 +543,10 @@ const translations = {
     platform: "Plateforme",
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
     heroTitle: "Que voulez-vous faire ?",
-    heroModeSingleTitle: "Utilisez un seul modèle",
+    heroModeSingleTitle: 'Utilisez <span class="hero-hl">un seul</span> modèle',
     heroModeSingleDesc: "Posez votre question à l'IA de votre choix et obtenez une réponse directe.",
     heroModeSingleCta: "Travailler avec un modèle",
-    heroModeMultiTitle: "Utilisez plusieurs modèles à la fois",
+    heroModeMultiTitle: 'Utilisez <span class="hero-hl">plusieurs</span> modèles à la fois',
     heroModeMultiDesc: "Envoyez une question à plusieurs modèles et comparez pour mieux décider.",
     heroModeMultiCta: "Comparer les modèles",
     heroModeMultiBadge: "Recommandé",
@@ -891,8 +891,9 @@ function setLanguage(language) {
   // Hero split (Tarea #5): dos formas de trabajar. Los textos se setean por
   // id porque viven dentro de los botones del hero.
   const setText = (id, value) => { const n = document.getElementById(id); if (n) n.textContent = value; };
-  setText("heroModeSingleTitle", copy.heroModeSingleTitle);
-  setText("heroModeMultiTitle", copy.heroModeMultiTitle);
+  const setHTML = (id, value) => { const n = document.getElementById(id); if (n) n.innerHTML = value; };
+  setHTML("heroModeSingleTitle", copy.heroModeSingleTitle);
+  setHTML("heroModeMultiTitle", copy.heroModeMultiTitle);
   setText("heroModeMultiBadge", copy.heroModeMultiBadge);
   elements.composerHint.textContent = copy.composerHint;
   elements.webSearchLabel.textContent = copy.webSearch;

@@ -178,8 +178,6 @@ const translations = {
     heroModeMultiDesc: "Lanza una pregunta a varios modelos y compara para decidir mejor.",
     heroModeMultiCta: "Comparar modelos",
     heroModeMultiBadge: "Recomendado",
-    demoTitle: "Míralo en 20 segundos",
-    demoCaption: "Una pregunta, cuatro modelos respondiendo al mismo tiempo.",
     heroMultiComingSoon: "El modo comparación llega muy pronto. Mientras tanto, empieza con un modelo.",
     composerHint: "Enter envía; Shift + Enter agrega una línea.",
     themeToggle: "Cambiar tema claro u oscuro",
@@ -366,8 +364,6 @@ const translations = {
     heroModeMultiDesc: "Send one question to several models and compare to decide better.",
     heroModeMultiCta: "Compare models",
     heroModeMultiBadge: "Recommended",
-    demoTitle: "See it in 20 seconds",
-    demoCaption: "One question, four models answering at once.",
     heroMultiComingSoon: "The comparison mode is coming very soon. For now, start with one model.",
     composerHint: "Enter sends; Shift + Enter adds a line.",
     themeToggle: "Switch light or dark theme",
@@ -554,8 +550,6 @@ const translations = {
     heroModeMultiDesc: "Envoyez une question à plusieurs modèles et comparez pour mieux décider.",
     heroModeMultiCta: "Comparer les modèles",
     heroModeMultiBadge: "Recommandé",
-    demoTitle: "Regardez-le en 20 secondes",
-    demoCaption: "Une question, quatre modèles qui répondent en même temps.",
     heroMultiComingSoon: "Le mode comparaison arrive très bientôt. En attendant, commencez avec un modèle.",
     composerHint: "Entrée envoie ; Maj + Entrée ajoute une ligne.",
     themeToggle: "Basculer le thème clair ou sombre",
@@ -901,9 +895,6 @@ function setLanguage(language) {
   setHTML("heroModeSingleTitle", copy.heroModeSingleTitle);
   setHTML("heroModeMultiTitle", copy.heroModeMultiTitle);
   setText("heroModeMultiBadge", copy.heroModeMultiBadge);
-  // Demo embebida (Tarea #7)
-  setText("demoTitle", copy.demoTitle);
-  setText("demoCaption", copy.demoCaption);
   if (elements.composerHint) elements.composerHint.textContent = copy.composerHint;
   if (elements.webSearchLabel) elements.webSearchLabel.textContent = copy.webSearch;
   if (elements.accessCodeInput) elements.accessCodeInput.placeholder = copy.accessPlaceholder;

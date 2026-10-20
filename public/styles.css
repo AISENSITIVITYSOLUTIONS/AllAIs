@@ -2726,3 +2726,63 @@ img {
 .quota-upgrade-btn:hover {
   opacity: 0.9;
 }
+
+/* ---------------------------------------------------------------------------
+ * Demo embebida (Tarea #7)
+ * ---------------------------------------------------------------------------
+ * Vive dentro de .stage, bajo el composer. Sigue la misma regla que el hero:
+ * solo existe en el estado inicial (`body.is-empty`). En cuanto hay un mensaje
+ * en la conversación desaparece, para no competir con el trabajo del usuario.
+ */
+.demo { display: none; }
+
+.is-empty .demo {
+  display: block;
+  width: 100%;
+  max-width: var(--column-w);
+  margin: 40px auto 0;
+  text-align: center;
+}
+
+.demo-title {
+  font-family: var(--font-read);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+
+.demo-caption {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  margin: 0 0 16px;
+}
+
+.demo-frame {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: 0 18px 44px rgba(5, 12, 24, 0.28);
+}
+:root[data-theme="dark"] .demo-frame { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .demo-frame { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5); }
+}
+
+.demo-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: #0a1628;
+}
+
+@media (max-width: 720px) {
+  .is-empty .demo { margin-top: 28px; }
+  .demo-title { font-size: 17px; }
+  .demo-caption { font-size: 13px; }
+}

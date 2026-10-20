@@ -50,7 +50,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="/styles.css?v=50" />
+    <link rel="stylesheet" href="/styles.css?v=51" />
     <link rel="stylesheet" href="/tour.css?v=2" />
     <link rel="stylesheet" href="/compare.css?v=2" />
     <link rel="stylesheet" href="/plan-gate.css?v=1" />
@@ -217,6 +217,37 @@
             <p class="composer-hint" id="composerHint">Enter envía; Shift + Enter agrega una línea.</p>
             <p class="limit-note" id="limitNote">Tienes un límite de 10 consultas diarias.</p>
           </div>
+
+          <!-- Demo embebida (Tarea #7). Solo visible en el estado inicial, igual
+               que el hero: en cuanto hay conversación, `body.is-empty` se va y la
+               sección se oculta. Arranca con el póster y solo reproduce al
+               hacer clic, por tres razones: no satura la vista inicial, no
+               descarga el video a quien no lo pide, y hace que `demo_play`
+               mida interés real. Con `autoplay` el evento ni siquiera se
+               registraría: el delegado de app.js vive en bindEvents(), dentro
+               del init() asíncrono, y el play automático ocurre antes. -->
+          <section class="demo" aria-labelledby="demoTitle">
+            <h2 class="demo-title" id="demoTitle">Míralo en 20 segundos</h2>
+            <p class="demo-caption" id="demoCaption">Una pregunta, cuatro modelos respondiendo al mismo tiempo.</p>
+            <div class="demo-frame">
+              <video
+                id="demoVideo"
+                class="demo-video"
+                poster="/assets/demo/allais-demo-poster.jpg?v=1"
+                preload="metadata"
+                playsinline
+                controls
+                data-track-event="demo_play"
+                data-track-params='{"location":"stage"}'
+              >
+                <!-- WebM/VP9 primero: pesa 1.6 MB frente a 3.9 MB del MP4 y lo
+                     soportan Chrome, Edge y Firefox. El MP4/H.264 queda de
+                     respaldo para Safari e iOS, que no reproducen VP9. -->
+                <source src="/assets/demo/allais-demo.webm?v=1" type="video/webm" />
+                <source src="/assets/demo/allais-demo.mp4?v=1" type="video/mp4" />
+              </video>
+            </div>
+          </section>
         </div>
       </main>
     </div>
@@ -256,7 +287,7 @@
     <script type="module" src="/auth.js?v=41"></script>
     <script type="module" src="/billing.js?v=9"></script>
     <script defer src="/plan-gate.js?v=1"></script>
-    <script defer src="/app.js?v=58"></script>
+    <script defer src="/app.js?v=59"></script>
     <script type="module" src="/hero3d.js?v=41"></script>
     <script defer src="/tour-demo-data.js?v=1"></script>
     <script defer src="/tour.js?v=3"></script>

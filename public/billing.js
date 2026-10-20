@@ -362,13 +362,17 @@ const STYLES = `
    aunque tenga z-index maximo — por eso este aviso parecia no aparecer. Dos
    elementos en el top layer se apilan por orden de showModal(), asi que al
    abrirse despues queda encima. */
-/* Payment Gateway Screen - Pantalla completa para seleccionar método de pago */
-.payment-gateway-screen {
-  position: fixed; inset: 0; z-index: 2147483647;
+/* Payment Gateway Dialog - usa <dialog>.showModal() para entrar al top layer */
+.payment-gateway-dialog {
+  border: none; padding: 0; margin: 0;
+  width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
   background: linear-gradient(135deg, #0a0f18 0%, #151d2d 50%, #0d1420 100%);
   display: flex; align-items: center; justify-content: center;
-  padding: 20px;
+  overflow: auto;
   animation: fadeIn 0.3s ease;
+}
+.payment-gateway-dialog::backdrop {
+  background: transparent;
 }
 @keyframes fadeIn {
   from { opacity: 0; } to { opacity: 1; }
@@ -941,9 +945,14 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
 
 // Diálogo para seleccionar plataforma de pago: PayPal o Mercado Pago.
 // Devuelve una promesa que resuelve "paypal", "mercado_pago" o null (canceló).
+// Usa <dialog>.showModal() para entrar al top layer del browser, igual que
+// billingDialog, evitando que quede tapado detrás de él.
 function selectPaymentGateway() {
   return new Promise((resolve) => {
-    const screen = node("div", { class: "payment-gateway-screen" });
+    // Limpiar cualquier selector previo que haya quedado en el DOM
+    document.querySelectorAll(".payment-gateway-dialog").forEach(el => el.remove());
+
+    const dlg = node("dialog", { class: "payment-gateway-dialog" });
     const container = node("div", { class: "payment-gateway-container" });
 
     const header = node("div", { class: "payment-gateway-header" });
@@ -976,11 +985,11 @@ function selectPaymentGateway() {
     footer.append(cancelBtn);
 
     container.append(header, optionsGrid, footer);
-    screen.append(container);
-    document.body.append(screen);
+    dlg.append(container);
+    document.body.append(dlg);
 
     const close = (result) => {
-      try { screen.remove(); } catch { /* ya removido */ }
+      try { dlg.close(); dlg.remove(); } catch { /* ya removido */ }
       resolve(result);
     };
 
@@ -988,14 +997,15 @@ function selectPaymentGateway() {
     mpBtn.addEventListener("click", () => close("mercado_pago"));
     cancelBtn.addEventListener("click", () => close(null));
 
-    // Cerrar con ESC
-    const escHandler = (e) => {
-      if (e.key === "Escape") {
-        document.removeEventListener("keydown", escHandler);
-        close(null);
-      }
-    };
-    document.addEventListener("keydown", escHandler);
+    // Cerrar con ESC (el elemento <dialog> ya maneja ESC nativo,
+    // pero lo capturamos para llamar a close() con null controladamente)
+    dlg.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      close(null);
+    });
+
+    // Mostrar en el top layer — entra DESPUÉS de que billingDialog fue cerrado
+    dlg.showModal();
   });
 }
 
@@ -1084,6 +1094,15 @@ async function choosePlan(planId, button, opts = {}) {
     let gateway = "mercado_pago"; // default
     if (!changing) {
       restore(); // Restaurar antes de mostrar el diálogo
+      // Cerrar el billingDialog antes de mostrar el selector de gateway.
+      // `dialog` es la variable de módulo (más fiable que getElementById).
+      // El setTimeout(0) fuerza un tick de repintado para que el backdrop
+      // del billingDialog desaparezca completamente antes de que aparezca
+      // el selector (que también usa showModal y entra al top layer).
+      if (dialog && dialog.open) {
+        dialog.close();
+        await new Promise(r => setTimeout(r, 0));
+      }
       gateway = await selectPaymentGateway();
       if (!gateway) return { ok: false, reason: "gateway_cancelled" };
       button.disabled = true;

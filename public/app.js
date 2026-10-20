@@ -73,7 +73,6 @@ const elements = {
   accountSubscription: $("#accountSubscription"),
   sendButton: $("#sendButton"),
   sendLabel: $("#sendLabel"),
-  heroSubtitle: $("#heroSubtitle"),
   composerHint: $("#composerHint"),
   formatChips: $("#formatChips"),
   topbarModel: $("#topbarModel"),
@@ -172,7 +171,6 @@ const translations = {
     platform: "Plataforma",
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
     heroTitle: "¿Qué quieres hacer?",
-    heroSubtitle: "Describe tu objetivo.",
     heroModeSingleTitle: "Usa un solo modelo",
     heroModeSingleDesc: "Pregunta a la IA de tu preferencia y recibe una respuesta directa.",
     heroModeSingleCta: "Trabajar con un modelo",
@@ -359,7 +357,6 @@ const translations = {
     platform: "Platform",
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
     heroTitle: "What do you want to do?",
-    heroSubtitle: "Describe your goal.",
     heroModeSingleTitle: "Use a single model",
     heroModeSingleDesc: "Ask the AI of your choice and get a direct answer.",
     heroModeSingleCta: "Work with one model",
@@ -546,7 +543,6 @@ const translations = {
     platform: "Plateforme",
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
     heroTitle: "Que voulez-vous faire ?",
-    heroSubtitle: "Décrivez votre objectif.",
     heroModeSingleTitle: "Utilisez un seul modèle",
     heroModeSingleDesc: "Posez votre question à l'IA de votre choix et obtenez une réponse directe.",
     heroModeSingleCta: "Travailler avec un modèle",
@@ -892,7 +888,6 @@ function setLanguage(language) {
   elements.platformPanelLabel.textContent = copy.platform;
   elements.platformDescription.textContent = copy.platformDescription;
   elements.heroTitle.textContent = copy.heroTitle;
-  elements.heroSubtitle.textContent = copy.heroSubtitle;
   // Hero split (Tarea #5): dos formas de trabajar. Los textos se setean por
   // id porque viven dentro de los botones del hero.
   const setText = (id, value) => { const n = document.getElementById(id); if (n) n.textContent = value; };

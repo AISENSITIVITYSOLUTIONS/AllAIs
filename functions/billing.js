@@ -144,7 +144,7 @@ function internalStatus(mpStatus) {
   }
 }
 
-async function createSubscription(request) {
+async function createMercadoPagoSubscription(request) {
   const user = await verifyUser(request);
   if (!user) throw httpError(401, "Inicia sesión con tu correo verificado para suscribirte.");
 
@@ -349,6 +349,22 @@ async function changePlan(request) {
   }, { merge: true });
 
   return { plan: plan.id };
+}
+
+// Ruta principal de suscripción: elige entre PayPal y Mercado Pago según el parámetro gateway.
+async function createSubscription(request) {
+  const gateway = String(request.body?.gateway || "mercado_pago").toLowerCase();
+
+  if (gateway === "paypal") {
+    return await createPayPalSubscription(request);
+  }
+
+  // Por defecto, Mercado Pago.
+  if (gateway === "mercado_pago") {
+    return await createMercadoPagoSubscription(request);
+  }
+
+  throw httpError(400, "Gateway de pago no válido. Usa 'paypal' o 'mercado_pago'.");
 }
 
 // Validación de la firma x-signature del webhook de Mercado Pago.

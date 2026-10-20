@@ -215,6 +215,8 @@ const translations = {
     subManage: "Administrar suscripción",
     subDemo: "Demo",
     subTrial: "En prueba",
+    subLaunchTrial: "Prueba de lanzamiento",
+    subLaunchTrialNote: "Prueba gratis activa. No se te cobrará nada hasta el 11 de noviembre de 2026. Puedes cancelar antes sin ningún cargo.",
     subActive: "Activo",
     subPending: "Pendiente",
     subPaused: "Pausada",
@@ -392,6 +394,8 @@ const translations = {
     subManage: "Manage subscription",
     subDemo: "Demo",
     subTrial: "Trial",
+    subLaunchTrial: "Launch trial",
+    subLaunchTrialNote: "Free trial active. You won't be charged anything until November 11, 2026. You can cancel before then at no cost.",
     subActive: "Active",
     subPending: "Pending",
     subPaused: "Paused",
@@ -569,6 +573,8 @@ const translations = {
     subManage: "Gérer l'abonnement",
     subDemo: "Démo",
     subTrial: "Essai",
+    subLaunchTrial: "Essai de lancement",
+    subLaunchTrialNote: "Essai gratuit actif. Vous ne serez débité de rien jusqu'au 11 novembre 2026. Vous pouvez annuler avant sans aucuns frais.",
     subActive: "Actif",
     subPending: "En attente",
     subPaused: "Suspendu",
@@ -981,10 +987,19 @@ function renderSubscriptionInfo(data) {
   let badgeClass = "sub-badge--active";
   let badgeText = copy.subActive;
   const isTrial = data.status === "active" && data.trialEndsAt && new Date(data.trialEndsAt) > new Date();
+  // Tarea #4b: la prueba de lanzamiento (trial-with-card) tiene su propio badge
+  // y una nota explícita del cobro diferido, tanto en pending (tarjeta recién
+  // registrada) como en active (ya autorizada, esperando el 11-nov).
+  const isLaunchTrial = data.trialType === "launch_free_trial" &&
+    ["pending", "active"].includes(data.status) &&
+    data.firstChargeAt && new Date(data.firstChargeAt) > new Date();
 
   if (data.mock) {
     badgeClass = "sub-badge--demo";
     badgeText = copy.subDemo;
+  } else if (isLaunchTrial) {
+    badgeClass = "sub-badge--trial";
+    badgeText = copy.subLaunchTrial;
   } else if (isTrial) {
     badgeClass = "sub-badge--trial";
     badgeText = copy.subTrial;
@@ -1009,14 +1024,19 @@ function renderSubscriptionInfo(data) {
 
   // Fecha del próximo cobro / primer cobro
   if (!data.mock) {
-    const dateIso = isTrial ? data.trialEndsAt : data.nextPaymentAt;
+    const dateIso = isLaunchTrial ? data.firstChargeAt : isTrial ? data.trialEndsAt : data.nextPaymentAt;
     const dateStr = formatDate(dateIso);
-    const label = isTrial ? copy.subFirstCharge : copy.subNextPayment;
+    const label = (isLaunchTrial || isTrial) ? copy.subFirstCharge : copy.subNextPayment;
     const amountStr = data.amount ? copy.subAmount(data.amount) : null;
     if (dateStr || amountStr) {
       const value = [dateStr, amountStr].filter(Boolean).join(" · ");
       html += `<div class="sub-detail"><span class="sub-label">${label}</span><span class="sub-value">${value}</span></div>`;
     }
+  }
+
+  // Nota explícita de la prueba de lanzamiento: deja claro el cobro diferido.
+  if (isLaunchTrial) {
+    html += `<p class="sub-trial-note">${copy.subLaunchTrialNote}</p>`;
   }
 
   // Botón "Administrar suscripción" (solo para suscripciones reales activas o pendientes)
@@ -1200,6 +1220,10 @@ async function startEmailSession() {
   setSessionState(true, copy.signedInAs(state.email));
   trackEvent("email_session_started");
   closeAuthDialog();
+  // Tarea #4b parte 2: tras iniciar sesión, si el usuario no tiene plan elegido
+  // mostramos la pantalla "Elige tu plan". El gate consulta /billing/status y
+  // decide por sí mismo; el delay deja que el diálogo de auth cierre antes.
+  window.setTimeout(() => { window.AllAIsPlanGate?.maybeShow(); }, 300);
 }
 
 async function signInWithGoogle() {

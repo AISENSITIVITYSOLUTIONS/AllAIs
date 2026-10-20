@@ -19,6 +19,9 @@
   const COMPARE_ENDPOINT = STREAM_HOSTS.has(location.hostname)
     ? "https://api-6wsxvgd6ra-uc.a.run.app/compare"
     : "/api/compare";
+  const CONSOLIDATE_ENDPOINT = STREAM_HOSTS.has(location.hostname)
+    ? "https://api-6wsxvgd6ra-uc.a.run.app/consolidate"
+    : "/api/consolidate";
   const PROVIDERS_ENDPOINT = "/api/providers";
   const MAX_MODELS = 4;
   const MIN_MODELS = 2;
@@ -34,22 +37,28 @@
   };
   const T = {
     es: {
-      toggle: "Comparar modelos", pick: "Elige 2 a 4 modelos para comparar",
+      toggle: "Comparar modelos", mode_single: "Un modelo", mode_multi: "Varios modelos",
+      pick: "Elige 2 a 4 modelos para comparar",
       min: "Elige al menos 2 modelos.", need_auth: "Inicia sesión para comparar varios modelos.",
       sending: "Comparando…", your_prompt: "Tu pregunta", caption: "Pregunta, compara, decide.",
-      err: "No se pudo completar.", consolidate: "Consolidar respuestas", quota_note: (n) => `Esta comparación usa ${n} consultas de tu plan.`
+      err: "No se pudo completar.", consolidate: "Consolidar respuestas", consolidating: "Consolidando…",
+      consolidated_title: "Síntesis de las respuestas", quota_note: (n) => `Esta comparación usa ${n} consultas de tu plan.`
     },
     en: {
-      toggle: "Compare models", pick: "Pick 2 to 4 models to compare",
+      toggle: "Compare models", mode_single: "One model", mode_multi: "Several models",
+      pick: "Pick 2 to 4 models to compare",
       min: "Pick at least 2 models.", need_auth: "Sign in to compare several models.",
       sending: "Comparing…", your_prompt: "Your prompt", caption: "Ask, compare, decide.",
-      err: "Could not complete.", consolidate: "Consolidate answers", quota_note: (n) => `This comparison uses ${n} queries from your plan.`
+      err: "Could not complete.", consolidate: "Consolidate answers", consolidating: "Consolidating…",
+      consolidated_title: "Synthesis of the answers", quota_note: (n) => `This comparison uses ${n} queries from your plan.`
     },
     fr: {
-      toggle: "Comparer les modèles", pick: "Choisissez 2 à 4 modèles à comparer",
+      toggle: "Comparer les modèles", mode_single: "Un modèle", mode_multi: "Plusieurs modèles",
+      pick: "Choisissez 2 à 4 modèles à comparer",
       min: "Choisissez au moins 2 modèles.", need_auth: "Connectez-vous pour comparer plusieurs modèles.",
       sending: "Comparaison…", your_prompt: "Votre requête", caption: "Demandez, comparez, décidez.",
-      err: "Impossible de terminer.", consolidate: "Consolider les réponses", quota_note: (n) => `Cette comparaison utilise ${n} requêtes de votre offre.`
+      err: "Impossible de terminer.", consolidate: "Consolider les réponses", consolidating: "Consolidation…",
+      consolidated_title: "Synthèse des réponses", quota_note: (n) => `Cette comparaison utilise ${n} requêtes de votre offre.`
     }
   };
   const t = (k, ...a) => { const v = (T[lang()] || T.es)[k]; return typeof v === "function" ? v(...a) : v; };
@@ -87,7 +96,7 @@
   // --------------------------------------------------------------------------
   //  UI: toggle en el composer + panel selector de modelos
   // --------------------------------------------------------------------------
-  let toggleBtn, selectorPanel;
+  let toggleBtn, selectorPanel, modeSwitch;
 
   function mountUI() {
     const tools = document.querySelector(".composer-tools");
@@ -111,6 +120,23 @@
     selectorPanel.append(hint, chips);
     if (footer && footer.parentNode) footer.parentNode.insertBefore(selectorPanel, footer);
     renderChips();
+
+    mountModeSwitch();
+  }
+
+  // Fase 3: segmented control en el topbar, más visible que el toggle del
+  // composer. Ambos reflejan el mismo estado (setActive sincroniza los dos).
+  function mountModeSwitch() {
+    if (document.getElementById("modeSwitch")) return;
+    const newChat = document.getElementById("topbarNewChat");
+    if (!newChat || !newChat.parentNode) return;
+    modeSwitch = el("div", { class: "mode-switch", id: "modeSwitch", role: "group", "aria-label": t("toggle") },
+      el("button", { type: "button", class: "mode-btn is-on", "data-mode": "single" }, t("mode_single")),
+      el("button", { type: "button", class: "mode-btn", "data-mode": "multi" }, t("mode_multi"))
+    );
+    modeSwitch.querySelector('[data-mode="single"]').addEventListener("click", () => setActive(false));
+    modeSwitch.querySelector('[data-mode="multi"]').addEventListener("click", () => setActive(true));
+    newChat.parentNode.insertBefore(modeSwitch, newChat.nextSibling);
   }
 
   function renderChips() {
@@ -159,6 +185,11 @@
       toggleBtn.setAttribute("aria-checked", on ? "true" : "false");
     }
     if (selectorPanel) selectorPanel.hidden = !on;
+    // Sincronizar el segmented del topbar.
+    if (modeSwitch) {
+      modeSwitch.querySelector('[data-mode="single"]')?.classList.toggle("is-on", !on);
+      modeSwitch.querySelector('[data-mode="multi"]')?.classList.toggle("is-on", on);
+    }
     // Ocultar la nota de "ChatGPT / OpenAI" del modo single cuando está multi.
     const single = document.getElementById("selectedProviderNote");
     if (single) single.style.display = on ? "none" : "";
@@ -270,6 +301,90 @@
       if (ev.quota && typeof window.AllAIsApp?.setQuota === "function") {
         window.AllAIsApp.setQuota(ev.quota);
       }
+      maybeAddConsolidate(block);
+    }
+  }
+
+  // Fase 4: botón "Consolidar" bajo las columnas. Toma las respuestas buenas y
+  // pide a Claude una síntesis crítica. El momento "wow": de varias opiniones a
+  // una decisión.
+  function maybeAddConsolidate(block) {
+    const good = block.cols.filter((c) => c.done && !c.colEl.classList.contains("is-error") && c.text.trim());
+    if (good.length < 2 || block.consolidateAdded) return;
+    block.consolidateAdded = true;
+    const btn = el("button", { type: "button", class: "compare-consolidate-btn" }, "✦ " + t("consolidate"));
+    const wrap = el("div", { class: "compare-consolidate-wrap" }, btn);
+    block.el.append(wrap);
+    btn.addEventListener("click", () => runConsolidate(block, good, btn, wrap));
+    scrollInto(block.el);
+  }
+
+  async function runConsolidate(block, good, btn, wrap) {
+    if (block.consolidating) return;
+    block.consolidating = true;
+    btn.disabled = true;
+    btn.textContent = t("consolidating");
+
+    const panel = el("div", { class: "compare-consolidated" },
+      el("div", { class: "compare-consolidated-head" },
+        el("span", { class: "compare-consolidated-badge" }, "✦"),
+        el("span", {}, t("consolidated_title"))
+      )
+    );
+    const body = el("div", { class: "compare-consolidated-body" }, el("span", { class: "compare-caret" }));
+    panel.append(body);
+    wrap.replaceWith(panel);
+    scrollInto(block.el);
+
+    if (typeof window.gtag === "function") {
+      window.gtag("event", "compare_consolidated", { count: good.length, language: lang() });
+    }
+
+    let text = "";
+    try {
+      const token = await window.AllAIsAuth.idToken();
+      const resp = await fetch(CONSOLIDATE_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          prompt: block.prompt,
+          answers: good.map((c) => ({ provider: c.id, text: c.text }))
+        })
+      });
+      if (!resp.ok || !resp.body) {
+        const d = await resp.json().catch(() => ({}));
+        throw new Error(d.error || t("err"));
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          let ev; try { ev = JSON.parse(line); } catch (_e) { continue; }
+          if (ev.t === "delta") {
+            text += ev.text || "";
+            body.innerHTML = renderText(text) + '<span class="compare-caret"></span>';
+            scrollInto(block.el);
+          } else if (ev.t === "done") {
+            text = ev.answer != null ? ev.answer : text;
+            body.innerHTML = renderText(text);
+            if (ev.quota && typeof window.AllAIsApp?.setQuota === "function") window.AllAIsApp.setQuota(ev.quota);
+          } else if (ev.t === "error") {
+            body.innerHTML = `<span class="compare-col-error">${esc(ev.error || t("err"))}</span>`;
+          }
+        }
+      }
+    } catch (error) {
+      body.innerHTML = `<span class="compare-col-error">${esc(error.message || t("err"))}</span>`;
+    } finally {
+      block.consolidating = false;
     }
   }
 
@@ -319,7 +434,7 @@
     conversation.append(block);
     document.body.classList.remove("is-empty");
     scrollInto(block);
-    return { el: block, grid, byId, cols };
+    return { el: block, grid, byId, cols, prompt };
   }
 
   function scrollInto(node) {
@@ -346,12 +461,15 @@
     await loadProviders();
     mountUI();
     interceptSubmit();
-    // Respeta la preferencia del hero split (Tarea #5) sin activarlo solo:
-    // el usuario entra en modo single por defecto; el toggle queda listo.
     window.AllAIsCompare = {
       setActive,
       isActive: () => state.active
     };
+    // Fase 3: si el visitante eligió "varios modelos" en el hero (Tarea #5) o en
+    // una sesión anterior, entramos directo en modo comparación.
+    try {
+      if (localStorage.getItem("allais_preferred_mode") === "multi") setActive(true);
+    } catch (_e) { /* */ }
   }
 
   if (document.readyState === "loading") {

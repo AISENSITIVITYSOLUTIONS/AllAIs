@@ -179,7 +179,7 @@ const translations = {
     heroModeMultiTitle: "Usa varios modelos al mismo tiempo",
     heroModeMultiDesc: "Lanza una pregunta a varios modelos y compara para decidir mejor.",
     heroModeMultiCta: "Comparar modelos",
-    heroModeMultiBadge: "Muy pronto",
+    heroModeMultiBadge: "Recomendado",
     heroMultiComingSoon: "El modo comparación llega muy pronto. Mientras tanto, empieza con un modelo.",
     composerHint: "Enter envía; Shift + Enter agrega una línea.",
     themeToggle: "Cambiar tema claro u oscuro",
@@ -366,7 +366,7 @@ const translations = {
     heroModeMultiTitle: "Use several models at once",
     heroModeMultiDesc: "Send one question to several models and compare to decide better.",
     heroModeMultiCta: "Compare models",
-    heroModeMultiBadge: "Coming soon",
+    heroModeMultiBadge: "Recommended",
     heroMultiComingSoon: "The comparison mode is coming very soon. For now, start with one model.",
     composerHint: "Enter sends; Shift + Enter adds a line.",
     themeToggle: "Switch light or dark theme",
@@ -553,7 +553,7 @@ const translations = {
     heroModeMultiTitle: "Utilisez plusieurs modèles à la fois",
     heroModeMultiDesc: "Envoyez une question à plusieurs modèles et comparez pour mieux décider.",
     heroModeMultiCta: "Comparer les modèles",
-    heroModeMultiBadge: "Bientôt disponible",
+    heroModeMultiBadge: "Recommandé",
     heroMultiComingSoon: "Le mode comparaison arrive très bientôt. En attendant, commencez avec un modèle.",
     composerHint: "Entrée envoie ; Maj + Entrée ajoute une ligne.",
     themeToggle: "Basculer le thème clair ou sombre",
@@ -2413,7 +2413,11 @@ function bindEvents() {
   const heroModeHandler = (mode) => {
     try { localStorage.setItem("allais_preferred_mode", mode); } catch (_e) { /* */ }
     trackEvent("hero_mode_selected", { mode, language: state.language });
-    if (mode === "multi") showHeroToast(translations[state.language].heroMultiComingSoon);
+    // Tarea #9 (fase 4): el modo "varios modelos" ya es real — activamos el
+    // modo comparación en el composer en vez del antiguo aviso "muy pronto".
+    if (window.AllAIsCompare?.setActive) {
+      window.AllAIsCompare.setActive(mode === "multi");
+    }
     // Llevar al usuario al punto donde empieza a trabajar.
     try {
       elements.promptInput?.scrollIntoView({ behavior: "smooth", block: "center" });

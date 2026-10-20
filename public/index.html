@@ -50,8 +50,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="/styles.css?v=47" />
+    <link rel="stylesheet" href="/styles.css?v=49" />
     <link rel="stylesheet" href="/tour.css?v=1" />
+    <link rel="stylesheet" href="/plan-gate.css?v=1" />
   </head>
   <body class="is-empty">
     <a class="skip-link" href="#promptInput">Ir al cuadro de escritura</a>
@@ -156,6 +157,26 @@
             </div>
             <h1 id="heroTitle">¿Qué quieres hacer?</h1>
             <p id="heroSubtitle">Describe tu objetivo y selecciona un modelo.</p>
+
+            <div class="hero-modes" id="heroModes" role="group" aria-label="Formas de trabajar">
+              <button type="button" class="hero-mode" id="heroModeSingle" data-mode="single">
+                <span class="hero-mode-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 19a6.5 6.5 0 0 1 13 0"/></svg>
+                </span>
+                <strong class="hero-mode-title" id="heroModeSingleTitle">Usa un solo modelo</strong>
+                <span class="hero-mode-desc" id="heroModeSingleDesc">Pregunta a la IA de tu preferencia y recibe una respuesta directa.</span>
+                <span class="hero-mode-cta" id="heroModeSingleCta">Trabajar con un modelo</span>
+              </button>
+              <button type="button" class="hero-mode hero-mode--featured" id="heroModeMulti" data-mode="multi">
+                <span class="hero-mode-badge" id="heroModeMultiBadge">Muy pronto</span>
+                <span class="hero-mode-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><path d="M3 19a5 5 0 0 1 8-4"/><path d="M13 15a5 5 0 0 1 8 4"/></svg>
+                </span>
+                <strong class="hero-mode-title" id="heroModeMultiTitle">Usa varios modelos al mismo tiempo</strong>
+                <span class="hero-mode-desc" id="heroModeMultiDesc">Lanza una pregunta a varios modelos y compara para decidir mejor.</span>
+                <span class="hero-mode-cta" id="heroModeMultiCta">Comparar modelos</span>
+              </button>
+            </div>
           </section>
 
           <section class="chat-card" aria-label="Conversación">
@@ -275,9 +296,10 @@
 
     <script type="module" src="/auth.js?v=41"></script>
     <script type="module" src="/billing.js?v=8"></script>
-    <script defer src="/app.js?v=50"></script>
+    <script defer src="/plan-gate.js?v=1"></script>
+    <script defer src="/app.js?v=52"></script>
     <script type="module" src="/hero3d.js?v=41"></script>
     <script defer src="/tour-demo-data.js?v=1"></script>
-    <script defer src="/tour.js?v=1"></script>
+    <script defer src="/tour.js?v=2"></script>
   </body>
 </html>

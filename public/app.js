@@ -173,6 +173,14 @@ const translations = {
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
     heroTitle: "¿Qué quieres hacer?",
     heroSubtitle: "Describe tu objetivo y selecciona un modelo.",
+    heroModeSingleTitle: "Usa un solo modelo",
+    heroModeSingleDesc: "Pregunta a la IA de tu preferencia y recibe una respuesta directa.",
+    heroModeSingleCta: "Trabajar con un modelo",
+    heroModeMultiTitle: "Usa varios modelos al mismo tiempo",
+    heroModeMultiDesc: "Lanza una pregunta a varios modelos y compara para decidir mejor.",
+    heroModeMultiCta: "Comparar modelos",
+    heroModeMultiBadge: "Muy pronto",
+    heroMultiComingSoon: "El modo comparación llega muy pronto. Mientras tanto, empieza con un modelo.",
     composerHint: "Enter envía; Shift + Enter agrega una línea.",
     themeToggle: "Cambiar tema claro u oscuro",
     openPanel: "Abrir panel",
@@ -215,6 +223,8 @@ const translations = {
     subManage: "Administrar suscripción",
     subDemo: "Demo",
     subTrial: "En prueba",
+    subLaunchTrial: "Prueba de lanzamiento",
+    subLaunchTrialNote: "Prueba gratis activa. No se te cobrará nada hasta el 11 de noviembre de 2026. Puedes cancelar antes sin ningún cargo.",
     subActive: "Activo",
     subPending: "Pendiente",
     subPaused: "Pausada",
@@ -350,6 +360,14 @@ const translations = {
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
     heroTitle: "What do you want to do?",
     heroSubtitle: "Describe your goal and pick a model.",
+    heroModeSingleTitle: "Use a single model",
+    heroModeSingleDesc: "Ask the AI of your choice and get a direct answer.",
+    heroModeSingleCta: "Work with one model",
+    heroModeMultiTitle: "Use several models at once",
+    heroModeMultiDesc: "Send one question to several models and compare to decide better.",
+    heroModeMultiCta: "Compare models",
+    heroModeMultiBadge: "Coming soon",
+    heroMultiComingSoon: "The comparison mode is coming very soon. For now, start with one model.",
     composerHint: "Enter sends; Shift + Enter adds a line.",
     themeToggle: "Switch light or dark theme",
     openPanel: "Open panel",
@@ -392,6 +410,8 @@ const translations = {
     subManage: "Manage subscription",
     subDemo: "Demo",
     subTrial: "Trial",
+    subLaunchTrial: "Launch trial",
+    subLaunchTrialNote: "Free trial active. You won't be charged anything until November 11, 2026. You can cancel before then at no cost.",
     subActive: "Active",
     subPending: "Pending",
     subPaused: "Paused",
@@ -527,6 +547,14 @@ const translations = {
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
     heroTitle: "Que voulez-vous faire ?",
     heroSubtitle: "Décrivez votre objectif et choisissez un modèle.",
+    heroModeSingleTitle: "Utilisez un seul modèle",
+    heroModeSingleDesc: "Posez votre question à l'IA de votre choix et obtenez une réponse directe.",
+    heroModeSingleCta: "Travailler avec un modèle",
+    heroModeMultiTitle: "Utilisez plusieurs modèles à la fois",
+    heroModeMultiDesc: "Envoyez une question à plusieurs modèles et comparez pour mieux décider.",
+    heroModeMultiCta: "Comparer les modèles",
+    heroModeMultiBadge: "Bientôt disponible",
+    heroMultiComingSoon: "Le mode comparaison arrive très bientôt. En attendant, commencez avec un modèle.",
     composerHint: "Entrée envoie ; Maj + Entrée ajoute une ligne.",
     themeToggle: "Basculer le thème clair ou sombre",
     openPanel: "Ouvrir le panneau",
@@ -569,6 +597,8 @@ const translations = {
     subManage: "Gérer l'abonnement",
     subDemo: "Démo",
     subTrial: "Essai",
+    subLaunchTrial: "Essai de lancement",
+    subLaunchTrialNote: "Essai gratuit actif. Vous ne serez débité de rien jusqu'au 11 novembre 2026. Vous pouvez annuler avant sans aucuns frais.",
     subActive: "Actif",
     subPending: "En attente",
     subPaused: "Suspendu",
@@ -815,6 +845,26 @@ function showAccessError(message) {
   elements.accessCodeInput.focus({ preventScroll: false });
 }
 
+// Toast efímero para avisos breves (p. ej. "modo comparación muy pronto" del
+// hero split). Autocontenido: crea su nodo, se desvanece y se elimina solo.
+let _heroToastTimer = null;
+function showHeroToast(message) {
+  let toast = document.getElementById("heroToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "heroToast";
+    toast.className = "hero-toast";
+    toast.setAttribute("role", "status");
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  requestAnimationFrame(() => toast.classList.add("is-visible"));
+  window.clearTimeout(_heroToastTimer);
+  _heroToastTimer = window.setTimeout(() => {
+    toast.classList.remove("is-visible");
+  }, 3600);
+}
+
 function setLanguage(language) {
   const previousLanguage = state.language;
   state.language = translations[language] ? language : "es";
@@ -843,6 +893,16 @@ function setLanguage(language) {
   elements.platformDescription.textContent = copy.platformDescription;
   elements.heroTitle.textContent = copy.heroTitle;
   elements.heroSubtitle.textContent = copy.heroSubtitle;
+  // Hero split (Tarea #5): dos formas de trabajar. Los textos se setean por
+  // id porque viven dentro de los botones del hero.
+  const setText = (id, value) => { const n = document.getElementById(id); if (n) n.textContent = value; };
+  setText("heroModeSingleTitle", copy.heroModeSingleTitle);
+  setText("heroModeSingleDesc", copy.heroModeSingleDesc);
+  setText("heroModeSingleCta", copy.heroModeSingleCta);
+  setText("heroModeMultiTitle", copy.heroModeMultiTitle);
+  setText("heroModeMultiDesc", copy.heroModeMultiDesc);
+  setText("heroModeMultiCta", copy.heroModeMultiCta);
+  setText("heroModeMultiBadge", copy.heroModeMultiBadge);
   elements.composerHint.textContent = copy.composerHint;
   elements.webSearchLabel.textContent = copy.webSearch;
   elements.accessCodeInput.placeholder = copy.accessPlaceholder;
@@ -981,10 +1041,19 @@ function renderSubscriptionInfo(data) {
   let badgeClass = "sub-badge--active";
   let badgeText = copy.subActive;
   const isTrial = data.status === "active" && data.trialEndsAt && new Date(data.trialEndsAt) > new Date();
+  // Tarea #4b: la prueba de lanzamiento (trial-with-card) tiene su propio badge
+  // y una nota explícita del cobro diferido, tanto en pending (tarjeta recién
+  // registrada) como en active (ya autorizada, esperando el 11-nov).
+  const isLaunchTrial = data.trialType === "launch_free_trial" &&
+    ["pending", "active"].includes(data.status) &&
+    data.firstChargeAt && new Date(data.firstChargeAt) > new Date();
 
   if (data.mock) {
     badgeClass = "sub-badge--demo";
     badgeText = copy.subDemo;
+  } else if (isLaunchTrial) {
+    badgeClass = "sub-badge--trial";
+    badgeText = copy.subLaunchTrial;
   } else if (isTrial) {
     badgeClass = "sub-badge--trial";
     badgeText = copy.subTrial;
@@ -1009,14 +1078,19 @@ function renderSubscriptionInfo(data) {
 
   // Fecha del próximo cobro / primer cobro
   if (!data.mock) {
-    const dateIso = isTrial ? data.trialEndsAt : data.nextPaymentAt;
+    const dateIso = isLaunchTrial ? data.firstChargeAt : isTrial ? data.trialEndsAt : data.nextPaymentAt;
     const dateStr = formatDate(dateIso);
-    const label = isTrial ? copy.subFirstCharge : copy.subNextPayment;
+    const label = (isLaunchTrial || isTrial) ? copy.subFirstCharge : copy.subNextPayment;
     const amountStr = data.amount ? copy.subAmount(data.amount) : null;
     if (dateStr || amountStr) {
       const value = [dateStr, amountStr].filter(Boolean).join(" · ");
       html += `<div class="sub-detail"><span class="sub-label">${label}</span><span class="sub-value">${value}</span></div>`;
     }
+  }
+
+  // Nota explícita de la prueba de lanzamiento: deja claro el cobro diferido.
+  if (isLaunchTrial) {
+    html += `<p class="sub-trial-note">${copy.subLaunchTrialNote}</p>`;
   }
 
   // Botón "Administrar suscripción" (solo para suscripciones reales activas o pendientes)
@@ -1200,6 +1274,10 @@ async function startEmailSession() {
   setSessionState(true, copy.signedInAs(state.email));
   trackEvent("email_session_started");
   closeAuthDialog();
+  // Tarea #4b parte 2: tras iniciar sesión, si el usuario no tiene plan elegido
+  // mostramos la pantalla "Elige tu plan". El gate consulta /billing/status y
+  // decide por sí mismo; el delay deja que el diálogo de auth cierre antes.
+  window.setTimeout(() => { window.AllAIsPlanGate?.maybeShow(); }, 300);
 }
 
 async function signInWithGoogle() {
@@ -2327,6 +2405,23 @@ function bindEvents() {
   });
   elements.newChatButton.addEventListener("click", resetChat);
   if (elements.topbarNewChat) elements.topbarNewChat.addEventListener("click", resetChat);
+
+  // Hero split (Tarea #5): dos formas de trabajar. El modo "un modelo" es el
+  // actual; el modo "varios modelos" es el diferenciador que construye la
+  // Tarea #9, así que por ahora guardamos la preferencia y llevamos al
+  // composer. El toggle del topbar de la Tarea #9 respetará esta preferencia.
+  const heroModeHandler = (mode) => {
+    try { localStorage.setItem("allais_preferred_mode", mode); } catch (_e) { /* */ }
+    trackEvent("hero_mode_selected", { mode, language: state.language });
+    if (mode === "multi") showHeroToast(translations[state.language].heroMultiComingSoon);
+    // Llevar al usuario al punto donde empieza a trabajar.
+    try {
+      elements.promptInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => elements.promptInput?.focus({ preventScroll: true }), 420);
+    } catch (_e) { /* */ }
+  };
+  document.getElementById("heroModeSingle")?.addEventListener("click", () => heroModeHandler("single"));
+  document.getElementById("heroModeMulti")?.addEventListener("click", () => heroModeHandler("multi"));
   elements.providerList.addEventListener("click", (event) => {
     const card = event.target.closest(".provider-card");
     if (!card) return;

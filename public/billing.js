@@ -804,7 +804,7 @@ async function choosePlan(planId, button, opts = {}) {
   if (!user) {
     dialog.close();
     document.getElementById("accountButton")?.click();
-    return;
+    return { ok: false, reason: "no_auth" };
   }
 
   const changing = hasLiveSubscription();
@@ -831,7 +831,7 @@ async function choosePlan(planId, button, opts = {}) {
       await refreshStatus();
       setMessage(`Cambiaste al plan ${PLAN_NAME[planId]}.`, true);
       restore();
-      return;
+      return { ok: true, changed: true };
     }
     if (data.mock) {
       // El aviso va después de refrescar: refreshStatus repinta los botones.
@@ -841,7 +841,7 @@ async function choosePlan(planId, button, opts = {}) {
       updateCtaButton({ isMockSub: true, planId });
       setMessage("Suscripción de prueba activada (sin cobro).", true);
       restore();
-      return;
+      return { ok: true, mock: true };
     }
     if (!data.initPoint) throw new Error("Mercado Pago no devolvió el enlace de pago.");
     // Conversión principal para Google Ads: value y currency habilitan optimización por ROAS.
@@ -863,9 +863,11 @@ async function choosePlan(planId, button, opts = {}) {
     // suscripción". El correo también se copia al portapapeles para que el
     // usuario solo tenga que pegarlo.
     await showPayerEmailNoticeBeforeRedirect(user.email, data.initPoint);
+    return { ok: true, redirected: true };
   } catch (error) {
     setMessage(error.message);
     restore();
+    return { ok: false, error: error.message };
   }
 }
 
@@ -931,6 +933,17 @@ function publishPublicApi() {
     dialog.showModal();
     refreshStatus();
   };
+  // API para la pantalla "Elige tu plan" (plan-gate.js, Tarea #4b parte 2):
+  // ejecuta el mismo flujo de contratación que el diálogo, pasando el botón de
+  // la tarjeta del gate para el estado "Un momento…". Devuelve el resultado
+  // ({ ok, mock, redirected, error }) para que el gate decida si cerrarse.
+  window.AllAIsBilling.subscribe = (planId, button, opts = {}) => choosePlan(planId, button, opts);
+  // Consulta /billing/status y actualiza el estado interno. El gate la usa para
+  // saber si el usuario ya tiene plan antes de mostrarse.
+  window.AllAIsBilling.refreshStatus = () => refreshStatus();
+  // Lectura síncrona del último estado conocido (tras refreshStatus).
+  window.AllAIsBilling.hasSubscription = () => hasLiveSubscription();
+  window.AllAIsBilling.currentStatus = () => ({ status: current.status, plan: current.plan });
 }
 
 function start() {

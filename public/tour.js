@@ -139,7 +139,8 @@
   //
   const STEPS = [
     { id: "signup",       target: "#topbarAccount, #accountButton", position: "bottom", isDemo: false },
-    { id: "pick_mode",    target: null,                              position: "center", isDemo: false },
+    // Tarea #5: el paso 2 ahora apunta a las dos tarjetas del hero split.
+    { id: "pick_mode",    target: "#heroModes",                     position: "top",    isDemo: false },
     { id: "pick_plan",    target: "#billingOpen",                   position: "right",  isDemo: false },
     { id: "try_compare",  target: null,                              position: "center", isDemo: true  },
     { id: "subscribe",    target: "#billingOpen, #topbarAccount",   position: "right",  isDemo: false }

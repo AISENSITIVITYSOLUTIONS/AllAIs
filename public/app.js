@@ -173,6 +173,14 @@ const translations = {
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
     heroTitle: "¿Qué quieres hacer?",
     heroSubtitle: "Describe tu objetivo y selecciona un modelo.",
+    heroModeSingleTitle: "Usa un solo modelo",
+    heroModeSingleDesc: "Pregunta a la IA de tu preferencia y recibe una respuesta directa.",
+    heroModeSingleCta: "Trabajar con un modelo",
+    heroModeMultiTitle: "Usa varios modelos al mismo tiempo",
+    heroModeMultiDesc: "Lanza una pregunta a varios modelos y compara para decidir mejor.",
+    heroModeMultiCta: "Comparar modelos",
+    heroModeMultiBadge: "Muy pronto",
+    heroMultiComingSoon: "El modo comparación llega muy pronto. Mientras tanto, empieza con un modelo.",
     composerHint: "Enter envía; Shift + Enter agrega una línea.",
     themeToggle: "Cambiar tema claro u oscuro",
     openPanel: "Abrir panel",
@@ -352,6 +360,14 @@ const translations = {
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
     heroTitle: "What do you want to do?",
     heroSubtitle: "Describe your goal and pick a model.",
+    heroModeSingleTitle: "Use a single model",
+    heroModeSingleDesc: "Ask the AI of your choice and get a direct answer.",
+    heroModeSingleCta: "Work with one model",
+    heroModeMultiTitle: "Use several models at once",
+    heroModeMultiDesc: "Send one question to several models and compare to decide better.",
+    heroModeMultiCta: "Compare models",
+    heroModeMultiBadge: "Coming soon",
+    heroMultiComingSoon: "The comparison mode is coming very soon. For now, start with one model.",
     composerHint: "Enter sends; Shift + Enter adds a line.",
     themeToggle: "Switch light or dark theme",
     openPanel: "Open panel",
@@ -531,6 +547,14 @@ const translations = {
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
     heroTitle: "Que voulez-vous faire ?",
     heroSubtitle: "Décrivez votre objectif et choisissez un modèle.",
+    heroModeSingleTitle: "Utilisez un seul modèle",
+    heroModeSingleDesc: "Posez votre question à l'IA de votre choix et obtenez une réponse directe.",
+    heroModeSingleCta: "Travailler avec un modèle",
+    heroModeMultiTitle: "Utilisez plusieurs modèles à la fois",
+    heroModeMultiDesc: "Envoyez une question à plusieurs modèles et comparez pour mieux décider.",
+    heroModeMultiCta: "Comparer les modèles",
+    heroModeMultiBadge: "Bientôt disponible",
+    heroMultiComingSoon: "Le mode comparaison arrive très bientôt. En attendant, commencez avec un modèle.",
     composerHint: "Entrée envoie ; Maj + Entrée ajoute une ligne.",
     themeToggle: "Basculer le thème clair ou sombre",
     openPanel: "Ouvrir le panneau",
@@ -821,6 +845,26 @@ function showAccessError(message) {
   elements.accessCodeInput.focus({ preventScroll: false });
 }
 
+// Toast efímero para avisos breves (p. ej. "modo comparación muy pronto" del
+// hero split). Autocontenido: crea su nodo, se desvanece y se elimina solo.
+let _heroToastTimer = null;
+function showHeroToast(message) {
+  let toast = document.getElementById("heroToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "heroToast";
+    toast.className = "hero-toast";
+    toast.setAttribute("role", "status");
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  requestAnimationFrame(() => toast.classList.add("is-visible"));
+  window.clearTimeout(_heroToastTimer);
+  _heroToastTimer = window.setTimeout(() => {
+    toast.classList.remove("is-visible");
+  }, 3600);
+}
+
 function setLanguage(language) {
   const previousLanguage = state.language;
   state.language = translations[language] ? language : "es";
@@ -849,6 +893,16 @@ function setLanguage(language) {
   elements.platformDescription.textContent = copy.platformDescription;
   elements.heroTitle.textContent = copy.heroTitle;
   elements.heroSubtitle.textContent = copy.heroSubtitle;
+  // Hero split (Tarea #5): dos formas de trabajar. Los textos se setean por
+  // id porque viven dentro de los botones del hero.
+  const setText = (id, value) => { const n = document.getElementById(id); if (n) n.textContent = value; };
+  setText("heroModeSingleTitle", copy.heroModeSingleTitle);
+  setText("heroModeSingleDesc", copy.heroModeSingleDesc);
+  setText("heroModeSingleCta", copy.heroModeSingleCta);
+  setText("heroModeMultiTitle", copy.heroModeMultiTitle);
+  setText("heroModeMultiDesc", copy.heroModeMultiDesc);
+  setText("heroModeMultiCta", copy.heroModeMultiCta);
+  setText("heroModeMultiBadge", copy.heroModeMultiBadge);
   elements.composerHint.textContent = copy.composerHint;
   elements.webSearchLabel.textContent = copy.webSearch;
   elements.accessCodeInput.placeholder = copy.accessPlaceholder;
@@ -2351,6 +2405,23 @@ function bindEvents() {
   });
   elements.newChatButton.addEventListener("click", resetChat);
   if (elements.topbarNewChat) elements.topbarNewChat.addEventListener("click", resetChat);
+
+  // Hero split (Tarea #5): dos formas de trabajar. El modo "un modelo" es el
+  // actual; el modo "varios modelos" es el diferenciador que construye la
+  // Tarea #9, así que por ahora guardamos la preferencia y llevamos al
+  // composer. El toggle del topbar de la Tarea #9 respetará esta preferencia.
+  const heroModeHandler = (mode) => {
+    try { localStorage.setItem("allais_preferred_mode", mode); } catch (_e) { /* */ }
+    trackEvent("hero_mode_selected", { mode, language: state.language });
+    if (mode === "multi") showHeroToast(translations[state.language].heroMultiComingSoon);
+    // Llevar al usuario al punto donde empieza a trabajar.
+    try {
+      elements.promptInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => elements.promptInput?.focus({ preventScroll: true }), 420);
+    } catch (_e) { /* */ }
+  };
+  document.getElementById("heroModeSingle")?.addEventListener("click", () => heroModeHandler("single"));
+  document.getElementById("heroModeMulti")?.addEventListener("click", () => heroModeHandler("multi"));
   elements.providerList.addEventListener("click", (event) => {
     const card = event.target.closest(".provider-card");
     if (!card) return;

@@ -11,6 +11,7 @@ const { getAuth } = require("firebase-admin/auth");
 const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
 const { verify: verifySignature } = require("./webhook-signature");
 const { handleWebhook: handleWebhookPure } = require("./webhook-handler");
+const { resolveTrialSchedule } = require("./trial-schedule");
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
@@ -148,13 +149,21 @@ async function createSubscription(request) {
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
   assertAvailable(plan.id);
 
+  // Tarea #4b — trial-with-card: cuando el frontend pide `launchFreeTrial: true`,
+  // creamos un preapproval con cobro diferido al cierre de la promoción (11-nov),
+  // no al +3 días habitual. Así capturamos la tarjeta hoy pero no cobramos nada
+  // hasta que la promo expire. La decisión (validación + fechas) vive en la
+  // función pura resolveTrialSchedule, probada aparte.
+  const launchFreeTrial = Boolean(request.body?.launchFreeTrial);
+  const schedule = resolveTrialSchedule({ launchFreeTrial, planId: plan.id, trialDays: TRIAL_DAYS });
+  if (schedule.error) throw httpError(schedule.error.status, schedule.error.message);
+  const { startDate, trialType } = schedule;
+
   // Una sola suscripción activa o pendiente por correo.
   const existing = await db.collection("subscriptions").doc(user.uid).get();
   if (existing.exists && ["active", "pending"].includes(existing.get("status"))) {
     throw httpError(409, "Ya tienes una suscripción activa o pendiente.");
   }
-
-  const startDate = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   // Modo de prueba interno (BILLING_MOCK=true): activa la suscripción sin llamar a Mercado Pago.
   // Sirve para validar la interfaz y Firestore. Debe estar apagado (false o sin definir) en producción.
@@ -168,14 +177,22 @@ async function createSubscription(request) {
       mpStatus: "mock",
       mock: true,
       trialEndsAt: startDate,
+      trialType,
+      firstChargeAt: startDate,
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
-    return { initPoint: null, mock: true };
+    return { initPoint: null, mock: true, trialType };
   }
 
   // En sandbox, Mercado Pago solo acepta un usuario de prueba como comprador: MP_PAYER_EMAIL.
   // En producción se deja vacío y se usa el correo real del usuario.
   const payerEmail = process.env.MP_PAYER_EMAIL || user.email;
+  // Diferenciamos el "reason" para que el usuario vea en MP y en su correo lo
+  // que firmó realmente — una prueba gratis con cobro diferido o un plan con 3
+  // días de prueba —, no un título genérico que después se confunda.
+  const reason = launchFreeTrial
+    ? `${plan.label} — Prueba gratis hasta el 10 de noviembre de 2026`
+    : plan.label;
   const preapproval = await mercadoPago("/preapproval", {
     method: "POST",
     // payer_email (plano) y payer.email (objeto): algunas versiones del SDK y
@@ -184,7 +201,7 @@ async function createSubscription(request) {
     // checkout, evitando que el usuario tenga que recordar y escribir su
     // correo exacto (y que MP rechace el pago por "El e-mail no coincide").
     body: JSON.stringify({
-      reason: plan.label,
+      reason,
       external_reference: `${user.uid}|${plan.id}`,
       payer_email: payerEmail,
       payer: { email: payerEmail },
@@ -209,10 +226,12 @@ async function createSubscription(request) {
     status: "pending",
     mpStatus: preapproval.status || "pending",
     trialEndsAt: startDate,
+    trialType,
+    firstChargeAt: startDate,
     updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
 
-  return { initPoint: preapproval.init_point, preapprovalId: String(preapproval.id) };
+  return { initPoint: preapproval.init_point, preapprovalId: String(preapproval.id), trialType };
 }
 
 async function subscriptionStatus(request) {
@@ -230,6 +249,8 @@ async function subscriptionStatus(request) {
     amount: planDef ? planDef.amount : null,
     mock: data.mock === true,
     trialEndsAt: toIso(data.trialEndsAt),
+    trialType: data.trialType || "standard",
+    firstChargeAt: toIso(data.firstChargeAt),
     nextPaymentAt: toIso(data.nextPaymentAt),
     payerEmail: data.payerEmail || null,
     updatedAt: toIso(data.updatedAt)

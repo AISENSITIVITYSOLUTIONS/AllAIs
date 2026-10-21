@@ -63,7 +63,9 @@ async function getOAuthToken() {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`PayPal OAuth falló: ${response.status} ${text}`);
+    // Diagnóstico temporal: qué host y qué credencial se está usando en runtime.
+    const diag = `host=${PAYPAL_API_HOST} env=${JSON.stringify(process.env.PAYPAL_ENV)} cid_len=${clientId.length} cid_head=${clientId.slice(0, 6)} cid_tail=${clientId.slice(-4)} sec_len=${clientSecret.length}`;
+    throw new Error(`PayPal OAuth falló: ${response.status} [${diag}] ${text}`);
   }
 
   const data = await response.json();

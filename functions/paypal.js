@@ -54,7 +54,11 @@ async function getOAuthToken() {
       "Authorization": `Basic ${auth}`,
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: "grant_type=client_credentials&scope=https://api.paypal.com/v1/payments/subscription"
+    // Solo grant_type: PayPal devuelve el token con todos los scopes de la app
+    // (incluido el de suscripciones). Pedir un scope explícito aquí provocaba
+    // un 401 invalid_client porque el valor que se enviaba no es un scope real
+    // de PayPal (el real es https://uri.paypal.com/services/subscriptions).
+    body: "grant_type=client_credentials"
   });
 
   if (!response.ok) {

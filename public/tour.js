@@ -2,7 +2,9 @@
  * AllAIs — Motor del onboarding tour (Tarea #5b del backlog v11)
  * ================================================================
  *
- * Tour nativo de 5 pasos sin dependencias externas. Decisiones:
+ * Tour nativo de 1 paso (solo la comparación de modelos) sin dependencias
+ * externas. Es un método de entrada más ligero: muestra de inmediato el valor
+ * real de AllAIs sin pedir nada. Decisiones:
  *
  *   - Nativo (sin Shepherd.js): el paso 4 es una ventana embebida de 4
  *     columnas con typewriter escalonado, no un tooltip clásico. Mantener
@@ -71,16 +73,8 @@
       reopen:   "Ver guía otra vez",
       close:    "Cerrar guía",
       steps: [
-        { title: "Regístrate",
-          body:  "Entra con tu correo o con Google. Sin contraseña. En diez segundos estás dentro." },
-        { title: "Elige tu modo",
-          body:  "AllAIs tiene dos formas de trabajar: pregunta a un solo modelo para una respuesta rápida, o pregunta a varios al mismo tiempo para comparar y decidir." },
-        { title: "Elige tu plan",
-          body:  "Tres días gratis cualquier plan. Si no te convence, cancelas desde \"Tu cuenta\" antes del cobro — sin pagar nada." },
         { title: "Prueba la comparación",
-          body:  "Esta es una comparación real: un prompt, cuatro modelos respondiendo lado a lado. Así es el modo \"varios modelos al mismo tiempo\" de AllAIs." },
-        { title: "Suscríbete cuando quieras",
-          body:  "Tu plan sigue trabajando cuando pase la prueba. Puedes cambiarlo o cancelarlo en cualquier momento desde Tu cuenta." }
+          body:  "Esta es una comparación real: un prompt, cuatro modelos respondiendo lado a lado. Así es el modo \"varios modelos al mismo tiempo\" de AllAIs." }
       ]
     },
     en: {
@@ -93,16 +87,8 @@
       reopen:   "Show the tour again",
       close:    "Close tour",
       steps: [
-        { title: "Sign in",
-          body:  "Use your email or Google account. No password required. You're in in ten seconds." },
-        { title: "Pick your mode",
-          body:  "AllAIs works in two ways: ask a single model for a quick answer, or ask several at once to compare and decide." },
-        { title: "Pick a plan",
-          body:  "Three free days on any plan. If it's not for you, cancel from \"Your account\" before the first charge — at no cost." },
         { title: "Try the comparison",
-          body:  "This is a real comparison: one prompt, four models answering side by side. That's the \"several models at once\" mode of AllAIs." },
-        { title: "Subscribe when you're ready",
-          body:  "Your plan keeps working once the trial ends. You can switch or cancel anytime from Your account." }
+          body:  "This is a real comparison: one prompt, four models answering side by side. That's the \"several models at once\" mode of AllAIs." }
       ]
     },
     fr: {
@@ -115,16 +101,8 @@
       reopen:   "Revoir la visite",
       close:    "Fermer la visite",
       steps: [
-        { title: "Inscrivez-vous",
-          body:  "Entrez avec votre e-mail ou votre compte Google. Pas de mot de passe. Vous êtes dedans en dix secondes." },
-        { title: "Choisissez votre mode",
-          body:  "AllAIs fonctionne de deux façons : demandez à un seul modèle pour une réponse rapide, ou demandez à plusieurs à la fois pour comparer et décider." },
-        { title: "Choisissez votre offre",
-          body:  "Trois jours gratuits pour n'importe quelle offre. Si cela ne vous convient pas, annulez depuis \"Votre compte\" avant le prélèvement — sans frais." },
         { title: "Essayez la comparaison",
-          body:  "Voici une vraie comparaison : une requête, quatre modèles qui répondent côte à côte. Voilà le mode \"plusieurs modèles à la fois\" d'AllAIs." },
-        { title: "Abonnez-vous quand vous voulez",
-          body:  "Votre offre continue de fonctionner après l'essai. Vous pouvez la changer ou l'annuler à tout moment depuis Votre compte." }
+          body:  "Voici une vraie comparaison : une requête, quatre modèles qui répondent côte à côte. Voilà le mode \"plusieurs modèles à la fois\" d'AllAIs." }
       ]
     }
   };
@@ -138,12 +116,8 @@
   //  isDemo:  true solo para el paso 4 (ventana embebida).
   //
   const STEPS = [
-    { id: "signup",       target: "#topbarAccount, #accountButton", position: "bottom", isDemo: false },
-    // Tarea #5: el paso 2 ahora apunta a las dos tarjetas del hero split.
-    { id: "pick_mode",    target: "#heroModes",                     position: "top",    isDemo: false },
-    { id: "pick_plan",    target: "#billingOpen",                   position: "right",  isDemo: false },
-    { id: "try_compare",  target: null,                              position: "center", isDemo: true  },
-    { id: "subscribe",    target: "#billingOpen, #topbarAccount",   position: "right",  isDemo: false }
+    // Entrada ligera: un solo paso, la demo de comparación de modelos.
+    { id: "try_compare",  target: null, position: "center", isDemo: true }
   ];
 
   // --------------------------------------------------------------------------
@@ -316,7 +290,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
       <div class="demo-head">
-        <p class="tour-eyebrow">${copy.eyebrow} · ${copy.step(index + 1, STEPS.length)}</p>
+        <p class="tour-eyebrow">${STEPS.length > 1 ? `${copy.eyebrow} · ${copy.step(index + 1, STEPS.length)}` : copy.eyebrow}</p>
       </div>
       <div class="demo-prompt">
         <span class="label">${data.prompt_label[state.lang]}</span>
@@ -327,18 +301,20 @@
       <div class="demo-actions">
         <div class="tour-progress"></div>
         <div class="tour-nav">
-          <button type="button" class="allais-tour-btn is-ghost" data-action="prev">${copy.prev}</button>
+          ${index > 0 ? `<button type="button" class="allais-tour-btn is-ghost" data-action="prev">${copy.prev}</button>` : ""}
           <button type="button" class="allais-tour-btn is-ghost" data-action="skip-typing">${copy.skip}</button>
-          <button type="button" class="allais-tour-btn is-primary" data-action="next" disabled>${copy.next}</button>
+          <button type="button" class="allais-tour-btn is-primary" data-action="next" disabled>${index === STEPS.length - 1 ? copy.finish : copy.next}</button>
         </div>
       </div>
     `;
 
     const progress = panel.querySelector(".tour-progress");
-    for (let i = 0; i < STEPS.length; i += 1) {
-      const dot = document.createElement("span");
-      dot.className = "tour-dot" + (i === index ? " is-current" : "");
-      progress.appendChild(dot);
+    if (STEPS.length > 1) {
+      for (let i = 0; i < STEPS.length; i += 1) {
+        const dot = document.createElement("span");
+        dot.className = "tour-dot" + (i === index ? " is-current" : "");
+        progress.appendChild(dot);
+      }
     }
 
     const grid = panel.querySelector(".demo-grid");
@@ -395,7 +371,8 @@
       skipBtn.style.visibility = "hidden";
     });
 
-    panel.querySelector('[data-action="prev"]').addEventListener("click", () => goPrev());
+    const prevBtn = panel.querySelector('[data-action="prev"]');
+    if (prevBtn) prevBtn.addEventListener("click", () => goPrev());
     nextBtn.addEventListener("click", () => goNext());
     panel.querySelector(".allais-tour-close").addEventListener("click", () => close("skipped"));
   };

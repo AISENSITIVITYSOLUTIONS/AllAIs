@@ -294,6 +294,19 @@ async function cancelSubscription(request) {
     return { status: "cancelled" };
   }
 
+  // Cancelación vía PayPal
+  if (data.gateway === "paypal") {
+    const { cancelPayPalSubscription } = require("./paypal");
+    await cancelPayPalSubscription(String(data.subscriptionId));
+    await ref.set({
+      status: "cancelled",
+      cancelledAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { status: "cancelled" };
+  }
+
+  // Cancelación vía Mercado Pago
   const preapproval = await mercadoPago(`/preapproval/${encodeURIComponent(String(data.preapprovalId))}`, {
     method: "PUT",
     body: JSON.stringify({ status: "cancelled" })

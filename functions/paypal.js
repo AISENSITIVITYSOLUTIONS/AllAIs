@@ -172,6 +172,32 @@ async function getSubscription(subscriptionId) {
   return await response.json();
 }
 
+// Cancela una suscripción activa de PayPal.
+async function cancelPayPalSubscription(subscriptionId, reason = "Cancelado por el usuario") {
+  requireConfigured();
+
+  const token = await getOAuthToken();
+
+  const response = await fetch(
+    `${PAYPAL_API_HOST}/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ reason })
+    }
+  );
+
+  // 204 = éxito sin cuerpo
+  if (response.status === 204) return { status: "cancelled" };
+
+  const text = await response.text();
+  console.error("PayPal cancelSubscription error:", response.status, text);
+  throw new Error(`Fallo al cancelar suscripción de PayPal: ${response.status}`);
+}
+
 // Verifica la firma del webhook de PayPal. El webhook viaja con 5 headers:
 //   paypal-transmission-id
 //   paypal-transmission-time
@@ -226,5 +252,6 @@ module.exports = {
   getOAuthToken,
   createSubscription,
   getSubscription,
+  cancelPayPalSubscription,
   verifyWebhookSignature
 };

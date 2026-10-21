@@ -21,7 +21,12 @@ async function main() {
   const host = prod ? "https://api.paypal.com" : "https://api.sandbox.paypal.com";
   console.log("PAYPAL_ENV =", JSON.stringify(env.PAYPAL_ENV), "-> host:", host);
 
-  const auth = Buffer.from(`${env.PAYPAL_CLIENT_ID}:${env.PAYPAL_CLIENT_SECRET}`).toString("base64");
+  // Preferir credenciales pasadas por variables de entorno (PP_ID/PP_SECRET),
+  // que es como inyectamos las de Secret Manager; si no, caer al .env local.
+  const clientId = (process.env.PP_ID || env.PAYPAL_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.PP_SECRET || env.PAYPAL_CLIENT_SECRET || "").trim();
+  console.log("Client ID: len =", clientId.length, "head =", clientId.slice(0, 6));
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const tokRes = await fetch(`${host}/v1/oauth2/token`, {
     method: "POST",
     headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },

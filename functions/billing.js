@@ -297,7 +297,14 @@ async function cancelSubscription(request) {
   // Cancelación vía PayPal
   if (data.gateway === "paypal") {
     const { cancelPayPalSubscription } = require("./paypal");
-    await cancelPayPalSubscription(String(data.subscriptionId));
+    try {
+      await cancelPayPalSubscription(String(data.subscriptionId));
+    } catch (err) {
+      // Una suscripción que nunca se aprobó (APPROVAL_PENDING) o que ya no
+      // existe no se puede cancelar en PayPal y tampoco cobra nada. En vez de
+      // dejar al usuario atorado, la marcamos cancelada localmente.
+      console.warn("PayPal cancel no aplicable, se marca cancelada localmente:", err.message);
+    }
     await ref.set({
       status: "cancelled",
       cancelledAt: FieldValue.serverTimestamp(),
@@ -341,6 +348,13 @@ async function changePlan(request) {
   if (isMock(data)) {
     await ref.set({ plan: plan.id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { plan: plan.id, mock: true };
+  }
+
+  // Cambiar de plan directamente solo está soportado en Mercado Pago. Para
+  // PayPal (que requiere su API de revise, aún no implementada) damos un
+  // mensaje claro en vez del error de cobro, guiando a cancelar y resuscribirse.
+  if (data.gateway === "paypal") {
+    throw httpError(409, "Para cambiar de plan con PayPal, cancela tu suscripción actual y vuelve a suscribirte al plan que quieras.");
   }
 
   const preapproval = await mercadoPago(`/preapproval/${encodeURIComponent(String(data.preapprovalId))}`, {

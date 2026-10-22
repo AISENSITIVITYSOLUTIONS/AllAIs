@@ -337,8 +337,16 @@
           return;
         }
       }
-    } catch (_e) { /* si el status falla, mostramos igual el gate */ }
-    show();
+    } catch (_e) { /* si el status falla, mostramos igual */ }
+    // Unificado: usamos UNA sola pantalla de planes. En vez de la pantalla
+    // completa propia del gate, abrimos el mismo diálogo de "Suscríbete aquí"
+    // (window.AllAIsBilling.openDialog). Si billing.js aún no cargó, caemos a
+    // la pantalla del gate como respaldo.
+    if (window.AllAIsBilling?.openDialog) {
+      window.AllAIsBilling.openDialog();
+    } else {
+      show();
+    }
   };
 
   window.AllAIsPlanGate = { maybeShow, show, hide };

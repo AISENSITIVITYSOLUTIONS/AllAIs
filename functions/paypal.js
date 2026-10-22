@@ -202,50 +202,54 @@ async function cancelPayPalSubscription(subscriptionId, reason = "Cancelado por 
   throw new Error(`Fallo al cancelar suscripción de PayPal: ${response.status}`);
 }
 
-// Verifica la firma del webhook de PayPal. El webhook viaja con 5 headers:
-//   paypal-transmission-id
-//   paypal-transmission-time
-//   paypal-transmission-sig
-//   paypal-cert-url
-//   paypal-auth-algo
-//
-// Construimos un manifest = transmission-id|transmission-time|webhook-id|event-body-hash
-// y validamos que la firma SHA256(HMAC, manifest, webhook-secret) coincida.
-async function verifyWebhookSignature(transmissionId, transmissionTime, signature, webhookId, eventBody) {
+// Verifica la firma del webhook de PayPal. PayPal NO firma con HMAC: usa firma
+// RSA sobre el certificado de paypal-cert-url. La forma soportada y confiable de
+// validarla es delegar en la propia API de PayPal, enviándole los 5 headers de
+// transmisión + el webhook-id + el evento; PayPal responde verification_status.
+// El webhook viaja con estos headers:
+//   paypal-transmission-id, paypal-transmission-time, paypal-transmission-sig,
+//   paypal-cert-url, paypal-auth-algo
+// Recibe un objeto para no equivocar el orden de los argumentos.
+async function verifyWebhookSignature({ transmissionId, transmissionTime, signature, certUrl, authAlgo, webhookId, eventBody } = {}) {
   requireConfigured();
 
-  const webhookSecret = String(process.env.PAYPAL_WEBHOOK_ID || "").trim();
-  if (!webhookSecret) {
+  const id = String(webhookId || process.env.PAYPAL_WEBHOOK_ID || "").trim();
+  if (!id) {
     console.error("PayPal webhook: PAYPAL_WEBHOOK_ID no configurado");
     return false;
   }
-
-  // PayPal usa el hash SHA256 del body como parte del manifest.
-  const bodyHash = createHmac("sha256", "")
-    .update(JSON.stringify(eventBody))
-    .digest("hex");
-
-  const manifest = [
-    transmissionId,
-    transmissionTime,
-    webhookId,
-    bodyHash
-  ].join("|");
-
-  // Firma con HMAC-SHA256.
-  const expectedSignature = createHmac("sha256", webhookSecret)
-    .update(manifest)
-    .digest("base64");
-
-  // Comparación segura contra timing attacks.
-  try {
-    return timingSafeEqual(
-      Buffer.from(signature, "utf8"),
-      Buffer.from(expectedSignature, "utf8")
-    );
-  } catch {
+  if (!transmissionId || !transmissionTime || !signature || !certUrl || !authAlgo) {
+    console.warn("PayPal webhook: faltan headers de firma (transmission/cert/auth).");
     return false;
   }
+
+  const token = await getOAuthToken();
+  const response = await fetch(`${PAYPAL_API_HOST}/v1/notifications/verify-webhook-signature`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      transmission_id: transmissionId,
+      transmission_time: transmissionTime,
+      cert_url: certUrl,
+      auth_algo: authAlgo,
+      transmission_sig: signature,
+      webhook_id: id,
+      // El evento debe ir como objeto JSON tal cual lo recibimos.
+      webhook_event: eventBody
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    console.error("PayPal verify-webhook-signature falló:", response.status, text);
+    return false;
+  }
+
+  const data = await response.json();
+  return data.verification_status === "SUCCESS";
 }
 
 module.exports = {

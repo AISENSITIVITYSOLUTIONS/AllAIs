@@ -506,19 +506,18 @@ async function handlePayPalWebhookRequest(request) {
   }
 
   const eventBody = request.body || {};
-  const transmissionId = request.get("paypal-transmission-id") || "";
-  const transmissionTime = request.get("paypal-transmission-time") || "";
-  const signature = request.get("paypal-transmission-sig") || "";
-  const webhookId = process.env.PAYPAL_WEBHOOK_ID || "";
 
-  // Verifica la firma contra PayPal.
-  const isValid = await verifyPayPalWebhookSignature(
-    transmissionId,
-    transmissionTime,
-    signature,
-    webhookId,
+  // Verifica la firma contra la API de PayPal (incluye cert-url y auth-algo,
+  // que antes faltaban). verifyPayPalWebhookSignature recibe un objeto.
+  const isValid = await verifyPayPalWebhookSignature({
+    transmissionId: request.get("paypal-transmission-id") || "",
+    transmissionTime: request.get("paypal-transmission-time") || "",
+    signature: request.get("paypal-transmission-sig") || "",
+    certUrl: request.get("paypal-cert-url") || "",
+    authAlgo: request.get("paypal-auth-algo") || "",
+    webhookId: process.env.PAYPAL_WEBHOOK_ID || "",
     eventBody
-  );
+  });
 
   if (!isValid) {
     console.warn("PayPal webhook: firma inválida o PAYPAL_WEBHOOK_ID no configurado.");

@@ -870,6 +870,19 @@ img {
   margin-bottom: 28px;
 }
 
+.hero-lockup {
+  display: block;
+  width: min(420px, 78vw);
+  height: auto;
+  margin: 0 auto 4px;
+  padding: 14px 20px;
+  border-radius: 18px;
+  background: #050c18;
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 20px 40px -22px rgba(6, 14, 28, 0.55);
+}
+
 .hero-visual {
   position: relative;
   display: grid;

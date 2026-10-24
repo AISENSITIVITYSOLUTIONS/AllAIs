@@ -310,8 +310,31 @@ img {
 .brand-lockup {
   display: block;
   width: 100%;
-  max-width: 210px;
+  max-width: 226px;
   height: auto;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 14%,
+    black 78%,
+    transparent 100%
+  ),
+    linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 14%,
+    black 78%,
+    transparent 100%
+  ),
+    linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+  mask-composite: intersect;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  mix-blend-mode: screen;
 }
 
 .brand-mark {

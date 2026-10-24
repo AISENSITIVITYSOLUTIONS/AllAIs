@@ -280,10 +280,10 @@
     panel.className = "allais-tour-demo";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", stepCopy.title);
-    panel.style.position = "absolute";
-    panel.style.left = "50%";
-    panel.style.top = "50%";
-    panel.style.transform = "translate(-50%, -50%)";
+    // El centrado (horizontal y vertical) lo da el `display:flex` de
+    // .allais-tour-root — antes se forzaba aquí con position/top/left/
+    // transform inline, lo que además pisaba la animación de entrada
+    // (transform) definida en CSS por especificidad de estilo inline.
 
     panel.innerHTML = `
       <button type="button" class="allais-tour-close" aria-label="${copy.close}">

@@ -19,6 +19,13 @@
   color: #e8edf5;
   font: 15px/1.55 "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   pointer-events: none; /* backdrop lo gestionará el hijo */
+  /* Centra verticalmente la demo embebida (paso 4) dentro del viewport.
+     Los hijos posicionados (backdrop, highlight, tooltips) son position:
+     absolute/fixed, así que no les afecta este flex — solo queda fuera del
+     flujo normal la .allais-tour-demo, que sí se beneficia. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .allais-tour-backdrop {
   position: absolute;

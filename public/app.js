@@ -232,43 +232,43 @@ const translations = {
       write: {
         label: "Escribir",
         description: "Mensajes, emails, cartas, propuestas y textos.",
-        placeholder: "Ejemplo: Necesito escribirle un mensaje a mi jefe para pedirle una reunión breve esta semana...",
+        placeholder: "",
         options: []
       },
       learn: {
         label: "Aprender",
         description: "Explicaciones claras por nivel de conocimiento.",
-        placeholder: "Ejemplo: Explícame la Revolución Mexicana para un niño de 10 años...",
+        placeholder: "",
         options: ["Explicación simple", "Clase breve", "Guía paso a paso", "Ejemplo cotidiano", "Preguntas de repaso"]
       },
       research: {
         label: "Investigar",
         description: "Preguntas, hipótesis, métodos y revisión inicial.",
-        placeholder: "Ejemplo: Ayúdame a formular preguntas de investigación sobre desigualdad urbana e IA...",
+        placeholder: "",
         options: ["Pregunta de investigación", "Hipótesis", "Marco conceptual", "Diseño metodológico", "Revisión inicial"]
       },
       analyze: {
         label: "Analizar",
         description: "Lectura crítica, patrones, riesgos y argumentos.",
-        placeholder: "Ejemplo: Analiza este problema y distingue riesgos, patrones, actores y escenarios...",
+        placeholder: "",
         options: ["Análisis crítico", "Riesgos", "Escenarios", "Comparación", "Argumentos principales"]
       },
       summarize: {
         label: "Resumir",
         description: "Síntesis ejecutiva, académica o didáctica.",
-        placeholder: "Ejemplo: Resume este texto en cinco ideas principales y una conclusión ejecutiva...",
+        placeholder: "",
         options: ["Resumen ejecutivo", "Resumen académico", "Síntesis breve", "Puntos clave", "Conclusiones"]
       },
       strategy: {
         label: "Crear estrategia",
         description: "Decisiones, mercados, comunicación y escenarios.",
-        placeholder: "Ejemplo: Diseña una estrategia para presentar AllAIs a clientes profesionales...",
+        placeholder: "",
         options: ["Estrategia comercial", "Plan de acción", "Comunicación", "Mercado", "Decisión ejecutiva"]
       },
       code: {
         label: "Programar",
         description: "Ayuda técnica, depuración y explicación.",
-        placeholder: "Ejemplo: Ayúdame a corregir este error de JavaScript y explícame qué pasó...",
+        placeholder: "",
         options: ["Corregir error", "Explicar código", "Crear función", "Mejorar interfaz", "Arquitectura"]
       },
       other: {
@@ -418,43 +418,43 @@ const translations = {
       write: {
         label: "Write",
         description: "Messages, emails, letters, proposals and texts.",
-        placeholder: "Example: I need to write my boss a message asking for a short meeting this week...",
+        placeholder: "",
         options: []
       },
       learn: {
         label: "Learn",
         description: "Clear explanations by knowledge level.",
-        placeholder: "Example: Explain the Mexican Revolution to a 10-year-old child...",
+        placeholder: "",
         options: ["Simple explanation", "Short lesson", "Step-by-step guide", "Everyday example", "Review questions"]
       },
       research: {
         label: "Research",
         description: "Questions, hypotheses, methods and initial review.",
-        placeholder: "Example: Help me formulate research questions about urban inequality and AI...",
+        placeholder: "",
         options: ["Research question", "Hypothesis", "Conceptual framework", "Methodological design", "Initial review"]
       },
       analyze: {
         label: "Analyze",
         description: "Critical reading, patterns, risks and arguments.",
-        placeholder: "Example: Analyze this problem and distinguish risks, patterns, actors and scenarios...",
+        placeholder: "",
         options: ["Critical analysis", "Risks", "Scenarios", "Comparison", "Main arguments"]
       },
       summarize: {
         label: "Summarize",
         description: "Executive, academic or didactic synthesis.",
-        placeholder: "Example: Summarize this text in five main ideas and an executive conclusion...",
+        placeholder: "",
         options: ["Executive summary", "Academic summary", "Brief synthesis", "Key points", "Conclusions"]
       },
       strategy: {
         label: "Create strategy",
         description: "Decisions, markets, communication and scenarios.",
-        placeholder: "Example: Design a strategy to present AllAIs to professional clients...",
+        placeholder: "",
         options: ["Commercial strategy", "Action plan", "Communication", "Market", "Executive decision"]
       },
       code: {
         label: "Code",
         description: "Technical help, debugging and explanation.",
-        placeholder: "Example: Help me fix this JavaScript error and explain what happened...",
+        placeholder: "",
         options: ["Fix error", "Explain code", "Create function", "Improve interface", "Architecture"]
       },
       other: {
@@ -604,43 +604,43 @@ const translations = {
       write: {
         label: "Écrire",
         description: "Messages, emails, lettres, propositions et textes.",
-        placeholder: "Exemple : Je dois écrire un message à mon responsable pour demander une courte réunion cette semaine...",
+        placeholder: "",
         options: []
       },
       learn: {
         label: "Apprendre",
         description: "Explications claires selon le niveau de connaissance.",
-        placeholder: "Exemple : Explique-moi la Révolution mexicaine pour un enfant de 10 ans...",
+        placeholder: "",
         options: ["Explication simple", "Courte leçon", "Guide étape par étape", "Exemple quotidien", "Questions de révision"]
       },
       research: {
         label: "Rechercher",
         description: "Questions, hypothèses, méthodes et première revue.",
-        placeholder: "Exemple : Aide-moi à formuler des questions de recherche sur les inégalités urbaines et l'IA...",
+        placeholder: "",
         options: ["Question de recherche", "Hypothèse", "Cadre conceptuel", "Design méthodologique", "Revue initiale"]
       },
       analyze: {
         label: "Analyser",
         description: "Lecture critique, tendances, risques et arguments.",
-        placeholder: "Exemple : Analyse ce problème et distingue les risques, les tendances, les acteurs et les scénarios...",
+        placeholder: "",
         options: ["Analyse critique", "Risques", "Scénarios", "Comparaison", "Arguments principaux"]
       },
       summarize: {
         label: "Résumer",
         description: "Synthèse exécutive, académique ou pédagogique.",
-        placeholder: "Exemple : Résume ce texte en cinq idées principales et une conclusion exécutive...",
+        placeholder: "",
         options: ["Résumé exécutif", "Résumé académique", "Synthèse brève", "Points clés", "Conclusions"]
       },
       strategy: {
         label: "Créer une stratégie",
         description: "Décisions, marchés, communication et scénarios.",
-        placeholder: "Exemple : Conçois une stratégie pour présenter AllAIs à des clients professionnels...",
+        placeholder: "",
         options: ["Stratégie commerciale", "Plan d'action", "Communication", "Marché", "Décision exécutive"]
       },
       code: {
         label: "Code",
         description: "Aide technique, débogage et explication.",
-        placeholder: "Exemple : Aide-moi à corriger cette erreur JavaScript et explique ce qui s'est passé...",
+        placeholder: "",
         options: ["Corriger une erreur", "Expliquer du code", "Créer une fonction", "Améliorer l'interface", "Architecture"]
       },
       other: {

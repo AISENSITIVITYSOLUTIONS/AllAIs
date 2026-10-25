@@ -140,13 +140,11 @@
       chip.addEventListener("click", () => toggleModel(p.id));
       chips.append(chip);
     });
-    // Nota de cuota
-    let note = document.getElementById("compareQuotaNote");
-    if (!note) {
-      note = el("span", { class: "compare-quota-note", id: "compareQuotaNote" });
-      chips.parentNode.append(note);
-    }
-    note.textContent = t("quota_note", state.selected.size);
+    // Nota de cuota: se quitó del UI (la decisión de mostrarla generaba
+    // confusión); se deja t("quota_note", …) disponible por si se
+    // reactiva, pero no se renderiza ningún elemento para ella.
+    const oldNote = document.getElementById("compareQuotaNote");
+    if (oldNote) oldNote.remove();
   }
 
   function toggleModel(id) {

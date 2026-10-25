@@ -244,3 +244,10 @@
 @media (prefers-reduced-motion: reduce) {
   .compare-caret { animation: none; }
 }
+
+/* Se quitó el toggle "Comparar modelos" del composer. El modo comparación
+   sigue disponible desde el botón "Usa varios modelos" del inicio, que
+   activa el mismo estado sin pasar por este botón. */
+#compareToggle {
+  display: none !important;
+}

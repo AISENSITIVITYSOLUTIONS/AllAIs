@@ -22,10 +22,6 @@
           "region": "us-central1",
           "pinTag": true
         }
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
       }
     ],
     "headers": [

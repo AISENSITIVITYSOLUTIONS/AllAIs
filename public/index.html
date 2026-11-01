@@ -85,17 +85,6 @@
           <button type="button" class="account-button" id="accountButton">Iniciar sesión</button>
         </section>
 
-        <button type="button" class="new-chat" id="newChatButton">
-          <span class="new-chat-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" role="img">
-              <path d="M5 19h11.5" />
-              <path d="M5 19V7.5A2.5 2.5 0 0 1 7.5 5H14" />
-              <path d="M9.2 14.8 18.4 5.6a1.7 1.7 0 0 1 2.4 2.4l-9.2 9.2-3.1.7.7-3.1Z" />
-            </svg>
-          </span>
-          Nueva consulta
-        </button>
-
         <section class="panel panel-models" aria-labelledby="providersPanelLabel">
           <h2 class="panel-label" id="providersPanelLabel">Modelos conectables</h2>
           <div class="provider-list" id="providerList" role="radiogroup" aria-labelledby="providersPanelLabel"></div>
@@ -122,6 +111,16 @@
           </div>
 
           <div class="topbar-actions">
+            <button type="button" class="topbar-new-chat" id="topbarNewChat" aria-label="Nueva consulta">
+              <span class="new-chat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 19h11.5" />
+                  <path d="M5 19V7.5A2.5 2.5 0 0 1 7.5 5H14" />
+                  <path d="M9.2 14.8 18.4 5.6a1.7 1.7 0 0 1 2.4 2.4l-9.2 9.2-3.1.7.7-3.1Z" />
+                </svg>
+              </span>
+              <span id="topbarNewChatLabel">Nueva consulta</span>
+            </button>
             <div class="language-switch" role="group" aria-label="Idioma">
               <button type="button" class="language-button active" data-lang="es" aria-label="Español" aria-pressed="true">ES</button>
               <button type="button" class="language-button" data-lang="en" aria-label="English" aria-pressed="false">EN</button>

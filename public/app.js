@@ -2395,7 +2395,7 @@ function bindEvents() {
       closeSidebar();
     }
   });
-  elements.newChatButton.addEventListener("click", resetChat);
+  if (elements.newChatButton) elements.newChatButton.addEventListener("click", resetChat);
   if (elements.topbarNewChat) elements.topbarNewChat.addEventListener("click", resetChat);
 
   // Hero split (Tarea #5): dos formas de trabajar. El modo "un modelo" es el

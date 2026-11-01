@@ -105,22 +105,23 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
           </button>
 
+          <button type="button" class="topbar-new-chat" id="topbarNewChat" aria-label="Nueva consulta">
+            <span class="new-chat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M5 19h11.5" />
+                <path d="M5 19V7.5A2.5 2.5 0 0 1 7.5 5H14" />
+                <path d="M9.2 14.8 18.4 5.6a1.7 1.7 0 0 1 2.4 2.4l-9.2 9.2-3.1.7.7-3.1Z" />
+              </svg>
+            </span>
+            <span id="topbarNewChatLabel">Nueva consulta</span>
+          </button>
+
           <div class="topbar-model" aria-live="polite">
             <span class="model-dot" aria-hidden="true"></span>
             <span id="topbarModel">ChatGPT / OpenAI</span>
           </div>
 
           <div class="topbar-actions">
-            <button type="button" class="topbar-new-chat" id="topbarNewChat" aria-label="Nueva consulta">
-              <span class="new-chat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M5 19h11.5" />
-                  <path d="M5 19V7.5A2.5 2.5 0 0 1 7.5 5H14" />
-                  <path d="M9.2 14.8 18.4 5.6a1.7 1.7 0 0 1 2.4 2.4l-9.2 9.2-3.1.7.7-3.1Z" />
-                </svg>
-              </span>
-              <span id="topbarNewChatLabel">Nueva consulta</span>
-            </button>
             <div class="language-switch" role="group" aria-label="Idioma">
               <button type="button" class="language-button active" data-lang="es" aria-label="Español" aria-pressed="true">ES</button>
               <button type="button" class="language-button" data-lang="en" aria-label="English" aria-pressed="false">EN</button>

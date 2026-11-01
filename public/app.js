@@ -931,6 +931,7 @@ function setLanguage(language) {
   } else if (state.authMode === "email") {
     setSessionState(true, copy.signedInAs(state.email));
   }
+  if (window.AllAIsTour?.updateLang) window.AllAIsTour.updateLang();
 }
 
 function logout() {

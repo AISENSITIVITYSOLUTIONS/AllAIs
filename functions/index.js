@@ -4,7 +4,7 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getAppCheck } = require("firebase-admin/app-check");
 const crypto = require("node:crypto");
-const { listProviders, callProvider } = require("./providers");
+const { listProviders, callProvider, listOpenRouterModels } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement } = require("./entitlements");
 const { consumeUsage, readUsage, refundUsage } = require("./quota");
@@ -29,6 +29,7 @@ const runtimeOptions = {
     "QWEN_API_KEY",
     "QWEN_BASE_URL",
     "QWEN_MODEL",
+    "OPENROUTER_API_KEY",
     "SHEETS_WEBHOOK_TOKEN"
   ]
 };
@@ -488,6 +489,18 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       return;
     }
 
+    // Catálogo de modelos de OpenRouter para el selector del frontend. Devuelve
+    // lista vacía si no hay clave o si OpenRouter no responde (no rompe la app).
+    if (path === "/models/openrouter" && request.method === "GET") {
+      try {
+        sendJson(response, 200, { models: await listOpenRouterModels() });
+      } catch (error) {
+        console.error("AllAIs openrouter models", { message: error?.message });
+        sendJson(response, 200, { models: [], error: "No se pudo obtener el catálogo." });
+      }
+      return;
+    }
+
     if (path === "/config" && request.method === "GET") {
       sendJson(response, 200, { appCheckSiteKey: process.env.APPCHECK_SITE_KEY || "", dailyLimit: DAILY_QUERY_LIMIT });
       return;
@@ -645,7 +658,10 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       const startedAt = Date.now();
-      const payload = { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments };
+      // Modelo opcional por petición: lo honra el proveedor openrouter (formato
+      // proveedor/modelo). Los demás proveedores usan su modelo fijo e ignoran esto.
+      const model = typeof request.body?.model === "string" ? request.body.model.trim().slice(0, 120) : "";
+      const payload = { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments, model };
 
       // Respuesta en tiempo real: líneas JSON (NDJSON) con fragmentos de texto y un cierre con metadatos.
       if (request.body?.stream === true) {
@@ -860,7 +876,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         return;
       }
 
-      const PROVIDER_NAMES = { openai: "ChatGPT", claude: "Claude", gemini: "Gemini", deepseek: "DeepSeek", qwen: "Qwen" };
+      const PROVIDER_NAMES = { openai: "ChatGPT", claude: "Claude", gemini: "Gemini", deepseek: "DeepSeek", qwen: "Qwen", openrouter: "OpenRouter" };
       const bloques = clean
         .map((a, i) => `--- Respuesta ${i + 1} (${PROVIDER_NAMES[a.provider] || a.provider}) ---\n${a.text}`)
         .join("\n\n");

@@ -4,6 +4,11 @@ const GEMINI_ENDPOINT_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models";
+// Cabeceras recomendadas por OpenRouter para atribución y ranking del sitio.
+const OPENROUTER_REFERER = "https://allais.nni.ai";
+const OPENROUTER_TITLE = "AllAIs";
 
 const QWEN_DEFAULT_BASE_URL =
   "https://ws-cxspccc12vzxj16l.us-east-1.maas.aliyuncs.com/compatible-mode/v1";
@@ -339,7 +344,8 @@ async function callOpenAICompatible(
   apiKey,
   model,
   payload,
-  extraBody = {}
+  extraBody = {},
+  extraHeaders = {}
 ) {
   const cleanApiKey = cleanSecret(apiKey);
 
@@ -358,7 +364,8 @@ async function callOpenAICompatible(
     method: "POST",
     headers: {
       Authorization: `Bearer ${cleanApiKey}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...extraHeaders
     },
     body: JSON.stringify({
       model,
@@ -631,6 +638,23 @@ const providers = {
     description:
       "Modelo asiático competitivo para flujos multilingües y operación económica.",
     call: callQwenStreaming
+  },
+
+  openrouter: {
+    name: "OpenRouter",
+    description:
+      "Puerta de enlace a cientos de modelos de distintos proveedores con una sola clave.",
+    // El modelo es por petición (payload.model, formato proveedor/modelo). Si no
+    // llega, cae en OPENROUTER_MODEL y, en última instancia, en un modelo económico.
+    call: (payload) =>
+      callOpenAICompatible(
+        OPENROUTER_ENDPOINT,
+        process.env.OPENROUTER_API_KEY,
+        cleanModel(payload.model || process.env.OPENROUTER_MODEL, "openai/gpt-6-luna"),
+        payload,
+        {},
+        { "HTTP-Referer": OPENROUTER_REFERER, "X-Title": OPENROUTER_TITLE }
+      )
   }
 };
 
@@ -645,7 +669,8 @@ const PROVIDER_KEY_ENV = {
   claude: "ANTHROPIC_API_KEY",
   gemini: "GEMINI_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
-  qwen: "QWEN_API_KEY"
+  qwen: "QWEN_API_KEY",
+  openrouter: "OPENROUTER_API_KEY"
 };
 
 function providerHasKey(id) {
@@ -708,9 +733,47 @@ async function callProvider(providerId, payload) {
   return provider.call(payload);
 }
 
+// Catálogo de modelos de OpenRouter para poblar el selector del frontend.
+// Se cachea en memoria del contenedor para no golpear la API en cada carga.
+let openRouterModelsCache = { at: 0, data: [] };
+const OPENROUTER_CACHE_MS = 10 * 60 * 1000;
+
+async function listOpenRouterModels() {
+  const apiKey = cleanSecret(process.env.OPENROUTER_API_KEY);
+  if (!apiKey) return [];
+  const now = Date.now();
+  if (openRouterModelsCache.data.length && now - openRouterModelsCache.at < OPENROUTER_CACHE_MS) {
+    return openRouterModelsCache.data;
+  }
+  const response = await fetch(OPENROUTER_MODELS_ENDPOINT, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": OPENROUTER_REFERER,
+      "X-Title": OPENROUTER_TITLE
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  const payload = await response.json();
+  const models = (Array.isArray(payload?.data) ? payload.data : [])
+    .map((m) => ({
+      id: m.id,
+      name: m.name || m.id,
+      context_length: m.context_length || null,
+      pricing: m.pricing
+        ? { prompt: m.pricing.prompt, completion: m.pricing.completion }
+        : null
+    }))
+    .filter((m) => m.id);
+  openRouterModelsCache = { at: now, data: models };
+  return models;
+}
+
 module.exports = {
   listProviders,
   callProvider,
   getProvider,
-  buildChatEndpoint
+  buildChatEndpoint,
+  listOpenRouterModels
 };

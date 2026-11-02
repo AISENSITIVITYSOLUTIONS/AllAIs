@@ -738,6 +738,27 @@ async function callProvider(providerId, payload) {
 let openRouterModelsCache = { at: 0, data: [] };
 const OPENROUTER_CACHE_MS = 10 * 60 * 1000;
 
+// Lista curada: modelos recomendados que se muestran por defecto en el selector.
+// El resto del catálogo queda disponible con la opción "ver todos". Si un id
+// deja de existir en OpenRouter, simplemente no se marca y no rompe nada.
+const CURATED_OPENROUTER = new Set([
+  "openai/gpt-6-luna",
+  "openai/gpt-6.1-sol",
+  "openai/gpt-6-astra",
+  "anthropic/claude-haiku-5.5",
+  "anthropic/claude-sonnet-5.5",
+  "anthropic/claude-opus-5.5",
+  "google/gemini-3.8-flash",
+  "google/gemini-4-argon",
+  "x-ai/grok-4.7",
+  "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-v4-pro",
+  "moonshotai/kimi-k3.1-pro",
+  "qwen/qwen3.8-flash",
+  "meta-llama/llama-3.3-70b-instruct",
+  "mistralai/mistral-large-4-0"
+]);
+
 async function listOpenRouterModels() {
   const apiKey = cleanSecret(process.env.OPENROUTER_API_KEY);
   if (!apiKey) return [];
@@ -763,7 +784,8 @@ async function listOpenRouterModels() {
       context_length: m.context_length || null,
       pricing: m.pricing
         ? { prompt: m.pricing.prompt, completion: m.pricing.completion }
-        : null
+        : null,
+      curated: CURATED_OPENROUTER.has(m.id)
     }))
     .filter((m) => m.id);
   openRouterModelsCache = { at: now, data: models };

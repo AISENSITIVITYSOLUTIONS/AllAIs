@@ -10,7 +10,11 @@ const state = {
   selectedProvider: "openai",
   history: [],
   attachments: [],
-  pendingAttachmentKind: "file"
+  pendingAttachmentKind: "file",
+  openrouterModels: [],
+  openrouterModel: "",
+  openrouterShowAll: false,
+  openrouterLoaded: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -34,6 +38,9 @@ function trackEvent(eventName, params = {}) {
 
 const elements = {
   providerList: $("#providerList"),
+  openrouterModelRow: $("#openrouterModelRow"),
+  openrouterModel: $("#openrouterModel"),
+  openrouterShowAll: $("#openrouterShowAll"),
   taskGrid: $("#taskGrid"),
   taskMoreButton: $("#taskMoreButton"),
   taskMoreMenu: $("#taskMoreMenu"),
@@ -2016,7 +2023,70 @@ function syncProviderCards() {
     elements.selectedProviderNote.textContent = display?.name || "";
   }
   if (elements.topbarModel) elements.topbarModel.textContent = display?.name || "";
+  updateOpenRouterRow();
   syncAttachmentMenu();
+}
+
+// Muestra el selector de modelo solo cuando el proveedor activo es OpenRouter.
+function updateOpenRouterRow() {
+  const row = elements.openrouterModelRow;
+  if (!row) return;
+  const isOpenRouter = state.selectedProvider === "openrouter";
+  row.hidden = !isOpenRouter;
+  const showAllLabel = { es: "Ver todos", en: "Show all", fr: "Voir tout" };
+  const label = document.getElementById("openrouterShowAllLabel");
+  if (label) label.textContent = showAllLabel[state.language] || showAllLabel.es;
+  if (isOpenRouter) ensureOpenRouterModels();
+}
+
+// Carga el catálogo una sola vez y llena el selector.
+async function ensureOpenRouterModels() {
+  if (state.openrouterLoaded) {
+    renderOpenRouterOptions();
+    return;
+  }
+  state.openrouterLoaded = true;
+  try {
+    const response = await fetch(`${API_BASE}/models/openrouter`);
+    const data = await readApiJson(response);
+    state.openrouterModels = Array.isArray(data.models) ? data.models : [];
+  } catch (error) {
+    console.warn("AllAIs no pudo cargar el catálogo de OpenRouter", error);
+    state.openrouterModels = [];
+  }
+  renderOpenRouterOptions();
+}
+
+// Llena el <select> con la lista curada (o todos) agrupada por proveedor.
+function renderOpenRouterOptions() {
+  const select = elements.openrouterModel;
+  if (!select) return;
+  const all = state.openrouterModels;
+  const list = state.openrouterShowAll ? all : all.filter((m) => m.curated);
+  const source = list.length ? list : all; // si no hay curados, muestra todos
+  select.innerHTML = "";
+  const groups = {};
+  for (const model of source) {
+    const vendor = String(model.id).split("/")[0] || "otros";
+    (groups[vendor] ||= []).push(model);
+  }
+  for (const vendor of Object.keys(groups).sort()) {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = vendor;
+    for (const model of groups[vendor]) {
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.name || model.id;
+      optgroup.append(option);
+    }
+    select.append(optgroup);
+  }
+  // Conserva la selección previa si sigue disponible; si no, toma la primera.
+  const available = new Set(source.map((m) => m.id));
+  if (!state.openrouterModel || !available.has(state.openrouterModel)) {
+    state.openrouterModel = source[0]?.id || "";
+  }
+  select.value = state.openrouterModel;
 }
 
 function resizePromptInput() {
@@ -2208,6 +2278,7 @@ async function sendPrompt(event) {
     const { response, data } = await requestChat({
         accessCode: cleanAccessCode(state.accessCode),
         provider,
+        model: provider === "openrouter" ? state.openrouterModel : undefined,
         prompt: enrichedPrompt,
         history: state.history.slice(0, -1),
         webSearch,
@@ -2428,6 +2499,14 @@ function bindEvents() {
     });
     syncProviderCards();
     closeSidebar();
+  });
+  elements.openrouterModel?.addEventListener("change", (event) => {
+    state.openrouterModel = event.target.value;
+    trackEvent("openrouter_model_selected", { model: state.openrouterModel });
+  });
+  elements.openrouterShowAll?.addEventListener("change", (event) => {
+    state.openrouterShowAll = event.target.checked;
+    renderOpenRouterOptions();
   });
   elements.languageButtons.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));

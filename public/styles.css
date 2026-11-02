@@ -2756,3 +2756,32 @@ img {
 .quota-upgrade-btn:hover {
   opacity: 0.9;
 }
+
+/* Selector de modelo de OpenRouter (modo una sola consulta) */
+.openrouter-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  flex-wrap: wrap;
+}
+.openrouter-model-select {
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 420px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255,255,255,.14));
+  background: var(--surface-2, rgba(255,255,255,.04));
+  color: inherit;
+  font-size: .85rem;
+}
+.openrouter-allmodels {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .8rem;
+  opacity: .8;
+  white-space: nowrap;
+  cursor: pointer;
+}

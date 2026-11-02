@@ -89,7 +89,7 @@ function normalizeAttachments(input) {
 }
 
 function providerCapabilities(providerId) {
-  const openaiModel = cleanModel(process.env.OPENAI_MODEL, "gpt-6.1-sol");
+  const openaiModel = cleanModel(process.env.OPENAI_MODEL, "gpt-6-luna");
   const claudeModel = cleanModel(process.env.ANTHROPIC_MODEL, "claude-sonnet-5-5");
   const geminiModel = cleanModel(process.env.GEMINI_MODEL, "gemini-3.8-flash");
   if (providerId === "openai") {
@@ -594,7 +594,7 @@ const providers = {
       callOpenAICompatible(
         OPENAI_CHAT_ENDPOINT,
         process.env.OPENAI_API_KEY,
-        cleanModel(process.env.OPENAI_MODEL, "gpt-6.1-sol"),
+        cleanModel(process.env.OPENAI_MODEL, "gpt-6-luna"),
         payload
       )
   },

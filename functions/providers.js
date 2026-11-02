@@ -348,6 +348,12 @@ async function callOpenAICompatible(
   }
 
   const streaming = typeof payload.onDelta === "function";
+  // Los modelos GPT-5/GPT-6 y la serie o de OpenAI usan max_completion_tokens
+  // en lugar de max_tokens y solo aceptan la temperatura por defecto. DeepSeek
+  // y otros compatibles conservan el comportamiento clásico.
+  const isOpenAI = /api\.openai\.com/i.test(endpoint);
+  const reasoningModel = /gpt-(?:5|6)|\bo[1-9]/i.test(model);
+  const tokenCap = payload.documentRequest ? 5000 : 1200;
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -357,8 +363,10 @@ async function callOpenAICompatible(
     body: JSON.stringify({
       model,
       messages: buildMessages(payload),
-      temperature: 0.7,
-      max_tokens: payload.documentRequest ? 5000 : 1200,
+      ...(reasoningModel ? {} : { temperature: 0.7 }),
+      ...(isOpenAI
+        ? { max_completion_tokens: reasoningModel ? tokenCap * 3 : tokenCap }
+        : { max_tokens: tokenCap }),
       ...(streaming ? { stream: true } : {}),
       ...extraBody
     })

@@ -89,11 +89,11 @@ function normalizeAttachments(input) {
 }
 
 function providerCapabilities(providerId) {
-  const openaiModel = cleanModel(process.env.OPENAI_MODEL, "gpt-4o-mini");
+  const openaiModel = cleanModel(process.env.OPENAI_MODEL, "gpt-6.1-sol");
   const claudeModel = cleanModel(process.env.ANTHROPIC_MODEL, "claude-sonnet-5-5");
   const geminiModel = cleanModel(process.env.GEMINI_MODEL, "gemini-3.8-flash");
   if (providerId === "openai") {
-    const multimodal = /gpt-(?:4o|4\.1|4\.5|5)|\bo[1-9]/i.test(openaiModel);
+    const multimodal = /gpt-(?:4o|4\.1|4\.5|5|6)|\bo[1-9]/i.test(openaiModel);
     return { files: true, images: multimodal, pdf: multimodal, videos: false };
   }
   if (providerId === "claude") {
@@ -586,7 +586,7 @@ const providers = {
       callOpenAICompatible(
         OPENAI_CHAT_ENDPOINT,
         process.env.OPENAI_API_KEY,
-        cleanModel(process.env.OPENAI_MODEL, "gpt-4o-mini"),
+        cleanModel(process.env.OPENAI_MODEL, "gpt-6.1-sol"),
         payload
       )
   },

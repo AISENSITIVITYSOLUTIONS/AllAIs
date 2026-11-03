@@ -121,33 +121,33 @@
     {
       id: "lanzamiento", name: "Lanzamiento", price: 99, trial3: true,
       features: {
-        es: ["300 al mes + 10 al día", "Los 4 modelos", "Precio de lanzamiento"],
-        en: ["300/mo + 10/day", "All 4 models", "Launch price"],
-        fr: ["300/mois + 10/jour", "Les 4 modèles", "Prix de lancement"]
+        es: ["300 al mes + 10 al día", "Los 4 modelos", "10 imágenes/mes", "Precio de lanzamiento"],
+        en: ["300/mo + 10/day", "All 4 models", "10 images/mo", "Launch price"],
+        fr: ["300/mois + 10/jour", "Les 4 modèles", "10 images/mois", "Prix de lancement"]
       }
     },
     {
       id: "profesional_1", name: "Esencial", price: 199, trial3: true,
       features: {
-        es: ["300 consultas al mes", "Los 4 modelos", "Historial de conversación"],
-        en: ["300 queries/month", "All 4 models", "Conversation history"],
-        fr: ["300 requêtes/mois", "Les 4 modèles", "Historique des conversations"]
+        es: ["300 consultas al mes", "Los 4 modelos", "15 imágenes + 30 s de video/mes", "Historial de conversación"],
+        en: ["300 queries/month", "All 4 models", "15 images + 30 s video/mo", "Conversation history"],
+        fr: ["300 requêtes/mois", "Les 4 modèles", "15 images + 30 s vidéo/mois", "Historique des conversations"]
       }
     },
     {
       id: "profesional_2", name: "Profesional", price: 299, trial3: true, recommended: true,
       features: {
-        es: ["600 consultas al mes", "Los 4 modelos", "Soporte prioritario"],
-        en: ["600 queries/month", "All 4 models", "Priority support"],
-        fr: ["600 requêtes/mois", "Les 4 modèles", "Support prioritaire"]
+        es: ["600 consultas al mes", "Los 4 modelos", "40 imágenes + 60 s de video/mes", "Soporte prioritario"],
+        en: ["600 queries/month", "All 4 models", "40 images + 60 s video/mo", "Priority support"],
+        fr: ["600 requêtes/mois", "Les 4 modèles", "40 images + 60 s vidéo/mois", "Support prioritaire"]
       }
     },
     {
       id: "profesional_3", name: "Avanzado", price: 399, trial3: true,
       features: {
-        es: ["1 000 consultas al mes", "Los 4 modelos", "Soporte prioritario"],
-        en: ["1,000 queries/month", "All 4 models", "Priority support"],
-        fr: ["1 000 requêtes/mois", "Les 4 modèles", "Support prioritaire"]
+        es: ["1 000 consultas al mes", "Los 4 modelos", "80 imágenes + 90 s de video/mes", "Soporte prioritario"],
+        en: ["1,000 queries/month", "All 4 models", "80 images + 90 s video/mo", "Priority support"],
+        fr: ["1 000 requêtes/mois", "Les 4 modèles", "80 images + 90 s vidéo/mois", "Support prioritaire"]
       }
     }
   ];

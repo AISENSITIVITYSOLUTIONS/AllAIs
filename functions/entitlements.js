@@ -47,6 +47,8 @@ function freeEntitlement(freeDaily, reason) {
     status: "none",
     monthly: null,
     daily: freeDaily,
+    images: 0,
+    videoSeconds: 0,
     cycle: null
   };
 }
@@ -121,6 +123,8 @@ async function resolveEntitlement({
     status,
     monthly: plan.monthly,
     daily: plan.daily,
+    images: plan.images || 0,
+    videoSeconds: plan.videoSeconds || 0,
     cycle
   };
 }

@@ -156,11 +156,62 @@ async function refundUsage(refs, increment, units = 1) {
   }
 }
 
+// ---------- Cuota de media (imágenes y segundos de video) ----------
+// Bolsas mensuales separadas del texto, por ciclo de facturación. kind: "image"
+// (amount = número de imágenes) o "video" (amount = segundos). Devuelve el ref y
+// el campo para poder reembolsar si la generación falla.
+function mediaDocId(uid, cycleKey) {
+  return `${uid}_${cycleKey}`;
+}
+
+async function consumeMedia({ db, uid, entitlement, kind, amount = 1, now = new Date() }) {
+  const limit = kind === "video" ? Number(entitlement.videoSeconds) : Number(entitlement.images);
+  const field = kind === "video" ? "videoSecondsUsed" : "imagesUsed";
+  if (!uid || !entitlement.cycle) {
+    return { ok: false, reason: "no_cycle", limit: limit || 0, used: 0, remaining: 0 };
+  }
+  if (!(Number.isFinite(limit) && limit > 0)) {
+    return { ok: false, reason: "not_in_plan", limit: 0, used: 0, remaining: 0 };
+  }
+  const ref = db.collection("mediaUsage").doc(mediaDocId(uid, entitlement.cycle.key));
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    const used = snap.exists ? Number(snap.get(field) || 0) : 0;
+    if (used + amount > limit) {
+      return { ok: false, reason: "exhausted", limit, used, remaining: Math.max(0, limit - used) };
+    }
+    transaction.set(ref, {
+      uid,
+      cycleKey: entitlement.cycle.key,
+      [field]: used + amount,
+      updatedAt: now.toISOString()
+    }, { merge: true });
+    return { ok: true, reason: null, limit, used: used + amount, remaining: limit - (used + amount), ref, field, amount };
+  });
+}
+
+async function readMedia({ db, uid, entitlement }) {
+  const images = { limit: Number(entitlement.images) || 0, used: 0 };
+  const video = { limit: Number(entitlement.videoSeconds) || 0, used: 0 };
+  if (uid && entitlement.cycle) {
+    const snap = await db.collection("mediaUsage").doc(mediaDocId(uid, entitlement.cycle.key)).get();
+    if (snap.exists) {
+      images.used = Number(snap.get("imagesUsed") || 0);
+      video.used = Number(snap.get("videoSecondsUsed") || 0);
+    }
+  }
+  images.remaining = Math.max(0, images.limit - images.used);
+  video.remaining = Math.max(0, video.limit - video.used);
+  return { images, video };
+}
+
 module.exports = {
   dailyDocId,
   cycleDocId,
   usageRefs,
   readUsage,
   consumeUsage,
-  refundUsage
+  refundUsage,
+  consumeMedia,
+  readMedia
 };

@@ -21,6 +21,8 @@ const PLANS = {
     amountEnv: "MP_PRICE_LANZAMIENTO_MXN",
     monthly: 300,
     daily: 10,
+    images: 10,
+    videoSeconds: 0,
     promo: true
   },
   profesional_1: {
@@ -30,6 +32,8 @@ const PLANS = {
     amountEnv: "MP_PRICE_PROFESIONAL_1_MXN",
     monthly: 300,
     daily: null,
+    images: 15,
+    videoSeconds: 30,
     promo: false
   },
   profesional_2: {
@@ -39,6 +43,8 @@ const PLANS = {
     amountEnv: "MP_PRICE_PROFESIONAL_2_MXN",
     monthly: 600,
     daily: null,
+    images: 40,
+    videoSeconds: 60,
     promo: false
   },
   profesional_3: {
@@ -48,6 +54,8 @@ const PLANS = {
     amountEnv: "MP_PRICE_PROFESIONAL_3_MXN",
     monthly: 1000,
     daily: null,
+    images: 80,
+    videoSeconds: 90,
     promo: false
   }
 };

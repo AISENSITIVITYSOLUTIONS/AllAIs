@@ -20,7 +20,7 @@ const PLANS = [
     features: [
       "300 consultas al mes",
       "Chat con los modelos habilitados",
-      "Redacción, resumen y traducción",
+      "15 imágenes + 30 s de video al mes",
       "Carga individual de documentos",
       "Exportación en PDF"
     ]
@@ -35,7 +35,7 @@ const PLANS = [
     features: [
       "600 consultas al mes",
       "Todo lo incluido en Esencial",
-      "Búsqueda web con fuentes",
+      "40 imágenes + 60 s de video al mes",
       "Comparación de dos modelos",
       "Exportación en Word y PDF"
     ]
@@ -49,9 +49,9 @@ const PLANS = [
     features: [
       "1000 consultas al mes",
       "Todo lo incluido en Profesional",
+      "80 imágenes + 90 s de video al mes",
       "Comparación de tres modelos",
-      "Análisis de CSV y JSON",
-      "Trabajo con varios documentos"
+      "Análisis de CSV y JSON"
     ]
   }
 ];
@@ -70,7 +70,7 @@ const LAUNCH = {
   id: "lanzamiento",
   name: "Lanzamiento",
   price: 99,
-  note: "300 consultas al mes, 10 al día.",
+  note: "300 consultas al mes, 10 al día · 10 imágenes al mes.",
   deadline: "Precio válido si contratas antes del 10 de noviembre de 2026."
 };
 

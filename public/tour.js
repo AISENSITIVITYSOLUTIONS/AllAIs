@@ -557,7 +557,9 @@
   // --------------------------------------------------------------------------
   //  Expose API y auto-arranque
   // --------------------------------------------------------------------------
-  window.AllAIsTour = { start, close, reset };
+  window.AllAIsTour = { start, close, reset, updateLang: () => {
+    if (reopenChip) reopenChip.textContent = COPY[detectLang()].reopen;
+  } };
 
   if (document.readyState === "complete" || document.readyState === "interactive") {
     maybeAutoStart();

@@ -3,6 +3,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getAppCheck } = require("firebase-admin/app-check");
+const { getStorage } = require("firebase-admin/storage");
 const crypto = require("node:crypto");
 const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
@@ -394,6 +395,43 @@ async function refundQuota(refs, units = 1) {
   await refundUsage([].concat(refs || []).filter(Boolean), FieldValue.increment, units);
 }
 
+// ---------- Generación de imágenes ----------
+const OPENAI_IMAGES_ENDPOINT = "https://api.openai.com/v1/images/generations";
+// Costo en unidades de cuota por imagen. La Tarea 3 fija el crédito real por plan.
+const IMAGE_QUERY_COST = 1;
+
+// Genera una imagen con la API de OpenAI y la guarda en Firebase Storage con un
+// token de descarga (URL durable). Devuelve la URL y el modelo usado.
+async function generateImage(prompt, holder) {
+  const apiKey = String(process.env.OPENAI_API_KEY || "").replace(/^﻿/, "").trim();
+  if (!apiKey) throw new Error("Falta configurar OPENAI_API_KEY.");
+  const model = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-2").trim();
+  const resp = await fetch(OPENAI_IMAGES_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, prompt: String(prompt).slice(0, 4000), size: "1024x1024", n: 1 })
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}: ${text.slice(0, 300)}`);
+  }
+  const data = await resp.json();
+  const b64 = data?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("La respuesta no incluyó imagen.");
+  const buffer = Buffer.from(b64, "base64");
+  const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
+  const safeHolder = String(holder || "anon").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+  const token = crypto.randomUUID();
+  const objectPath = `images/${safeHolder}/${Date.now()}-${token.slice(0, 8)}.png`;
+  const file = bucket.file(objectPath);
+  await file.save(buffer, {
+    resumable: false,
+    metadata: { contentType: "image/png", metadata: { firebaseStorageDownloadTokens: token } }
+  });
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+  return { url, model };
+}
+
 // Consulta a Mercado Pago usada para revalidar una suscripción guardada.
 // Se carga de forma diferida para no acoplar el arranque de este módulo.
 async function verifyPreapproval(preapprovalId) {
@@ -540,7 +578,11 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         const messages = rawMessages
           .filter((m) => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string")
           .slice(-100)
-          .map((m) => ({ role: m.role, content: String(m.content).slice(0, 20000), meta: cleanText(m.meta, 120) }));
+          .map((m) => {
+            const out = { role: m.role, content: String(m.content).slice(0, 20000), meta: cleanText(m.meta, 120) };
+            if (typeof m.image === "string" && /^https:\/\//.test(m.image)) out.image = m.image.slice(0, 1000);
+            return out;
+          });
         if (!messages.length) {
           sendJson(response, 400, { error: "Nada que guardar." });
           return;
@@ -663,6 +705,73 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         message: ok ? "Access granted" : (reasons[access?.reason] || "Invalid access code"),
         ...(ok && access.limit ? { quota: await readQuota(`code:${access.code}`, access.limit) } : {})
       });
+      return;
+    }
+
+    // Generación de imágenes: genera con OpenAI, guarda en Storage y devuelve la URL.
+    if (path === "/image" && request.method === "POST") {
+      if (!(await appCheckOk(request))) {
+        sendJson(response, 401, { error: "App verification failed.", code: "APP_CHECK" });
+        return;
+      }
+      if (await rateLimited(request, "chat")) {
+        sendJson(response, 429, { error: "Demasiados intentos. Espera unos minutos.", code: "RATE_LIMIT" });
+        return;
+      }
+      const emailUser = await verifyEmailUser(request);
+      const codeAccess = emailUser ? null : await resolveCode(request.body?.accessCode);
+      if (!emailUser && !codeAccess) {
+        sendJson(response, 401, { error: "Unauthorized", code: "UNAUTHORIZED" });
+        return;
+      }
+      const prompt = String(request.body?.prompt || "").trim();
+      if (!prompt) {
+        sendJson(response, 400, { error: "Describe la imagen que quieres generar." });
+        return;
+      }
+
+      // Cuota: una imagen consume IMAGE_QUERY_COST unidades (cuenta) o 1 (código).
+      const entitlement = emailUser ? await entitlementFor(emailUser) : null;
+      let quotaRef = [];
+      let quota = null;
+      let refundUnits = 1;
+      if (emailUser) {
+        const consumed = await consumeUsage({ db, holder: emailUser.email, uid: emailUser.uid, entitlement, units: IMAGE_QUERY_COST });
+        if (!consumed.ok) {
+          const monthly = consumed.blockedBy === "monthly";
+          sendJson(response, 429, {
+            error: monthly ? "Monthly query limit reached." : "Daily query limit reached.",
+            code: monthly ? "MONTHLY_LIMIT" : "DAILY_LIMIT",
+            plan: entitlement.planId,
+            quota: consumed.quota
+          });
+          return;
+        }
+        quotaRef = consumed.refs;
+        quota = consumed.quota;
+        refundUnits = IMAGE_QUERY_COST;
+      } else if (codeAccess.limit) {
+        const consumed = await consumeQuota(`code:${codeAccess.code}`, codeAccess.limit);
+        if (!consumed.ok) {
+          sendJson(response, 429, { error: "Daily query limit reached.", code: "DAILY_LIMIT", quota: consumed.quota });
+          return;
+        }
+        quotaRef = [consumed.ref];
+        quota = consumed.quota;
+      }
+
+      try {
+        const holder = emailUser ? emailUser.uid : `code_${codeAccess.code}`;
+        const { url, model } = await generateImage(prompt, holder);
+        sendJson(response, 200, { url, model, ...(quota ? { quota } : {}) });
+        await logToSheet("imagen", { email: emailUser?.email || "", codigo: codeAccess?.code || "", modelo: model, resultado: "ok", restantes: quota ? quota.remaining : "" });
+      } catch (error) {
+        await refundQuota(quotaRef, refundUnits);
+        if (quota) quota.remaining += refundUnits;
+        console.error("AllAIs image error", { message: error?.message });
+        sendJson(response, 502, { error: "No se pudo generar la imagen. Intenta de nuevo.", ...(quota ? { quota } : {}) });
+        await logToSheet("imagen", { email: emailUser?.email || "", codigo: codeAccess?.code || "", resultado: "error", detalle: cleanText(error?.message, 200) });
+      }
       return;
     }
 

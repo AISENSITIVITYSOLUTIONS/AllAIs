@@ -1,3 +1,5 @@
+const { PLANS } = require("./plans");
+
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const GEMINI_ENDPOINT_BASE =
@@ -733,6 +735,64 @@ async function callProvider(providerId, payload) {
   return provider.call(payload);
 }
 
+// ---------- Niveles de modelo de OpenRouter por costo ----------
+// Se clasifica cada modelo por su precio de salida (USD por token). Los planes
+// superiores desbloquean niveles más caros; así se protege la cuota del abuso de
+// modelos premium. Umbrales editables:
+//   economy  : salida <= $1 por millón de tokens  (0.000001)
+//   standard : salida <= $10 por millón           (0.00001)
+//   premium  : más caro que eso (Astra, Opus, Grok, Terra Pro, etc.)
+const OPENROUTER_TIER_THRESHOLDS = { economy: 0.000001, standard: 0.00001 };
+const TIER_RANK = { economy: 0, standard: 1, premium: 2 };
+
+// Nivel máximo permitido por plan. "free" = sin suscripción. Editable: es la
+// decisión de negocio sobre qué plan desbloquea qué modelos.
+const PLAN_MAX_TIER = {
+  free: "economy",
+  lanzamiento: "standard",
+  profesional_1: "standard", // Esencial
+  profesional_2: "premium",  // Profesional
+  profesional_3: "premium"   // Avanzado
+};
+const PLAN_ORDER = ["free", "lanzamiento", "profesional_1", "profesional_2", "profesional_3"];
+
+function tierFromPricing(completion) {
+  const price = Number(completion);
+  if (!Number.isFinite(price)) return "premium"; // sin precio conocido: nivel alto por prudencia
+  if (price <= OPENROUTER_TIER_THRESHOLDS.economy) return "economy";
+  if (price <= OPENROUTER_TIER_THRESHOLDS.standard) return "standard";
+  return "premium";
+}
+
+// Primer plan (en orden ascendente) cuyo nivel máximo cubre el tier dado.
+function minPlanForTier(tier) {
+  for (const planId of PLAN_ORDER) {
+    if (TIER_RANK[PLAN_MAX_TIER[planId]] >= TIER_RANK[tier]) return planId;
+  }
+  return "profesional_3";
+}
+
+async function openRouterModelTier(modelId) {
+  const models = await listOpenRouterModels();
+  const found = models.find((m) => m.id === modelId);
+  return tierFromPricing(found?.pricing?.completion);
+}
+
+// ¿El plan del usuario permite este modelo? planId null => free.
+async function openRouterModelAllowed(modelId, planId) {
+  const tier = await openRouterModelTier(modelId);
+  const key = planId && PLAN_MAX_TIER[planId] ? planId : "free";
+  const allowed = TIER_RANK[tier] <= TIER_RANK[PLAN_MAX_TIER[key]];
+  return { allowed, tier, requiredPlan: allowed ? null : minPlanForTier(tier) };
+}
+
+// Metadatos para que el frontend bloquee modelos según el plan del usuario.
+function openRouterPlanMeta() {
+  const planNames = { free: "Gratis" };
+  for (const [id, plan] of Object.entries(PLANS)) planNames[id] = plan.name;
+  return { tierRank: TIER_RANK, planMaxTier: PLAN_MAX_TIER, planOrder: PLAN_ORDER, planNames };
+}
+
 // Catálogo de modelos de OpenRouter para poblar el selector del frontend.
 // Se cachea en memoria del contenedor para no golpear la API en cada carga.
 let openRouterModelsCache = { at: 0, data: [] };
@@ -785,7 +845,8 @@ async function listOpenRouterModels() {
       pricing: m.pricing
         ? { prompt: m.pricing.prompt, completion: m.pricing.completion }
         : null,
-      curated: CURATED_OPENROUTER.has(m.id)
+      curated: CURATED_OPENROUTER.has(m.id),
+      tier: tierFromPricing(m.pricing?.completion)
     }))
     .filter((m) => m.id);
   openRouterModelsCache = { at: now, data: models };
@@ -797,5 +858,7 @@ module.exports = {
   callProvider,
   getProvider,
   buildChatEndpoint,
-  listOpenRouterModels
+  listOpenRouterModels,
+  openRouterModelAllowed,
+  openRouterPlanMeta
 };

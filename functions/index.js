@@ -4,7 +4,7 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getAppCheck } = require("firebase-admin/app-check");
 const crypto = require("node:crypto");
-const { listProviders, callProvider, listOpenRouterModels } = require("./providers");
+const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement } = require("./entitlements");
 const { consumeUsage, readUsage, refundUsage } = require("./quota");
@@ -493,10 +493,10 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     // lista vacía si no hay clave o si OpenRouter no responde (no rompe la app).
     if (path === "/models/openrouter" && request.method === "GET") {
       try {
-        sendJson(response, 200, { models: await listOpenRouterModels() });
+        sendJson(response, 200, { models: await listOpenRouterModels(), plans: openRouterPlanMeta() });
       } catch (error) {
         console.error("AllAIs openrouter models", { message: error?.message });
-        sendJson(response, 200, { models: [], error: "No se pudo obtener el catálogo." });
+        sendJson(response, 200, { models: [], plans: openRouterPlanMeta(), error: "No se pudo obtener el catálogo." });
       }
       return;
     }
@@ -620,15 +620,34 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         return;
       }
 
+      // Modelo opcional por petición: lo honra el proveedor openrouter (formato
+      // proveedor/modelo). Los demás proveedores usan su modelo fijo e ignoran esto.
+      const model = typeof request.body?.model === "string" ? request.body.model.trim().slice(0, 120) : "";
+
+      // El plan se resuelve en el servidor a partir del uid del token: nunca se
+      // toma de la petición, porque el navegador podría declarar cualquier plan.
+      const entitlement = emailUser ? await entitlementFor(emailUser) : null;
+
+      // Gate de modelo OpenRouter por plan: protege la cuota de los modelos premium.
+      // Se bloquea antes de consumir cuota si el modelo excede el nivel del plan.
+      if (provider === "openrouter" && model) {
+        const gate = await openRouterModelAllowed(model, entitlement?.planId || null);
+        if (!gate.allowed) {
+          sendJson(response, 403, {
+            error: "Este modelo requiere un plan superior. Elige otro modelo o mejora tu plan.",
+            code: "MODEL_PLAN",
+            requiredPlan: gate.requiredPlan,
+            tier: gate.tier
+          });
+          return;
+        }
+      }
+
       // El código maestro no tiene límite; las cuentas y los códigos promocionales sí.
-      //
-      // La cuenta con suscripción usa el cupo de su plan. El plan se resuelve en el
-      // servidor a partir del uid del token: nunca se toma de la petición, porque el
-      // navegador podría declarar cualquier plan.
+      // La cuenta con suscripción usa el cupo de su plan.
       let quotaRef = [];
       let quota = null;
       if (emailUser) {
-        const entitlement = await entitlementFor(emailUser);
         const consumed = await consumeUsage({
           db,
           holder: emailUser.email,
@@ -658,9 +677,6 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       const startedAt = Date.now();
-      // Modelo opcional por petición: lo honra el proveedor openrouter (formato
-      // proveedor/modelo). Los demás proveedores usan su modelo fijo e ignoran esto.
-      const model = typeof request.body?.model === "string" ? request.body.model.trim().slice(0, 120) : "";
       const payload = { prompt, system, temperature, history, documentRequest, documentTransform, webSearch, attachments, model };
 
       // Respuesta en tiempo real: líneas JSON (NDJSON) con fragmentos de texto y un cierre con metadatos.

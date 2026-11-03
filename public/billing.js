@@ -207,7 +207,11 @@ const STYLES = `
 .billing-head .billing-sub { margin: 0; font-size: 1rem; color: var(--bp-ink-2); }
 .billing-head .billing-status { min-height: 1.1em; margin: 10px 0 0; font-size: .92rem; font-weight: 600; color: var(--bp-blue-3); }
 
-.billing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: stretch; }
+.billing-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: stretch; }
+.billing-card--launch { border-color: rgba(234,179,8,.35); background: rgba(234,179,8,.06); }
+.billing-ribbon--launch { background: rgba(234,179,8,.18); color: #fde68a; border-color: rgba(234,179,8,.35); }
+.billing-launch-deadline { margin: 0 0 14px; font-size: .82rem; color: var(--bp-ink-2); line-height: 1.4; }
+.billing-launch-deadline b { color: #fde68a; }
 
 .billing-card {
   box-sizing: border-box;
@@ -339,13 +343,13 @@ const STYLES = `
 .billing-foot p { margin: 0 0 5px; font-size: .82rem; line-height: 1.45; color: var(--bp-ink-3); }
 .billing-foot p:last-child { margin: 0; }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .billing-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
   .billing-grid { grid-template-columns: 1fr; }
   .billing-card.is-featured { order: -1; margin: 0; }
   .billing-sheet { padding: 28px 20px 20px; border-radius: 20px; }
-  .billing-launch { flex-wrap: wrap; gap: 12px; }
-  .billing-launch .billing-launch-note { flex-basis: 100%; padding-left: 0; border-left: 0; }
-  .billing-launch .billing-choose { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .billing-cta { animation: none; }
@@ -733,30 +737,43 @@ function planCard(plan) {
   return card;
 }
 
-function launchStrip() {
-  const strip = node("div", { class: "billing-launch", "data-plan": LAUNCH.id });
-  strip.append(node("span", { class: "billing-rocket", "aria-hidden": "true" }, "🚀"));
+function launchCard() {
+  const card = node("article", { class: "billing-card billing-card--launch", "data-plan": LAUNCH.id });
+  card.append(node("p", { class: "billing-ribbon billing-ribbon--launch" }, "🚀 Lanzamiento"));
 
-  const title = node("p", { class: "billing-launch-title" });
-  title.append(document.createTextNode(`${LAUNCH.name} · `));
-  const amount = node("b", {}, `$${LAUNCH.price}`);
-  amount.append(node("small", {}, " MXN/mes"));
-  title.append(amount);
+  const top = node("div", { class: "billing-card-top" });
+  const heading = node("div", {});
+  heading.append(node("h3", {}, LAUNCH.name));
+  heading.append(node("p", { class: "billing-tagline" }, "Precio promocional de arranque."));
+  top.append(heading);
 
-  // Tarea #4b — trial-with-card: el banner de Lanzamiento registra la tarjeta
-  // hoy pero no cobra hasta el 11-nov. El texto lo dice con claridad para que
-  // nadie se sorprenda en el checkout de Mercado Pago.
-  const note = node("p", { class: "billing-launch-note" });
-  note.append(
-    document.createTextNode(`${LAUNCH.note} Registras tu tarjeta ahora y `),
-    node("b", {}, "no se cobra nada hasta el 11 de noviembre de 2026"),
-    document.createTextNode(". Cancela antes sin ningún cargo.")
-  );
+  const price = node("div", { class: "billing-price" });
+  price.append(node("strong", {}, `$${LAUNCH.price}`), node("span", {}, "MXN / mes"));
 
-  const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, "Empezar prueba gratis");
+  const list = node("ul", { class: "billing-features" });
+  [
+    "300 consultas al mes, 10 al día",
+    "Los 4 modelos principales",
+    "10 imágenes al mes",
+    "Soporte por correo"
+  ].forEach((feature) => {
+    const item = node("li", {});
+    item.append(checkIcon(), node("span", {}, feature));
+    list.append(item);
+  });
+
+  const deadline = node("p", { class: "billing-launch-deadline" });
+  deadline.innerHTML = `Registras tu tarjeta ahora y <b>no se cobra nada hasta el 11 de noviembre de 2026</b>. Cancela antes sin ningún cargo.`;
+
+  const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, `Elegir ${LAUNCH.name}`);
   choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose, { launchFreeTrial: true }));
 
-  strip.append(title, note, choose);
+  card.append(top, price, list, deadline, choose);
+  return card;
+}
+
+function launchStrip() {
+  const strip = node("div", { class: "billing-launch", "data-plan": LAUNCH.id, hidden: "" });
   return strip;
 }
 
@@ -781,6 +798,7 @@ function buildDialog() {
   head.append(title, sub, status);
 
   const grid = node("div", { class: "billing-grid" });
+  if (promoOpen()) grid.append(launchCard());
   PLANS.forEach((plan) => grid.append(planCard(plan)));
 
   const manage = node("div", { class: "billing-manage", id: "billingManage", hidden: "" });
@@ -792,7 +810,6 @@ function buildDialog() {
 
   const foot = node("footer", { class: "billing-foot" });
   foot.append(
-    node("p", {}, "Propuesta comercial: funciones y cupos sujetos a validación técnica y de costos."),
     node("p", {}, "Cada consulta corresponde a una respuesta de un modelo; la búsqueda web y los archivos tienen límites propios."),
     node("p", {}, "Pagos seguros con PayPal o Mercado Pago.")
   );
@@ -823,11 +840,10 @@ function resetCancel() {
 function paintPlans({ signedIn = true } = {}) {
   const live = signedIn && hasLiveSubscription();
 
-  // Terminada la promoción, Lanzamiento desaparece de la pantalla. Quien ya lo
-  // tenga contratado lo sigue viendo, porque conserva su precio.
+  // Terminada la promoción, Lanzamiento desaparece. Quien ya lo tenga contratado lo sigue viendo.
   const launchVisible = promoOpen() || (live && current.plan === LAUNCH.id);
-  const strip = document.querySelector(`.billing-launch[data-plan="${LAUNCH.id}"]`);
-  if (strip) strip.hidden = !launchVisible;
+  const launchCard = document.querySelector(`[data-plan="${LAUNCH.id}"]`);
+  if (launchCard) launchCard.hidden = !launchVisible;
 
   ALL_PLANS.forEach((plan) => {
     const button = document.querySelector(`[data-choose="${plan.id}"]`);

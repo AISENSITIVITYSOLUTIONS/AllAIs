@@ -2242,6 +2242,7 @@ async function login() {
   state.quota = data.quota || null;
   renderQuota();
   renderAccount();
+  loadConversations();
   window.setTimeout(closeAuthDialog, 700);
   clearAccessError();
   elements.accessCodeInput.value = "";
@@ -2415,15 +2416,41 @@ function resetChat() {
 }
 
 // ---------- Historial de conversaciones ----------
-// Solo para usuarios con cuenta (email): el uid identifica el historial antes y
-// después de pagar. En demo por código no se persiste en el servidor.
-function historyEnabled() {
-  return state.authMode === "email" && Boolean(state.email);
+// Usuarios con cuenta (email): se persiste en el servidor por uid, y sobrevive
+// antes y después de pagar. Demo por código: se guarda en el navegador
+// (localStorage), por dispositivo, sin identidad en el servidor.
+function historyMode() {
+  if (state.authMode === "email" && state.email) return "server";
+  if (state.accessCode) return "local";
+  return "none";
+}
+
+const LOCAL_HISTORY_KEY = "allais_history_v1";
+function readLocalConversations() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writeLocalConversations(list) {
+  try {
+    const trimmed = list
+      .slice()
+      .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+      .slice(0, 50);
+    localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(trimmed));
+  } catch { /* almacenamiento lleno o no disponible */ }
 }
 
 async function loadConversations() {
-  if (elements.historyPanel) elements.historyPanel.hidden = !historyEnabled();
-  if (!historyEnabled()) { state.conversations = []; renderHistoryList(); return; }
+  const mode = historyMode();
+  if (elements.historyPanel) elements.historyPanel.hidden = mode === "none";
+  if (mode === "none") { state.conversations = []; renderHistoryList(); return; }
+  if (mode === "local") {
+    state.conversations = readLocalConversations().map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt }));
+    renderHistoryList();
+    return;
+  }
   try {
     const response = await fetch(`${API_BASE}/conversations`, { headers: await authHeaders() });
     const data = await readApiJson(response);
@@ -2466,33 +2493,46 @@ function renderHistoryList() {
   }
 }
 
+function replayConversation(id, messages) {
+  state.history = [];
+  state.conversationMessages = [];
+  state.currentConversationId = id;
+  elements.conversation.innerHTML = "";
+  for (const message of messages || []) {
+    addMessage(message.role, message.content, message.meta || "", [], true);
+    appendHistory(message.role, message.content);
+  }
+  setConversationState();
+  scrollConversationToEnd();
+  renderHistoryList();
+  closeSidebar();
+}
+
 async function openConversation(id) {
+  if (historyMode() === "local") {
+    const conv = readLocalConversations().find((c) => c.id === id);
+    if (conv) replayConversation(id, conv.messages || []);
+    return;
+  }
   try {
     const response = await fetch(`${API_BASE}/conversations/${encodeURIComponent(id)}`, { headers: await authHeaders() });
     const data = await readApiJson(response);
     if (!response.ok) throw new Error(data.error || "No se pudo abrir la conversación.");
-    state.history = [];
-    state.conversationMessages = [];
-    state.currentConversationId = id;
-    elements.conversation.innerHTML = "";
-    for (const message of data.messages || []) {
-      addMessage(message.role, message.content, message.meta || "", [], true);
-      appendHistory(message.role, message.content);
-    }
-    setConversationState();
-    scrollConversationToEnd();
-    renderHistoryList();
-    closeSidebar();
+    replayConversation(id, data.messages || []);
   } catch (error) {
     console.warn("AllAIs abrir conversación", error);
   }
 }
 
 async function deleteConversation(id) {
-  try {
-    await fetch(`${API_BASE}/conversations/${encodeURIComponent(id)}`, { method: "DELETE", headers: await authHeaders() });
-  } catch (error) {
-    console.warn("AllAIs borrar conversación", error);
+  if (historyMode() === "local") {
+    writeLocalConversations(readLocalConversations().filter((c) => c.id !== id));
+  } else {
+    try {
+      await fetch(`${API_BASE}/conversations/${encodeURIComponent(id)}`, { method: "DELETE", headers: await authHeaders() });
+    } catch (error) {
+      console.warn("AllAIs borrar conversación", error);
+    }
   }
   if (state.currentConversationId === id) { state.currentConversationId = null; }
   state.conversations = state.conversations.filter((conv) => conv.id !== id);
@@ -2500,11 +2540,24 @@ async function deleteConversation(id) {
 }
 
 async function saveCurrentConversation() {
-  if (!historyEnabled()) return;
+  const mode = historyMode();
+  if (mode === "none") return;
   const messages = state.conversationMessages.slice(-100);
   if (!messages.length) return;
   const firstUser = messages.find((m) => m.role === "user");
   const title = (firstUser?.content || messages[0].content || "Consulta").slice(0, 80);
+
+  if (mode === "local") {
+    const list = readLocalConversations();
+    if (!state.currentConversationId) state.currentConversationId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const entry = { id: state.currentConversationId, title, updatedAt: new Date().toISOString(), messages };
+    const idx = list.findIndex((c) => c.id === entry.id);
+    if (idx >= 0) list[idx] = entry; else list.push(entry);
+    writeLocalConversations(list);
+    loadConversations();
+    return;
+  }
+
   try {
     const response = await fetch(`${API_BASE}/conversations`, {
       method: "POST",

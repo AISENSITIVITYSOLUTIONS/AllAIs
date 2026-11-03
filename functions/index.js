@@ -1188,7 +1188,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         return;
       }
 
-      const PROVIDER_NAMES = { openai: "ChatGPT", claude: "Claude", gemini: "Gemini", deepseek: "DeepSeek", qwen: "Qwen", openrouter: "OpenRouter" };
+      const PROVIDER_NAMES = { openai: "ChatGPT", claude: "Claude", gemini: "Gemini", deepseek: "DeepSeek", qwen: "Qwen", openrouter: "Toda la IA" };
       const bloques = clean
         .map((a, i) => `--- Respuesta ${i + 1} (${PROVIDER_NAMES[a.provider] || a.provider}) ---\n${a.text}`)
         .join("\n\n");

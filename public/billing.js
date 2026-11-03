@@ -36,7 +36,8 @@ const PLANS = [
       "600 consultas al mes",
       "Todo lo incluido en Esencial",
       "40 imágenes + 60 s de video al mes",
-      "Comparación de dos modelos",
+      "20 modelos de IA de OpenRouter",
+      "Comparación de cuatro modelos",
       "Exportación en Word y PDF"
     ]
   },
@@ -50,7 +51,8 @@ const PLANS = [
       "1000 consultas al mes",
       "Todo lo incluido en Profesional",
       "80 imágenes + 90 s de video al mes",
-      "Comparación de tres modelos",
+      "20 modelos de IA de OpenRouter",
+      "Comparación de cuatro modelos",
       "Análisis de CSV y JSON"
     ]
   }

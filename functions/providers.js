@@ -643,7 +643,7 @@ const providers = {
   },
 
   openrouter: {
-    name: "OpenRouter",
+    name: "Toda la IA",
     description:
       "Puerta de enlace a cientos de modelos de distintos proveedores con una sola clave.",
     // El modelo es por petición (payload.model, formato proveedor/modelo). Si no

@@ -18,7 +18,8 @@ const state = {
   openrouterTierMeta: null,
   conversations: [],
   currentConversationId: null,
-  conversationMessages: []
+  conversationMessages: [],
+  imageMode: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -47,6 +48,8 @@ const elements = {
   openrouterShowAll: $("#openrouterShowAll"),
   historyPanel: $("#historyPanel"),
   historyList: $("#historyList"),
+  imageModeToggle: $("#imageModeToggle"),
+  imageModeLabel: $("#imageModeLabel"),
   taskGrid: $("#taskGrid"),
   taskMoreButton: $("#taskMoreButton"),
   taskMoreMenu: $("#taskMoreMenu"),
@@ -142,6 +145,10 @@ const translations = {
     historyEmpty: "Aún no tienes consultas guardadas.",
     untitledChat: "Consulta",
     deleteChat: "Borrar conversación",
+    imageMode: "Imagen",
+    imageTaskLabel: "Imagen",
+    imageGenerating: "Generando imagen…",
+    imageNeedPrompt: "Describe la imagen que quieres generar.",
     access: "Acceso",
     accessPlaceholder: "tu@email.com",
     accessLabel: "Registra tu email para acceso",
@@ -332,6 +339,10 @@ const translations = {
     historyEmpty: "No saved requests yet.",
     untitledChat: "Request",
     deleteChat: "Delete conversation",
+    imageMode: "Image",
+    imageTaskLabel: "Image",
+    imageGenerating: "Generating image…",
+    imageNeedPrompt: "Describe the image you want to generate.",
     access: "Access",
     accessPlaceholder: "you@email.com",
     accessLabel: "Register your email to get access",
@@ -522,6 +533,10 @@ const translations = {
     historyEmpty: "Aucune demande enregistrée.",
     untitledChat: "Demande",
     deleteChat: "Supprimer la conversation",
+    imageMode: "Image",
+    imageTaskLabel: "Image",
+    imageGenerating: "Génération de l'image…",
+    imageNeedPrompt: "Décrivez l'image à générer.",
     access: "Accès",
     accessPlaceholder: "vous@email.com",
     accessLabel: "Inscrivez votre email pour accéder",
@@ -912,6 +927,7 @@ function setLanguage(language) {
   if (elements.topbarNewChatLabel) elements.topbarNewChatLabel.textContent = copy.newChat;
   if (elements.providersPanelLabel) elements.providersPanelLabel.textContent = copy.providers;
   if (elements.historyPanelLabel) elements.historyPanelLabel.textContent = copy.history;
+  if (elements.imageModeLabel) elements.imageModeLabel.textContent = copy.imageMode;
   renderHistoryList();
   if (elements.platformPanelLabel) elements.platformPanelLabel.textContent = copy.platform;
   if (elements.platformDescription) elements.platformDescription.textContent = copy.platformDescription;
@@ -1769,11 +1785,13 @@ function addPromptNavigationControls(role, content, responseContent, bubble) {
   bubble.append(returnButton);
 }
 
-function addMessage(role, content, meta = "", sources = [], persist = true) {
+function addMessage(role, content, meta = "", sources = [], persist = true, imageUrl = "") {
   // Acumula el mensaje para guardar la conversación. Los mensajes de error o de
   // cuota pasan persist=false y no se guardan.
   if (persist && (role === "user" || role === "assistant")) {
-    state.conversationMessages.push({ role, content: String(content || ""), meta: String(meta || "") });
+    const entry = { role, content: String(content || ""), meta: String(meta || "") };
+    if (imageUrl) entry.image = imageUrl;
+    state.conversationMessages.push(entry);
   }
   const article = document.createElement("article");
   article.className = `message ${role}`;
@@ -1814,6 +1832,15 @@ function addMessage(role, content, meta = "", sources = [], persist = true) {
     const paragraph = document.createElement("p");
     paragraph.textContent = content;
     responseContent.append(paragraph);
+  }
+
+  if (imageUrl) {
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.alt = meta || "imagen";
+    img.loading = "lazy";
+    img.className = "generated-image";
+    responseContent.append(img);
   }
 
   const copyButton = document.createElement("button");
@@ -2250,6 +2277,53 @@ async function login() {
   setSessionState(true, copy.welcome);
 }
 
+// Genera una imagen a partir del prompt, la muestra y la guarda en el historial.
+async function generateImageFlow(prompt) {
+  const copy = translations[state.language];
+  if (!prompt) { window.alert(copy.imageNeedPrompt); return; }
+  addMessage("user", prompt, copy.imageTaskLabel);
+  appendHistory("user", prompt);
+  elements.promptInput.value = "";
+  resizePromptInput();
+  elements.sendButton.disabled = true;
+  elements.attachButton.disabled = true;
+  const prevLabel = elements.sendLabel.textContent;
+  elements.sendLabel.textContent = copy.processing;
+  const pending = addPendingMessage(copy.imageGenerating);
+  trackEvent("image_requested", { language: state.language });
+  try {
+    const response = await fetch(`${API_BASE}/image`, {
+      method: "POST",
+      headers: await authHeaders(),
+      body: JSON.stringify({ accessCode: cleanAccessCode(state.accessCode), prompt })
+    });
+    const data = await readApiJson(response);
+    pending.remove();
+    if (data.quota) { state.quota = data.quota; renderQuota(); }
+    if (response.status === 429) {
+      const monthly = data.code === "MONTHLY_LIMIT";
+      state.plan = typeof data.plan !== "undefined" ? data.plan : state.plan;
+      const text = monthly ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
+      const rendered = addMessage("assistant", text(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs", [], false);
+      appendUpgradeOffer(rendered?.responseContent, data.plan, monthly);
+      state.history.pop();
+      return;
+    }
+    if (!response.ok || !data.url) throw new Error(data.error || "No se pudo generar la imagen.");
+    addMessage("assistant", "", `${copy.imageTaskLabel} · ${data.model || "gpt-image"}`, [], true, data.url);
+    appendHistory("assistant", `[imagen] ${prompt}`);
+    saveCurrentConversation();
+  } catch (error) {
+    pending.remove();
+    addMessage("assistant", error.message, copy.error, [], false);
+    state.history.pop();
+  } finally {
+    elements.sendButton.disabled = false;
+    elements.attachButton.disabled = false;
+    elements.sendLabel.textContent = prevLabel;
+  }
+}
+
 async function sendPrompt(event) {
   event.preventDefault();
 
@@ -2274,6 +2348,13 @@ async function sendPrompt(event) {
     appendUpgradeOffer(rendered?.responseContent, state.plan, isMonthly);
     return;
   }
+
+  // Modo imagen: genera una imagen con el prompt en vez de enviar al modelo de texto.
+  if (state.imageMode) {
+    await generateImageFlow(prompt);
+    return;
+  }
+
   const capabilities = selectedCapabilities();
   if (attachmentsAtSend.some((item) => (item.kind === "image" && !capabilities.images) || (item.kind === "pdf" && !capabilities.pdf) || (item.kind === "video" && !capabilities.videos))) {
     trackEvent("app_error", {
@@ -2476,7 +2557,7 @@ async function openConversation(id) {
     state.currentConversationId = id;
     elements.conversation.innerHTML = "";
     for (const message of data.messages || []) {
-      addMessage(message.role, message.content, message.meta || "", [], true);
+      addMessage(message.role, message.content, message.meta || "", [], true, message.image || "");
       appendHistory(message.role, message.content);
     }
     setConversationState();
@@ -2684,6 +2765,10 @@ function bindEvents() {
   elements.openrouterShowAll?.addEventListener("change", (event) => {
     state.openrouterShowAll = event.target.checked;
     renderOpenRouterOptions();
+  });
+  elements.imageModeToggle?.addEventListener("change", (event) => {
+    state.imageMode = event.target.checked;
+    trackEvent("image_mode_toggled", { on: state.imageMode });
   });
   elements.languageButtons.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));

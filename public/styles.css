@@ -2807,3 +2807,13 @@ img {
 .history-item:hover .history-delete { opacity: .7; }
 .history-item .history-delete:hover { opacity: 1; }
 .history-empty { font-size: .8rem; opacity: .6; padding: 6px 8px; }
+
+/* Imagen generada en el chat */
+.generated-image {
+  display: block;
+  max-width: min(100%, 420px);
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin-top: 4px;
+}

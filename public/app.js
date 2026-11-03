@@ -14,7 +14,8 @@ const state = {
   openrouterModels: [],
   openrouterModel: "",
   openrouterShowAll: false,
-  openrouterLoaded: false
+  openrouterLoaded: false,
+  openrouterTierMeta: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -2051,6 +2052,7 @@ async function ensureOpenRouterModels() {
     const response = await fetch(`${API_BASE}/models/openrouter`);
     const data = await readApiJson(response);
     state.openrouterModels = Array.isArray(data.models) ? data.models : [];
+    state.openrouterTierMeta = data.plans || null;
   } catch (error) {
     console.warn("AllAIs no pudo cargar el catálogo de OpenRouter", error);
     state.openrouterModels = [];
@@ -2058,7 +2060,28 @@ async function ensureOpenRouterModels() {
   renderOpenRouterOptions();
 }
 
+// Devuelve true si el plan del usuario permite el modelo (según su nivel/tier).
+function openrouterModelLocked(model) {
+  const meta = state.openrouterTierMeta;
+  if (!meta || !model?.tier) return false; // sin metadatos no se bloquea nada
+  const planId = state.plan && meta.planMaxTier[state.plan] ? state.plan : "free";
+  return (meta.tierRank[model.tier] ?? 0) > (meta.tierRank[meta.planMaxTier[planId]] ?? 0);
+}
+
+// Nombre del plan mínimo que desbloquea el tier del modelo.
+function requiredPlanName(model) {
+  const meta = state.openrouterTierMeta;
+  if (!meta) return "";
+  for (const planId of meta.planOrder) {
+    if ((meta.tierRank[meta.planMaxTier[planId]] ?? 0) >= (meta.tierRank[model.tier] ?? 0)) {
+      return meta.planNames[planId] || planId;
+    }
+  }
+  return "";
+}
+
 // Llena el <select> con la lista curada (o todos) agrupada por proveedor.
+// Los modelos por encima del plan del usuario se muestran bloqueados.
 function renderOpenRouterOptions() {
   const select = elements.openrouterModel;
   if (!select) return;
@@ -2077,15 +2100,21 @@ function renderOpenRouterOptions() {
     for (const model of groups[vendor]) {
       const option = document.createElement("option");
       option.value = model.id;
-      option.textContent = model.name || model.id;
+      const locked = openrouterModelLocked(model);
+      option.textContent = locked
+        ? `🔒 ${model.name || model.id} — Plan ${requiredPlanName(model)}`
+        : (model.name || model.id);
+      option.disabled = locked;
       optgroup.append(option);
     }
     select.append(optgroup);
   }
-  // Conserva la selección previa si sigue disponible; si no, toma la primera.
-  const available = new Set(source.map((m) => m.id));
-  if (!state.openrouterModel || !available.has(state.openrouterModel)) {
-    state.openrouterModel = source[0]?.id || "";
+  // Conserva la selección previa si sigue disponible y permitida; si no, toma el
+  // primer modelo no bloqueado.
+  const allowed = source.filter((m) => !openrouterModelLocked(m));
+  const allowedIds = new Set(allowed.map((m) => m.id));
+  if (!state.openrouterModel || !allowedIds.has(state.openrouterModel)) {
+    state.openrouterModel = allowed[0]?.id || source[0]?.id || "";
   }
   select.value = state.openrouterModel;
 }

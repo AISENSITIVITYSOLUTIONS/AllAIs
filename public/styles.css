@@ -2785,3 +2785,25 @@ img {
   white-space: nowrap;
   cursor: pointer;
 }
+
+/* Panel de historial de conversaciones */
+.history-list { display: flex; flex-direction: column; gap: 2px; }
+.history-item {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; text-align: left;
+  padding: 7px 8px; border-radius: 8px;
+  background: transparent; border: 0; color: inherit;
+  cursor: pointer; font-size: .85rem;
+}
+.history-item:hover { background: var(--surface-2, rgba(255,255,255,.05)); }
+.history-item.active { background: var(--surface-2, rgba(255,255,255,.08)); }
+.history-item .history-title {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.history-item .history-delete {
+  flex: none; opacity: 0; border: 0; background: transparent;
+  color: inherit; cursor: pointer; font-size: .9rem; line-height: 1; padding: 2px 4px;
+}
+.history-item:hover .history-delete { opacity: .7; }
+.history-item .history-delete:hover { opacity: 1; }
+.history-empty { font-size: .8rem; opacity: .6; padding: 6px 8px; }

@@ -506,6 +506,80 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       return;
     }
 
+    // ---------- Historial de conversaciones por usuario ----------
+    // Persistencia por uid: el mismo usuario conserva su historial antes y
+    // después de suscribirse. El navegador nunca toca Firestore directamente;
+    // todo pasa por aquí con el token verificado.
+    if (path === "/conversations" || path.startsWith("/conversations/")) {
+      if (!(await appCheckOk(request))) {
+        sendJson(response, 401, { error: "App verification failed.", code: "APP_CHECK" });
+        return;
+      }
+      const user = await verifyEmailUser(request);
+      if (!user) {
+        sendJson(response, 401, { error: "Inicia sesión para guardar tu historial.", code: "UNAUTHORIZED" });
+        return;
+      }
+      const items = db.collection("conversations").doc(user.uid).collection("items");
+
+      // Listar (id, título y fecha) — las 50 más recientes.
+      if (path === "/conversations" && request.method === "GET") {
+        const snap = await items.orderBy("updatedAt", "desc").limit(50).get();
+        const list = snap.docs.map((doc) => {
+          const d = doc.data();
+          return { id: doc.id, title: d.title || "Consulta", updatedAt: toIso(d.updatedAt) };
+        });
+        sendJson(response, 200, { conversations: list });
+        return;
+      }
+
+      // Crear o actualizar una conversación.
+      if (path === "/conversations" && request.method === "POST") {
+        const title = cleanText(request.body?.title, 200) || "Consulta";
+        const rawMessages = Array.isArray(request.body?.messages) ? request.body.messages : [];
+        const messages = rawMessages
+          .filter((m) => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string")
+          .slice(-100)
+          .map((m) => ({ role: m.role, content: String(m.content).slice(0, 20000), meta: cleanText(m.meta, 120) }));
+        if (!messages.length) {
+          sendJson(response, 400, { error: "Nada que guardar." });
+          return;
+        }
+        const now = FieldValue.serverTimestamp();
+        const requestedId = cleanText(request.body?.id, 80);
+        let ref;
+        if (requestedId) {
+          ref = items.doc(requestedId);
+          await ref.set({ title, messages, updatedAt: now }, { merge: true });
+        } else {
+          ref = items.doc();
+          await ref.set({ title, messages, createdAt: now, updatedAt: now });
+        }
+        // Poda: conservar solo las 50 más recientes.
+        const extra = await items.orderBy("updatedAt", "desc").offset(50).limit(25).get();
+        await Promise.all(extra.docs.map((doc) => doc.ref.delete()));
+        sendJson(response, 200, { id: ref.id });
+        return;
+      }
+
+      // Obtener o borrar una conversación por id.
+      const convId = path.startsWith("/conversations/") ? path.slice("/conversations/".length) : "";
+      if (convId && request.method === "GET") {
+        const doc = await items.doc(convId).get();
+        if (!doc.exists) { sendJson(response, 404, { error: "No encontrada." }); return; }
+        const d = doc.data();
+        sendJson(response, 200, { id: doc.id, title: d.title || "Consulta", messages: Array.isArray(d.messages) ? d.messages : [] });
+        return;
+      }
+      if (convId && request.method === "DELETE") {
+        await items.doc(convId).delete();
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+      sendJson(response, 404, { error: "Ruta no encontrada." });
+      return;
+    }
+
     if ((path === "/session" || path === "/chat") && request.method === "POST") {
       if (!(await appCheckOk(request))) {
         sendJson(response, 401, { ok: false, error: "App verification failed.", code: "APP_CHECK" });

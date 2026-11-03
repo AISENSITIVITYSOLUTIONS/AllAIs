@@ -8,7 +8,7 @@ const crypto = require("node:crypto");
 const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement } = require("./entitlements");
-const { consumeUsage, readUsage, refundUsage } = require("./quota");
+const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
 
 initializeApp();
 const db = getFirestore();
@@ -397,8 +397,6 @@ async function refundQuota(refs, units = 1) {
 
 // ---------- Generación de imágenes ----------
 const OPENAI_IMAGES_ENDPOINT = "https://api.openai.com/v1/images/generations";
-// Costo en unidades de cuota por imagen. La Tarea 3 fija el crédito real por plan.
-const IMAGE_QUERY_COST = 1;
 
 // Genera una imagen con la API de OpenAI y la guarda en Firebase Storage con un
 // token de descarga (URL durable). Devuelve la URL y el modelo usado.
@@ -453,7 +451,8 @@ async function entitlementFor(user) {
 async function accountQuota(user) {
   const entitlement = await entitlementFor(user);
   const quota = await readUsage({ db, holder: user.email, uid: user.uid, entitlement });
-  return { quota, plan: entitlement.planId, planName: entitlement.planName };
+  const media = await readMedia({ db, uid: user.uid, entitlement });
+  return { quota, plan: entitlement.planId, planName: entitlement.planName, media };
 }
 
 // ---------- Lista de espera "Reservar mi lugar" (Tarea #6) ----------
@@ -718,10 +717,10 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         sendJson(response, 429, { error: "Demasiados intentos. Espera unos minutos.", code: "RATE_LIMIT" });
         return;
       }
+      // Las imágenes son una prestación de plan: requieren cuenta con suscripción.
       const emailUser = await verifyEmailUser(request);
-      const codeAccess = emailUser ? null : await resolveCode(request.body?.accessCode);
-      if (!emailUser && !codeAccess) {
-        sendJson(response, 401, { error: "Unauthorized", code: "UNAUTHORIZED" });
+      if (!emailUser) {
+        sendJson(response, 401, { error: "Inicia sesión para generar imágenes.", code: "UNAUTHORIZED" });
         return;
       }
       const prompt = String(request.body?.prompt || "").trim();
@@ -730,47 +729,35 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         return;
       }
 
-      // Cuota: una imagen consume IMAGE_QUERY_COST unidades (cuenta) o 1 (código).
-      const entitlement = emailUser ? await entitlementFor(emailUser) : null;
-      let quotaRef = [];
-      let quota = null;
-      let refundUnits = 1;
-      if (emailUser) {
-        const consumed = await consumeUsage({ db, holder: emailUser.email, uid: emailUser.uid, entitlement, units: IMAGE_QUERY_COST });
-        if (!consumed.ok) {
-          const monthly = consumed.blockedBy === "monthly";
-          sendJson(response, 429, {
-            error: monthly ? "Monthly query limit reached." : "Daily query limit reached.",
-            code: monthly ? "MONTHLY_LIMIT" : "DAILY_LIMIT",
-            plan: entitlement.planId,
-            quota: consumed.quota
-          });
-          return;
-        }
-        quotaRef = consumed.refs;
-        quota = consumed.quota;
-        refundUnits = IMAGE_QUERY_COST;
-      } else if (codeAccess.limit) {
-        const consumed = await consumeQuota(`code:${codeAccess.code}`, codeAccess.limit);
-        if (!consumed.ok) {
-          sendJson(response, 429, { error: "Daily query limit reached.", code: "DAILY_LIMIT", quota: consumed.quota });
-          return;
-        }
-        quotaRef = [consumed.ref];
-        quota = consumed.quota;
+      // Cuota de imágenes: bolsa mensual del plan (una imagen = 1).
+      const entitlement = await entitlementFor(emailUser);
+      const consumed = await consumeMedia({ db, uid: emailUser.uid, entitlement, kind: "image", amount: 1 });
+      if (!consumed.ok) {
+        const upgrade = consumed.reason === "not_in_plan" || consumed.reason === "no_cycle";
+        sendJson(response, upgrade ? 403 : 429, {
+          error: upgrade
+            ? "La generación de imágenes está disponible desde el plan Esencial."
+            : "Agotaste tus imágenes de este mes. Mejora de plan o espera al siguiente ciclo.",
+          code: upgrade ? "MEDIA_PLAN" : "MEDIA_LIMIT",
+          plan: entitlement.planId,
+          media: { images: { limit: consumed.limit, used: consumed.used, remaining: consumed.remaining } }
+        });
+        return;
       }
 
       try {
-        const holder = emailUser ? emailUser.uid : `code_${codeAccess.code}`;
-        const { url, model } = await generateImage(prompt, holder);
-        sendJson(response, 200, { url, model, ...(quota ? { quota } : {}) });
-        await logToSheet("imagen", { email: emailUser?.email || "", codigo: codeAccess?.code || "", modelo: model, resultado: "ok", restantes: quota ? quota.remaining : "" });
+        const { url, model } = await generateImage(prompt, emailUser.uid);
+        sendJson(response, 200, {
+          url, model,
+          media: { images: { limit: consumed.limit, used: consumed.used, remaining: consumed.remaining } }
+        });
+        await logToSheet("imagen", { email: emailUser.email, modelo: model, resultado: "ok", restantes: consumed.remaining });
       } catch (error) {
-        await refundQuota(quotaRef, refundUnits);
-        if (quota) quota.remaining += refundUnits;
+        // Reembolsa el crédito de imagen consumido.
+        if (consumed.ref) await consumed.ref.set({ [consumed.field]: FieldValue.increment(-consumed.amount) }, { merge: true });
         console.error("AllAIs image error", { message: error?.message });
-        sendJson(response, 502, { error: "No se pudo generar la imagen. Intenta de nuevo.", ...(quota ? { quota } : {}) });
-        await logToSheet("imagen", { email: emailUser?.email || "", codigo: codeAccess?.code || "", resultado: "error", detalle: cleanText(error?.message, 200) });
+        sendJson(response, 502, { error: "No se pudo generar la imagen. Intenta de nuevo." });
+        await logToSheet("imagen", { email: emailUser.email, resultado: "error", detalle: cleanText(error?.message, 200) });
       }
       return;
     }

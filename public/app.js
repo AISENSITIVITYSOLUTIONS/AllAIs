@@ -15,7 +15,10 @@ const state = {
   openrouterModel: "",
   openrouterShowAll: false,
   openrouterLoaded: false,
-  openrouterTierMeta: null
+  openrouterTierMeta: null,
+  conversations: [],
+  currentConversationId: null,
+  conversationMessages: []
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -42,6 +45,8 @@ const elements = {
   openrouterModelRow: $("#openrouterModelRow"),
   openrouterModel: $("#openrouterModel"),
   openrouterShowAll: $("#openrouterShowAll"),
+  historyPanel: $("#historyPanel"),
+  historyList: $("#historyList"),
   taskGrid: $("#taskGrid"),
   taskMoreButton: $("#taskMoreButton"),
   taskMoreMenu: $("#taskMoreMenu"),
@@ -94,6 +99,7 @@ const elements = {
   languageButtons: document.querySelectorAll(".language-button"),
   accessPanelLabel: $("#accessPanelLabel"),
   providersPanelLabel: $("#providersPanelLabel"),
+  historyPanelLabel: $("#historyPanelLabel"),
   platformPanelLabel: $("#platformPanelLabel"),
   platformDescription: $("#platformDescription"),
   heroTitle: $("#heroTitle"),
@@ -132,6 +138,10 @@ const secondaryTaskIds = new Set(["summarize", "strategy", "code", "other"]);
 const translations = {
   es: {
     newChat: "Nueva consulta",
+    history: "Historial",
+    historyEmpty: "Aún no tienes consultas guardadas.",
+    untitledChat: "Consulta",
+    deleteChat: "Borrar conversación",
     access: "Acceso",
     accessPlaceholder: "tu@email.com",
     accessLabel: "Registra tu email para acceso",
@@ -318,6 +328,10 @@ const translations = {
   },
   en: {
     newChat: "New request",
+    history: "History",
+    historyEmpty: "No saved requests yet.",
+    untitledChat: "Request",
+    deleteChat: "Delete conversation",
     access: "Access",
     accessPlaceholder: "you@email.com",
     accessLabel: "Register your email to get access",
@@ -504,6 +518,10 @@ const translations = {
   },
   fr: {
     newChat: "Nouvelle demande",
+    history: "Historique",
+    historyEmpty: "Aucune demande enregistrée.",
+    untitledChat: "Demande",
+    deleteChat: "Supprimer la conversation",
     access: "Accès",
     accessPlaceholder: "vous@email.com",
     accessLabel: "Inscrivez votre email pour accéder",
@@ -893,6 +911,8 @@ function setLanguage(language) {
   `;
   if (elements.topbarNewChatLabel) elements.topbarNewChatLabel.textContent = copy.newChat;
   if (elements.providersPanelLabel) elements.providersPanelLabel.textContent = copy.providers;
+  if (elements.historyPanelLabel) elements.historyPanelLabel.textContent = copy.history;
+  renderHistoryList();
   if (elements.platformPanelLabel) elements.platformPanelLabel.textContent = copy.platform;
   if (elements.platformDescription) elements.platformDescription.textContent = copy.platformDescription;
   if (elements.heroTitle) elements.heroTitle.textContent = copy.heroTitle;
@@ -951,7 +971,12 @@ function logout() {
   state.authMode = "";
   state.email = "";
   state.quota = null;
+  state.conversations = [];
+  state.currentConversationId = null;
+  state.conversationMessages = [];
   clearAccessError();
+  if (elements.historyPanel) elements.historyPanel.hidden = true;
+  renderHistoryList();
   elements.loginBox.classList.remove("authenticated");
   elements.accessCodeInput.value = "";
   elements.loginButton.textContent = copy.enter;
@@ -1274,6 +1299,7 @@ async function startEmailSession() {
   renderAccount();
   setSessionState(true, copy.signedInAs(state.email));
   trackEvent("email_session_started");
+  loadConversations();
   closeAuthDialog();
   // Tarea #4b parte 2: tras iniciar sesión, si el usuario no tiene plan elegido
   // mostramos la pantalla "Elige tu plan". El gate consulta /billing/status y
@@ -1743,7 +1769,12 @@ function addPromptNavigationControls(role, content, responseContent, bubble) {
   bubble.append(returnButton);
 }
 
-function addMessage(role, content, meta = "", sources = []) {
+function addMessage(role, content, meta = "", sources = [], persist = true) {
+  // Acumula el mensaje para guardar la conversación. Los mensajes de error o de
+  // cuota pasan persist=false y no se guardan.
+  if (persist && (role === "user" || role === "assistant")) {
+    state.conversationMessages.push({ role, content: String(content || ""), meta: String(meta || "") });
+  }
   const article = document.createElement("article");
   article.className = `message ${role}`;
 
@@ -2239,7 +2270,7 @@ async function sendPrompt(event) {
     // El cupo agotado puede ser el del periodo o el del día: el backend indica cuál manda.
     const isMonthly = state.quota.scope === "monthly";
     const text = isMonthly ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
-    const rendered = addMessage("assistant", text(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs");
+    const rendered = addMessage("assistant", text(state.quota.limit, formatResetTime(state.quota.resetAt)), "AllAIs", [], false);
     appendUpgradeOffer(rendered?.responseContent, state.plan, isMonthly);
     return;
   }
@@ -2332,7 +2363,7 @@ async function sendPrompt(event) {
       // Mantener state.plan sincronizado con la respuesta autoritativa del backend.
       state.plan = typeof data.plan !== "undefined" ? data.plan : state.plan;
       const text = monthly ? copy.quotaExhaustedMonthly : copy.quotaExhausted;
-      const rendered = addMessage("assistant", text(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs");
+      const rendered = addMessage("assistant", text(data.quota?.limit || 10, formatResetTime(data.quota?.resetAt)), "AllAIs", [], false);
       appendUpgradeOffer(rendered?.responseContent, data.plan, monthly);
       state.history.pop();
       return;
@@ -2346,6 +2377,7 @@ async function sendPrompt(event) {
     if (requestedWord) downloadBlob(makeDocxBlob(answer, data.sources || []), `${fileBaseName}-allais.docx`);
     if (requestedPdf && pendingPdfWindow) printAsPdf(rendered.responseContent, data.sources || [], pendingPdfWindow);
     appendHistory("assistant", answer);
+    saveCurrentConversation();
     state.attachments = state.attachments.filter((item) => !attachmentsAtSend.some((sent) => sent.id === item.id));
     renderAttachmentList();
   } catch (error) {
@@ -2356,7 +2388,7 @@ async function sendPrompt(event) {
       error_area: "chat_request",
       status: "failed"
     });
-    addMessage("assistant", error.message, copy.error);
+    addMessage("assistant", error.message, copy.error, [], false);
     state.history.pop();
     addRetryOptions(provider, prompt);
   } finally {
@@ -2370,13 +2402,128 @@ async function sendPrompt(event) {
 function resetChat() {
   state.history = [];
   state.attachments = [];
+  state.currentConversationId = null;
+  state.conversationMessages = [];
   renderAttachmentList();
   elements.webSearchToggle.checked = false;
   elements.conversation.innerHTML = "";
   setConversationState();
   updateTaskUI("write");
+  renderHistoryList();
   closeSidebar();
   elements.promptInput.focus({ preventScroll: true });
+}
+
+// ---------- Historial de conversaciones ----------
+// Solo para usuarios con cuenta (email): el uid identifica el historial antes y
+// después de pagar. En demo por código no se persiste en el servidor.
+function historyEnabled() {
+  return state.authMode === "email" && Boolean(state.email);
+}
+
+async function loadConversations() {
+  if (elements.historyPanel) elements.historyPanel.hidden = !historyEnabled();
+  if (!historyEnabled()) { state.conversations = []; renderHistoryList(); return; }
+  try {
+    const response = await fetch(`${API_BASE}/conversations`, { headers: await authHeaders() });
+    const data = await readApiJson(response);
+    state.conversations = Array.isArray(data.conversations) ? data.conversations : [];
+  } catch (error) {
+    console.warn("AllAIs no pudo cargar el historial", error);
+    state.conversations = [];
+  }
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const list = elements.historyList;
+  if (!list) return;
+  list.innerHTML = "";
+  if (!state.conversations.length) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = translations[state.language].historyEmpty;
+    list.append(empty);
+    return;
+  }
+  for (const conv of state.conversations) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "history-item" + (conv.id === state.currentConversationId ? " active" : "");
+    const title = document.createElement("span");
+    title.className = "history-title";
+    title.textContent = conv.title || translations[state.language].untitledChat;
+    item.append(title);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "history-delete";
+    del.setAttribute("aria-label", translations[state.language].deleteChat);
+    del.textContent = "×";
+    del.addEventListener("click", (event) => { event.stopPropagation(); deleteConversation(conv.id); });
+    item.append(del);
+    item.addEventListener("click", () => openConversation(conv.id));
+    list.append(item);
+  }
+}
+
+async function openConversation(id) {
+  try {
+    const response = await fetch(`${API_BASE}/conversations/${encodeURIComponent(id)}`, { headers: await authHeaders() });
+    const data = await readApiJson(response);
+    if (!response.ok) throw new Error(data.error || "No se pudo abrir la conversación.");
+    state.history = [];
+    state.conversationMessages = [];
+    state.currentConversationId = id;
+    elements.conversation.innerHTML = "";
+    for (const message of data.messages || []) {
+      addMessage(message.role, message.content, message.meta || "", [], true);
+      appendHistory(message.role, message.content);
+    }
+    setConversationState();
+    scrollConversationToEnd();
+    renderHistoryList();
+    closeSidebar();
+  } catch (error) {
+    console.warn("AllAIs abrir conversación", error);
+  }
+}
+
+async function deleteConversation(id) {
+  try {
+    await fetch(`${API_BASE}/conversations/${encodeURIComponent(id)}`, { method: "DELETE", headers: await authHeaders() });
+  } catch (error) {
+    console.warn("AllAIs borrar conversación", error);
+  }
+  if (state.currentConversationId === id) { state.currentConversationId = null; }
+  state.conversations = state.conversations.filter((conv) => conv.id !== id);
+  renderHistoryList();
+}
+
+async function saveCurrentConversation() {
+  if (!historyEnabled()) return;
+  const messages = state.conversationMessages.slice(-100);
+  if (!messages.length) return;
+  const firstUser = messages.find((m) => m.role === "user");
+  const title = (firstUser?.content || messages[0].content || "Consulta").slice(0, 80);
+  try {
+    const response = await fetch(`${API_BASE}/conversations`, {
+      method: "POST",
+      headers: await authHeaders(),
+      body: JSON.stringify({ id: state.currentConversationId || undefined, title, messages })
+    });
+    const data = await readApiJson(response);
+    if (response.ok && data.id) {
+      const isNew = !state.currentConversationId;
+      state.currentConversationId = data.id;
+      if (isNew) loadConversations(); else {
+        const entry = state.conversations.find((conv) => conv.id === data.id);
+        if (entry) entry.title = title;
+        renderHistoryList();
+      }
+    }
+  } catch (error) {
+    console.warn("AllAIs guardar conversación", error);
+  }
 }
 
 function openSidebar() {

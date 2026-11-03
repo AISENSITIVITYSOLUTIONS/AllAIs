@@ -810,7 +810,6 @@ function buildDialog() {
 
   const foot = node("footer", { class: "billing-foot" });
   foot.append(
-    node("p", {}, "Propuesta comercial: funciones y cupos sujetos a validación técnica y de costos."),
     node("p", {}, "Cada consulta corresponde a una respuesta de un modelo; la búsqueda web y los archivos tienen límites propios."),
     node("p", {}, "Pagos seguros con PayPal o Mercado Pago.")
   );

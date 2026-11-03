@@ -395,6 +395,79 @@ async function refundQuota(refs, units = 1) {
   await refundUsage([].concat(refs || []).filter(Boolean), FieldValue.increment, units);
 }
 
+// ---------- Generación de videos (MiniMax H3-Lite / T2V-01-Director) ----------
+// API asíncrona: submit → poll hasta completar → download URL → subir a Storage.
+const MINIMAX_SUBMIT_URL = "https://api.minimaxi.chat/v1/video_generation";
+const MINIMAX_QUERY_URL  = "https://api.minimaxi.chat/v1/query/video_generation";
+const MINIMAX_FILE_URL   = "https://api.minimaxi.chat/v1/files/retrieve";
+const MINIMAX_MODEL      = process.env.MINIMAX_VIDEO_MODEL || "T2V-01-Director";
+// Duración fija por generación (segundos). MiniMax cobra por segundo de video.
+const VIDEO_DURATION_SECONDS = 5;
+// Tiempo máximo de espera para polling (ms) y intervalo entre intentos.
+const VIDEO_POLL_TIMEOUT_MS  = 180_000; // 3 min
+const VIDEO_POLL_INTERVAL_MS = 4_000;
+
+async function generateVideo(prompt, holder) {
+  const apiKey = String(process.env.MINIMAX_API_KEY || "").replace(/^﻿/, "").trim();
+  if (!apiKey) throw new Error("Falta configurar MINIMAX_API_KEY.");
+
+  // 1. Enviar tarea de generación
+  const submitResp = await fetch(MINIMAX_SUBMIT_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: MINIMAX_MODEL, prompt: String(prompt).slice(0, 2000), duration: VIDEO_DURATION_SECONDS })
+  });
+  if (!submitResp.ok) {
+    const text = await submitResp.text();
+    throw new Error(`MiniMax submit ${submitResp.status}: ${text.slice(0, 300)}`);
+  }
+  const submitData = await submitResp.json();
+  const taskId = submitData?.task_id;
+  if (!taskId) throw new Error(`MiniMax no devolvió task_id: ${JSON.stringify(submitData).slice(0, 200)}`);
+
+  // 2. Polling hasta que el video esté listo
+  const deadline = Date.now() + VIDEO_POLL_TIMEOUT_MS;
+  let fileId = null;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS));
+    const qResp = await fetch(`${MINIMAX_QUERY_URL}?task_id=${encodeURIComponent(taskId)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    if (!qResp.ok) continue;
+    const qData = await qResp.json();
+    const status = qData?.status;
+    if (status === "Success") { fileId = qData?.file_id; break; }
+    if (status === "Fail") throw new Error(`MiniMax generación fallida: ${JSON.stringify(qData).slice(0, 200)}`);
+    // "Processing" — seguir esperando
+  }
+  if (!fileId) throw new Error("Tiempo de espera agotado para la generación de video.");
+
+  // 3. Obtener URL de descarga
+  const fileResp = await fetch(`${MINIMAX_FILE_URL}?file_id=${encodeURIComponent(fileId)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` }
+  });
+  if (!fileResp.ok) throw new Error(`MiniMax retrieve file ${fileResp.status}`);
+  const fileData = await fileResp.json();
+  const downloadUrl = fileData?.file?.download_url;
+  if (!downloadUrl) throw new Error("MiniMax no devolvió download_url.");
+
+  // 4. Descargar el video y subirlo a Firebase Storage
+  const videoResp = await fetch(downloadUrl);
+  if (!videoResp.ok) throw new Error(`Error descargando video de MiniMax: ${videoResp.status}`);
+  const buffer = Buffer.from(await videoResp.arrayBuffer());
+  const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
+  const safeHolder = String(holder || "anon").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+  const token = crypto.randomUUID();
+  const objectPath = `videos/${safeHolder}/${Date.now()}-${token.slice(0, 8)}.mp4`;
+  const file = bucket.file(objectPath);
+  await file.save(buffer, {
+    resumable: false,
+    metadata: { contentType: "video/mp4", metadata: { firebaseStorageDownloadTokens: token } }
+  });
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+  return { url, model: MINIMAX_MODEL, durationSeconds: VIDEO_DURATION_SECONDS };
+}
+
 // ---------- Generación de imágenes ----------
 const OPENAI_IMAGES_ENDPOINT = "https://api.openai.com/v1/images/generations";
 
@@ -758,6 +831,59 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         console.error("AllAIs image error", { message: error?.message });
         sendJson(response, 502, { error: "No se pudo generar la imagen. Intenta de nuevo." });
         await logToSheet("imagen", { email: emailUser.email, resultado: "error", detalle: cleanText(error?.message, 200) });
+      }
+      return;
+    }
+
+    if (path === "/video" && request.method === "POST") {
+      if (!(await appCheckOk(request))) {
+        sendJson(response, 401, { error: "App verification failed.", code: "APP_CHECK" });
+        return;
+      }
+      if (await rateLimited(request, "chat")) {
+        sendJson(response, 429, { error: "Demasiados intentos. Espera unos minutos.", code: "RATE_LIMIT" });
+        return;
+      }
+      const emailUser = await verifyEmailUser(request);
+      if (!emailUser) {
+        sendJson(response, 401, { error: "Inicia sesión para generar videos.", code: "UNAUTHORIZED" });
+        return;
+      }
+      const prompt = String(request.body?.prompt || "").trim();
+      if (!prompt) {
+        sendJson(response, 400, { error: "Describe el video que quieres generar." });
+        return;
+      }
+
+      // Cuota de video: bolsa mensual del plan medida en segundos.
+      const entitlement = await entitlementFor(emailUser);
+      const consumed = await consumeMedia({ db, uid: emailUser.uid, entitlement, kind: "video", amount: VIDEO_DURATION_SECONDS });
+      if (!consumed.ok) {
+        const upgrade = consumed.reason === "not_in_plan" || consumed.reason === "no_cycle";
+        sendJson(response, upgrade ? 403 : 429, {
+          error: upgrade
+            ? "La generación de videos está disponible desde el plan Esencial."
+            : `Agotaste tus segundos de video este mes (${consumed.limit}s). Mejora de plan o espera al siguiente ciclo.`,
+          code: upgrade ? "MEDIA_PLAN" : "MEDIA_LIMIT",
+          plan: entitlement.planId,
+          media: { video: { limit: consumed.limit, used: consumed.used, remaining: consumed.remaining } }
+        });
+        return;
+      }
+
+      try {
+        const { url, model, durationSeconds } = await generateVideo(prompt, emailUser.uid);
+        sendJson(response, 200, {
+          url, model, durationSeconds,
+          media: { video: { limit: consumed.limit, used: consumed.used, remaining: consumed.remaining } }
+        });
+        await logToSheet("video", { email: emailUser.email, modelo: model, resultado: "ok", segundos: durationSeconds, restantes: consumed.remaining });
+      } catch (error) {
+        // Reembolsa los segundos consumidos.
+        if (consumed.ref) await consumed.ref.set({ [consumed.field]: FieldValue.increment(-consumed.amount) }, { merge: true });
+        console.error("AllAIs video error", { message: error?.message });
+        sendJson(response, 502, { error: "No se pudo generar el video. Intenta de nuevo." });
+        await logToSheet("video", { email: emailUser.email, resultado: "error", detalle: cleanText(error?.message, 200) });
       }
       return;
     }

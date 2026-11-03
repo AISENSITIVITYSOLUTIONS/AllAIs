@@ -19,7 +19,8 @@ const state = {
   conversations: [],
   currentConversationId: null,
   conversationMessages: [],
-  imageMode: false
+  imageMode: false,
+  videoMode: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -50,6 +51,8 @@ const elements = {
   historyList: $("#historyList"),
   imageModeToggle: $("#imageModeToggle"),
   imageModeLabel: $("#imageModeLabel"),
+  videoModeToggle: $("#videoModeToggle"),
+  videoModeLabel: $("#videoModeLabel"),
   taskGrid: $("#taskGrid"),
   taskMoreButton: $("#taskMoreButton"),
   taskMoreMenu: $("#taskMoreMenu"),
@@ -149,6 +152,10 @@ const translations = {
     imageTaskLabel: "Imagen",
     imageGenerating: "Generando imagen…",
     imageNeedPrompt: "Describe la imagen que quieres generar.",
+    videoMode: "Video",
+    videoTaskLabel: "Video",
+    videoGenerating: "Generando video… (puede tardar 1-2 min)",
+    videoNeedPrompt: "Describe el video que quieres generar.",
     access: "Acceso",
     accessPlaceholder: "tu@email.com",
     accessLabel: "Registra tu email para acceso",
@@ -343,6 +350,10 @@ const translations = {
     imageTaskLabel: "Image",
     imageGenerating: "Generating image…",
     imageNeedPrompt: "Describe the image you want to generate.",
+    videoMode: "Video",
+    videoTaskLabel: "Video",
+    videoGenerating: "Generating video… (may take 1-2 min)",
+    videoNeedPrompt: "Describe the video you want to generate.",
     access: "Access",
     accessPlaceholder: "you@email.com",
     accessLabel: "Register your email to get access",
@@ -537,6 +548,10 @@ const translations = {
     imageTaskLabel: "Image",
     imageGenerating: "Génération de l'image…",
     imageNeedPrompt: "Décrivez l'image à générer.",
+    videoMode: "Vidéo",
+    videoTaskLabel: "Vidéo",
+    videoGenerating: "Génération de la vidéo… (1-2 min)",
+    videoNeedPrompt: "Décrivez la vidéo à générer.",
     access: "Accès",
     accessPlaceholder: "vous@email.com",
     accessLabel: "Inscrivez votre email pour accéder",
@@ -928,6 +943,7 @@ function setLanguage(language) {
   if (elements.providersPanelLabel) elements.providersPanelLabel.textContent = copy.providers;
   if (elements.historyPanelLabel) elements.historyPanelLabel.textContent = copy.history;
   if (elements.imageModeLabel) elements.imageModeLabel.textContent = copy.imageMode;
+  if (elements.videoModeLabel) elements.videoModeLabel.textContent = copy.videoMode;
   renderHistoryList();
   if (elements.platformPanelLabel) elements.platformPanelLabel.textContent = copy.platform;
   if (elements.platformDescription) elements.platformDescription.textContent = copy.platformDescription;
@@ -1843,6 +1859,19 @@ function addMessage(role, content, meta = "", sources = [], persist = true, imag
     responseContent.append(img);
   }
 
+  if (arguments[6]) {
+    const videoUrl = arguments[6];
+    const videoEl = document.createElement("video");
+    videoEl.src = videoUrl;
+    videoEl.controls = true;
+    videoEl.className = "generated-video";
+    videoEl.setAttribute("playsinline", "");
+    videoEl.style.maxWidth = "100%";
+    videoEl.style.borderRadius = "8px";
+    videoEl.style.marginTop = "8px";
+    responseContent.append(videoEl);
+  }
+
   const copyButton = document.createElement("button");
   copyButton.type = "button";
   copyButton.className = "copy-message";
@@ -2324,6 +2353,52 @@ async function generateImageFlow(prompt) {
   }
 }
 
+async function generateVideoFlow(prompt) {
+  const copy = translations[state.language];
+  if (!prompt) { window.alert(copy.videoNeedPrompt); return; }
+  addMessage("user", prompt, copy.videoTaskLabel);
+  appendHistory("user", prompt);
+  elements.promptInput.value = "";
+  resizePromptInput();
+  elements.sendButton.disabled = true;
+  elements.attachButton.disabled = true;
+  const prevLabel = elements.sendLabel.textContent;
+  elements.sendLabel.textContent = copy.processing;
+  const pending = addPendingMessage(copy.videoGenerating);
+  trackEvent("video_requested", { language: state.language });
+  try {
+    const response = await fetch(`${API_BASE}/video`, {
+      method: "POST",
+      headers: await authHeaders(),
+      body: JSON.stringify({ accessCode: cleanAccessCode(state.accessCode), prompt })
+    });
+    const data = await readApiJson(response);
+    pending.remove();
+    if (response.status === 403 || response.status === 429) {
+      const upgrade = response.status === 403;
+      state.plan = typeof data.plan !== "undefined" ? data.plan : state.plan;
+      const rendered = addMessage("assistant", data.error || (upgrade ? "Se requiere plan Esencial o superior para generar videos." : "Agotaste tus segundos de video este mes."), "AllAIs", [], false);
+      appendUpgradeOffer(rendered?.responseContent, data.plan, upgrade);
+      state.history.pop();
+      return;
+    }
+    if (!response.ok || !data.url) throw new Error(data.error || "No se pudo generar el video.");
+    const videoSeconds = data.media?.video?.remaining;
+    const metaLabel = `${copy.videoTaskLabel} · ${data.model || "MiniMax"}${typeof videoSeconds === "number" ? ` · ${videoSeconds}s restantes` : ""}`;
+    addMessage("assistant", "", metaLabel, [], true, "", data.url);
+    appendHistory("assistant", `[video] ${prompt}`);
+    saveCurrentConversation();
+  } catch (error) {
+    pending.remove();
+    addMessage("assistant", error.message, copy.error, [], false);
+    state.history.pop();
+  } finally {
+    elements.sendButton.disabled = false;
+    elements.attachButton.disabled = false;
+    elements.sendLabel.textContent = prevLabel;
+  }
+}
+
 async function sendPrompt(event) {
   event.preventDefault();
 
@@ -2352,6 +2427,12 @@ async function sendPrompt(event) {
   // Modo imagen: genera una imagen con el prompt en vez de enviar al modelo de texto.
   if (state.imageMode) {
     await generateImageFlow(prompt);
+    return;
+  }
+
+  // Modo video: genera un video con MiniMax.
+  if (state.videoMode) {
+    await generateVideoFlow(prompt);
     return;
   }
 
@@ -2768,7 +2849,19 @@ function bindEvents() {
   });
   elements.imageModeToggle?.addEventListener("change", (event) => {
     state.imageMode = event.target.checked;
+    if (state.imageMode && state.videoMode) {
+      state.videoMode = false;
+      if (elements.videoModeToggle) elements.videoModeToggle.checked = false;
+    }
     trackEvent("image_mode_toggled", { on: state.imageMode });
+  });
+  elements.videoModeToggle?.addEventListener("change", (event) => {
+    state.videoMode = event.target.checked;
+    if (state.videoMode && state.imageMode) {
+      state.imageMode = false;
+      if (elements.imageModeToggle) elements.imageModeToggle.checked = false;
+    }
+    trackEvent("video_mode_toggled", { on: state.videoMode });
   });
   elements.languageButtons.forEach((button) => {
     button.addEventListener("click", () => setLanguage(button.dataset.lang));

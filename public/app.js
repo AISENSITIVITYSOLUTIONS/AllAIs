@@ -163,6 +163,7 @@ const translations = {
     googleError: "No se pudo iniciar sesión con Google. Intenta de nuevo o usa tu email.",
     orEmail: "o con tu email",
     limitNote: (n) => `Tienes un límite de ${n} consultas diarias.`,
+    unlimitedNote: "Sin límite de consultas.",
     guest: "Invitado",
     guestStatus: "Sin sesión · consultas desactivadas",
     teamAccount: "Invitado con código promocional",
@@ -361,6 +362,7 @@ const translations = {
     googleError: "Couldn't sign in with Google. Try again or use your email.",
     orEmail: "or with your email",
     limitNote: (n) => `You have a limit of ${n} queries per day.`,
+    unlimitedNote: "No query limit.",
     guest: "Guest",
     guestStatus: "Not signed in · queries disabled",
     teamAccount: "Guest with promo code",
@@ -559,6 +561,7 @@ const translations = {
     googleError: "Impossible de se connecter avec Google. Réessayez ou utilisez votre email.",
     orEmail: "ou avec votre email",
     limitNote: (n) => `Vous avez une limite de ${n} requêtes par jour.`,
+    unlimitedNote: "Aucune limite de requêtes.",
     guest: "Invité",
     guestStatus: "Non connecté · requêtes désactivées",
     teamAccount: "Invité avec code promotionnel",
@@ -969,7 +972,7 @@ function setLanguage(language) {
   if (elements.accessHint) elements.accessHint.textContent = copy.accessHint;
   if (elements.googleLabel) elements.googleLabel.textContent = copy.google;
   if (elements.authDividerText) elements.authDividerText.textContent = copy.orEmail;
-  if (elements.limitNote) elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 10);
+  if (elements.limitNote) elements.limitNote.textContent = limitNoteText(copy);
   if (elements.consentText) elements.consentText.innerHTML = copy.consentHtml;
   if (elements.loginButton) elements.loginButton.textContent = isAuthenticated() ? copy.exit : copy.enter;
   renderQuota();
@@ -1057,7 +1060,7 @@ function renderAccount() {
   elements.accountStatus.classList.toggle("is-active", signed);
   elements.accountButton.textContent = signed ? copy.signOut : copy.signIn;
   elements.accountAvatar.textContent = signed ? (state.email || "N").charAt(0).toUpperCase() : "";
-  elements.limitNote.textContent = copy.limitNote(state.quota?.limit || 10);
+  elements.limitNote.textContent = limitNoteText(copy);
   elements.accountAvatar.classList.toggle("is-guest", !signed);
   elements.googleButton.hidden = signed;
   elements.authDivider.hidden = signed;
@@ -1191,6 +1194,12 @@ async function loadSubscriptionInfo() {
 function syncConsentVisibility() {
   const show = !isAuthenticated() && isEmailValue(elements.accessCodeInput.value);
   elements.consentRow.hidden = !show;
+}
+
+// Cuentas con plan sin tope (administrador) reciben quota null del servidor.
+function limitNoteText(copy) {
+  if (isAuthenticated() && state.plan && !state.quota) return copy.unlimitedNote;
+  return copy.limitNote(state.quota?.limit || 10);
 }
 
 function formatResetTime(resetAt) {

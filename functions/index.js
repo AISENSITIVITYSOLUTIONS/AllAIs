@@ -7,7 +7,7 @@ const { getStorage } = require("firebase-admin/storage");
 const crypto = require("node:crypto");
 const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
-const { resolveEntitlement } = require("./entitlements");
+const { resolveEntitlement, adminEntitlement } = require("./entitlements");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
 
 initializeApp();
@@ -512,6 +512,7 @@ async function verifyPreapproval(preapprovalId) {
 
 // Derecho de uso de una cuenta: plan resuelto en el servidor a partir del uid.
 async function entitlementFor(user) {
+  if (user?.email && adminEmails().includes(user.email)) return adminEntitlement();
   return resolveEntitlement({
     db,
     uid: user.uid,

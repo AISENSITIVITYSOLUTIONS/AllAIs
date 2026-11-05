@@ -5,7 +5,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { FakeFirestore } = require("./fake-firestore");
-const { resolveEntitlement, REVALIDATE_AFTER_MS } = require("../entitlements");
+const { resolveEntitlement, adminEntitlement, REVALIDATE_AFTER_MS } = require("../entitlements");
+const { getPlan } = require("../plans");
 
 const FREE_DAILY = 10;
 const AHORA = new Date("2026-10-17T18:00:00Z");
@@ -202,4 +203,15 @@ test("el ciclo se ancla en la fecha de contratación y avanza mes a mes", async 
   assert.equal(primero.cycle.startIso, "2026-03-15T06:00:00.000Z");
   assert.equal(segundo.cycle.startIso, "2026-04-15T06:00:00.000Z");
   assert.notEqual(primero.cycle.key, segundo.cycle.key, "el cambio de ciclo reinicia el contador");
+});
+
+test("administrador: plan de nivel premium, sin cupo diario ni mensual", () => {
+  const derecho = adminEntitlement(AHORA);
+  assert.equal(derecho.source, "admin");
+  assert.equal(derecho.planId, "profesional_3");
+  assert.equal(derecho.monthly, null);
+  assert.equal(derecho.daily, null);
+  assert.ok(derecho.images >= 80 && derecho.videoSeconds >= 90);
+  assert.ok(derecho.cycle && derecho.cycle.startIso && derecho.cycle.endIso);
+  assert.ok(getPlan(derecho.planId));
 });

@@ -1499,6 +1499,10 @@ img {
   --edge-bottom: #c4d0db;
   position: relative;
   display: grid;
+  /* La columna no crece con el contenido: sin esto, la barra de herramientas
+     ancha estiraba la columna y el texto se salía del recuadro. */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 4px;
   padding: 10px;
   border: 1px solid transparent;
@@ -1659,7 +1663,9 @@ img {
 
 #promptInput {
   display: block;
+  box-sizing: border-box;
   width: 100%;
+  overflow-wrap: anywhere;
   min-height: 56px;
   max-height: 300px;
   padding: 8px 4px;
@@ -1739,10 +1745,20 @@ img {
 
 .composer-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 2px 2px 0;
+  min-width: 0;
+}
+
+.composer-footer > * {
+  min-width: 0;
+}
+
+.composer-send {
+  margin-left: auto;
 }
 
 .composer-tools,
@@ -2757,19 +2773,9 @@ img {
   opacity: 0.9;
 }
 
-/* Modelo fijo de video (MiniMax) mostrado en lugar del selector de texto */
-.media-model-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  margin: 6px 0 2px;
-  border-radius: 8px;
-  border: 1px solid var(--border, rgba(255,255,255,.14));
-  background: var(--surface-2, rgba(255,255,255,.04));
-  font-size: .85rem;
-  white-space: nowrap;
-}
-.media-model-badge[hidden] { display: none; }
+/* Selector de modelo de video (MiniMax y OpenRouter) */
+.media-model-select { margin: 6px 0 2px; }
+.media-model-select[hidden] { display: none; }
 
 /* Selector de modelo de OpenRouter (modo una sola consulta) */
 .openrouter-model-row {

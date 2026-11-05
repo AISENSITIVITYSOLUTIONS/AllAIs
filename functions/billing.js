@@ -10,6 +10,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { initializeApp, getApps } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const { isAdminEmail } = require("./admins");
 const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
 const { verify: verifySignature } = require("./webhook-signature");
 const { handleWebhook: handleWebhookPure } = require("./webhook-handler");
@@ -242,6 +243,10 @@ async function createMercadoPagoSubscription(request) {
 async function subscriptionStatus(request) {
   const user = await verifyUser(request);
   if (!user) throw httpError(401, "Inicia sesión para ver tu suscripción.");
+  // El administrador tiene acceso completo sin suscripción: no se le ofrece pagar.
+  if (isAdminEmail(user.email)) {
+    return { status: "active", plan: "profesional_3", planLabel: "Administrador", admin: true, amount: 0, mock: false };
+  }
   const snapshot = await db.collection("subscriptions").doc(user.uid).get();
   if (!snapshot.exists) return { status: "none" };
   const data = snapshot.data();

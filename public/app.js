@@ -155,7 +155,7 @@ const translations = {
     imageNeedPrompt: "Describe la imagen que quieres generar.",
     videoMode: "Video",
     videoTaskLabel: "Video",
-    videoGenerating: "Generando video… (puede tardar 1-2 min)",
+    videoGenerating: "Generando video… (puede tardar de 2 a 5 min)",
     videoNeedPrompt: "Describe el video que quieres generar.",
     access: "Acceso",
     accessPlaceholder: "tu@email.com",
@@ -354,7 +354,7 @@ const translations = {
     imageNeedPrompt: "Describe the image you want to generate.",
     videoMode: "Video",
     videoTaskLabel: "Video",
-    videoGenerating: "Generating video… (may take 1-2 min)",
+    videoGenerating: "Generating video… (may take 2-5 min)",
     videoNeedPrompt: "Describe the video you want to generate.",
     access: "Access",
     accessPlaceholder: "you@email.com",
@@ -553,7 +553,7 @@ const translations = {
     imageNeedPrompt: "Décrivez l'image à générer.",
     videoMode: "Vidéo",
     videoTaskLabel: "Vidéo",
-    videoGenerating: "Génération de la vidéo… (1-2 min)",
+    videoGenerating: "Génération de la vidéo… (2 à 5 min)",
     videoNeedPrompt: "Décrivez la vidéo à générer.",
     access: "Accès",
     accessPlaceholder: "vous@email.com",
@@ -2396,8 +2396,8 @@ async function generateVideoFlow(prompt) {
       body: JSON.stringify({ accessCode: cleanAccessCode(state.accessCode), prompt })
     });
     const data = await readApiJson(response);
-    pending.remove();
     if (response.status === 403 || response.status === 429) {
+      pending.remove();
       const upgrade = response.status === 403;
       state.plan = typeof data.plan !== "undefined" ? data.plan : state.plan;
       const rendered = addMessage("assistant", data.error || (upgrade ? "Se requiere plan Esencial o superior para generar videos." : "Agotaste tus segundos de video este mes."), "AllAIs", [], false);
@@ -2405,8 +2405,13 @@ async function generateVideoFlow(prompt) {
       state.history.pop();
       return;
     }
-    if (!response.ok || !data.url) throw new Error(data.error || "No se pudo generar el video.");
+    if (!response.ok || !data.taskId) throw new Error(data.error || "No se pudo generar el video.");
     const videoSeconds = data.media?.video?.remaining;
+    // El video tarda minutos: se consulta el estado hasta que esté listo.
+    const result = await waitForVideo(data.taskId);
+    pending.remove();
+    data.url = result.url;
+    data.model = result.model || data.model;
     const metaLabel = `${copy.videoTaskLabel} · ${data.model || "MiniMax"}${typeof videoSeconds === "number" ? ` · ${videoSeconds}s restantes` : ""}`;
     addMessage("assistant", "", metaLabel, [], true, "", data.url);
     appendHistory("assistant", `[video] ${prompt}`);
@@ -2420,6 +2425,29 @@ async function generateVideoFlow(prompt) {
     elements.attachButton.disabled = false;
     elements.sendLabel.textContent = prevLabel;
   }
+}
+
+// Consulta el estado de una tarea de video hasta que termine (máx. 15 min).
+async function waitForVideo(taskId) {
+  const deadline = Date.now() + 15 * 60 * 1000;
+  let failures = 0;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    let data;
+    try {
+      const response = await fetch(`${API_BASE}/video/status?taskId=${encodeURIComponent(taskId)}`, { headers: await authHeaders() });
+      data = await readApiJson(response);
+      if (!response.ok) throw new Error(data.error || "No se pudo consultar el video.");
+      failures = 0;
+    } catch (error) {
+      failures += 1;
+      if (failures >= 6) throw error;
+      continue;
+    }
+    if (data.status === "done" && data.url) return data;
+    if (data.status === "failed") throw new Error(data.error || "No se pudo generar el video.");
+  }
+  throw new Error("El video tardó demasiado. Intenta de nuevo.");
 }
 
 async function sendPrompt(event) {

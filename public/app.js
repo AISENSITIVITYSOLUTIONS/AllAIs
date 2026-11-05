@@ -109,7 +109,8 @@ const elements = {
   platformPanelLabel: $("#platformPanelLabel"),
   platformDescription: $("#platformDescription"),
   heroTitle: $("#heroTitle"),
-  selectedProviderNote: $("#selectedProviderNote")
+  selectedProviderNote: $("#selectedProviderNote"),
+  mediaModelBadge: $("#mediaModelBadge")
 };
 
 const taskConfig = {
@@ -2122,7 +2123,19 @@ function syncProviderCards() {
   }
   if (elements.topbarModel) elements.topbarModel.textContent = display?.name || "";
   updateOpenRouterRow();
+  applyVideoModelDisplay();
   syncAttachmentMenu();
+}
+
+// El video siempre se genera con MiniMax, sin importar el proveedor o modelo de
+// texto elegido. Con Video encendido se muestra ese modelo en lugar del selector.
+const VIDEO_MODEL_LABEL = "MiniMax (video)";
+function applyVideoModelDisplay() {
+  const on = Boolean(state.videoMode);
+  if (elements.mediaModelBadge) elements.mediaModelBadge.hidden = !on;
+  if (!on) return;
+  if (elements.selectedProviderNote) elements.selectedProviderNote.textContent = VIDEO_MODEL_LABEL;
+  if (elements.topbarModel) elements.topbarModel.textContent = VIDEO_MODEL_LABEL;
 }
 
 // Muestra el selector de modelo solo cuando el proveedor activo es OpenRouter.
@@ -2130,7 +2143,8 @@ function updateOpenRouterRow() {
   const row = elements.openrouterModelRow;
   if (!row) return;
   const isOpenRouter = state.selectedProvider === "openrouter";
-  row.hidden = !isOpenRouter;
+  // Con Video encendido el selector de texto no aplica: el video siempre usa MiniMax.
+  row.hidden = !isOpenRouter || state.videoMode;
   const showAllLabel = { es: "Ver todos", en: "Show all", fr: "Voir tout" };
   const label = document.getElementById("openrouterShowAllLabel");
   if (label) label.textContent = showAllLabel[state.language] || showAllLabel.es;
@@ -2862,6 +2876,7 @@ function bindEvents() {
       state.videoMode = false;
       if (elements.videoModeToggle) elements.videoModeToggle.checked = false;
     }
+    syncProviderCards();
     trackEvent("image_mode_toggled", { on: state.imageMode });
   });
   elements.videoModeToggle?.addEventListener("change", (event) => {
@@ -2870,6 +2885,7 @@ function bindEvents() {
       state.imageMode = false;
       if (elements.imageModeToggle) elements.imageModeToggle.checked = false;
     }
+    syncProviderCards();
     trackEvent("video_mode_toggled", { on: state.videoMode });
   });
   elements.languageButtons.forEach((button) => {

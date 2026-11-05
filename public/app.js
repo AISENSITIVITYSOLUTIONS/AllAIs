@@ -20,7 +20,9 @@ const state = {
   currentConversationId: null,
   conversationMessages: [],
   imageMode: false,
-  videoMode: false
+  videoMode: false,
+  videoModel: "",
+  videoModels: []
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -110,7 +112,7 @@ const elements = {
   platformDescription: $("#platformDescription"),
   heroTitle: $("#heroTitle"),
   selectedProviderNote: $("#selectedProviderNote"),
-  mediaModelBadge: $("#mediaModelBadge")
+  videoModelSelect: $("#videoModelSelect")
 };
 
 const taskConfig = {
@@ -2127,15 +2129,56 @@ function syncProviderCards() {
   syncAttachmentMenu();
 }
 
-// El video siempre se genera con MiniMax, sin importar el proveedor o modelo de
-// texto elegido. Con Video encendido se muestra ese modelo en lugar del selector.
-const VIDEO_MODEL_LABEL = "MiniMax (video)";
+// Con Video encendido, el selector de texto se sustituye por el de modelos de
+// video (MiniMax y los de OpenRouter). El servidor decide qué modelos permite
+// cada plan; los bloqueados aparecen con candado y el plan que los incluye.
+function selectedVideoModel() {
+  return state.videoModels.find((m) => m.id === state.videoModel) || null;
+}
+
+function videoModelLabel(m) {
+  if (m.allowed) return m.included ? `${m.name} · incluido` : m.name;
+  if (m.requiredPlanName) return `🔒 ${m.name} — Plan ${m.requiredPlanName}`;
+  return `🔒 ${m.name}`;
+}
+
+function renderVideoModelOptions() {
+  const select = elements.videoModelSelect;
+  if (!select) return;
+  select.innerHTML = "";
+  // Los modelos fuera de todos los planes solo se listan si se pueden usar (administrador).
+  const visible = state.videoModels.filter((m) => m.allowed || !m.adminOnly);
+  for (const m of visible) {
+    const option = document.createElement("option");
+    option.value = m.id;
+    option.textContent = videoModelLabel(m);
+    option.disabled = !m.allowed;
+    select.append(option);
+  }
+  const current = visible.find((m) => m.id === state.videoModel && m.allowed);
+  state.videoModel = current ? current.id : (visible.find((m) => m.allowed)?.id || visible[0]?.id || "");
+  select.value = state.videoModel;
+}
+
+async function loadVideoModels() {
+  try {
+    const response = await fetch(`${API_BASE}/models/video`, { headers: await authHeaders() });
+    const data = await readApiJson(response);
+    state.videoModels = Array.isArray(data.models) ? data.models : [];
+  } catch {
+    state.videoModels = [];
+  }
+  renderVideoModelOptions();
+  applyVideoModelDisplay();
+}
+
 function applyVideoModelDisplay() {
   const on = Boolean(state.videoMode);
-  if (elements.mediaModelBadge) elements.mediaModelBadge.hidden = !on;
+  if (elements.videoModelSelect) elements.videoModelSelect.hidden = !on;
   if (!on) return;
-  if (elements.selectedProviderNote) elements.selectedProviderNote.textContent = VIDEO_MODEL_LABEL;
-  if (elements.topbarModel) elements.topbarModel.textContent = VIDEO_MODEL_LABEL;
+  const label = selectedVideoModel()?.name || "Video";
+  if (elements.selectedProviderNote) elements.selectedProviderNote.textContent = label;
+  if (elements.topbarModel) elements.topbarModel.textContent = label;
 }
 
 // Muestra el selector de modelo solo cuando el proveedor activo es OpenRouter.
@@ -2393,9 +2436,15 @@ async function generateVideoFlow(prompt) {
     const response = await fetch(`${API_BASE}/video`, {
       method: "POST",
       headers: await authHeaders(),
-      body: JSON.stringify({ accessCode: cleanAccessCode(state.accessCode), prompt })
+      body: JSON.stringify({ accessCode: cleanAccessCode(state.accessCode), prompt, videoModel: state.videoModel || undefined })
     });
     const data = await readApiJson(response);
+    if (response.status === 403 && data.code === "VIDEO_MODEL_PLAN") {
+      pending.remove();
+      addMessage("assistant", data.error, "AllAIs", [], false);
+      state.history.pop();
+      return;
+    }
     if (response.status === 403 || response.status === 429) {
       pending.remove();
       const upgrade = response.status === 403;
@@ -2890,6 +2939,11 @@ function bindEvents() {
     syncProviderCards();
     closeSidebar();
   });
+  elements.videoModelSelect?.addEventListener("change", (event) => {
+    state.videoModel = event.target.value;
+    applyVideoModelDisplay();
+    trackEvent("video_model_selected", { model: state.videoModel });
+  });
   elements.openrouterModel?.addEventListener("change", (event) => {
     state.openrouterModel = event.target.value;
     trackEvent("openrouter_model_selected", { model: state.openrouterModel });
@@ -2914,6 +2968,7 @@ function bindEvents() {
       if (elements.imageModeToggle) elements.imageModeToggle.checked = false;
     }
     syncProviderCards();
+    if (state.videoMode) loadVideoModels();
     trackEvent("video_mode_toggled", { on: state.videoMode });
   });
   elements.languageButtons.forEach((button) => {

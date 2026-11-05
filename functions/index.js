@@ -9,6 +9,7 @@ const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowe
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement, adminEntitlement } = require("./entitlements");
 const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
+const videoModels = require("./video-models");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
 
 initializeApp();
@@ -453,7 +454,20 @@ async function queryVideoTask(taskId) {
   return { state: "processing", raw: status || "unknown" };
 }
 
-// Descarga el video terminado y lo guarda en Firebase Storage (URL durable).
+// Guarda un video en Firebase Storage con token de descarga (URL durable).
+async function saveVideoBuffer(buffer, holder, contentType = "video/mp4") {
+  const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
+  const safeHolder = String(holder || "anon").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+  const token = crypto.randomUUID();
+  const objectPath = `videos/${safeHolder}/${Date.now()}-${token.slice(0, 8)}.mp4`;
+  await bucket.file(objectPath).save(buffer, {
+    resumable: false,
+    metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } }
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+}
+
+// Descarga el video terminado de MiniMax y lo guarda en Firebase Storage.
 async function storeVideoFile(fileId, holder) {
   const apiKey = minimaxKey();
   const fileResp = await fetch(`${MINIMAX_FILE_URL}?file_id=${encodeURIComponent(fileId)}`, {
@@ -468,15 +482,7 @@ async function storeVideoFile(fileId, holder) {
   const videoResp = await fetch(downloadUrl, { signal: AbortSignal.timeout(45_000) });
   if (!videoResp.ok) throw new Error(`Error descargando video de MiniMax: ${videoResp.status}`);
   const buffer = Buffer.from(await videoResp.arrayBuffer());
-  const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
-  const safeHolder = String(holder || "anon").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
-  const token = crypto.randomUUID();
-  const objectPath = `videos/${safeHolder}/${Date.now()}-${token.slice(0, 8)}.mp4`;
-  await bucket.file(objectPath).save(buffer, {
-    resumable: false,
-    metadata: { contentType: "video/mp4", metadata: { firebaseStorageDownloadTokens: token } }
-  });
-  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+  return saveVideoBuffer(buffer, holder, "video/mp4");
 }
 
 // Devuelve los segundos consumidos de una tarea que no llegó a entregarse.
@@ -857,6 +863,18 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       return;
     }
 
+    // Modelos de video con el acceso calculado para el usuario (candado por plan).
+    if (path === "/models/video" && request.method === "GET") {
+      const emailUser = await verifyEmailUser(request);
+      const entitlement = emailUser ? await entitlementFor(emailUser) : { source: "free", videoSeconds: 0 };
+      const models = await videoModels.allVideoModels(MINIMAX_MODEL);
+      sendJson(response, 200, {
+        models: videoModels.catalogFor(models, entitlement),
+        defaultModel: models[0]?.id || null
+      });
+      return;
+    }
+
     if (path === "/video/status" && request.method === "GET") {
       const emailUser = await verifyEmailUser(request);
       if (!emailUser) {
@@ -872,7 +890,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
       const job = snap.data();
       if (job.status === "done") {
-        sendJson(response, 200, { status: "done", url: job.url, model: job.model, durationSeconds: job.durationSeconds });
+        sendJson(response, 200, { status: "done", url: job.url, model: job.modelName || job.model, durationSeconds: job.durationSeconds });
         return;
       }
       if (job.status === "failed") {
@@ -893,7 +911,11 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       };
 
       try {
-        const result = await queryVideoTask(taskId);
+        const provider = job.provider || "minimax";
+        const providerJobId = job.providerJobId || taskId;
+        const result = provider === "openrouter"
+          ? await videoModels.queryOpenRouterVideo(providerJobId)
+          : await queryVideoTask(providerJobId);
         if (result.state === "failed") { await fail(`MiniMax falló: ${result.raw}`); return; }
         if (result.state === "processing") {
           const age = Date.now() - new Date(job.createdAt).getTime();
@@ -909,10 +931,16 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
           return true;
         });
         if (!claimed) { sendJson(response, 200, { status: "processing" }); return; }
-        const url = await storeVideoFile(result.fileId, emailUser.uid);
-        await ref.set({ status: "done", url, updatedAt: new Date().toISOString() }, { merge: true });
+        let url;
+        if (provider === "openrouter") {
+          const { buffer, contentType } = await videoModels.downloadOpenRouterVideo(providerJobId);
+          url = await saveVideoBuffer(buffer, emailUser.uid, contentType);
+        } else {
+          url = await storeVideoFile(result.fileId, emailUser.uid);
+        }
+        await ref.set({ status: "done", url, cost: result.cost ?? null, updatedAt: new Date().toISOString() }, { merge: true });
         await logToSheet("video", { email: emailUser.email, modelo: job.model, resultado: "ok", segundos: job.durationSeconds });
-        sendJson(response, 200, { status: "done", url, model: job.model, durationSeconds: job.durationSeconds });
+        sendJson(response, 200, { status: "done", url, model: job.modelName || job.model, durationSeconds: job.durationSeconds });
       } catch (error) {
         // Error de red al consultar: se reintenta en la siguiente consulta, salvo
         // que el archivo ya se estuviera copiando, en cuyo caso se libera.
@@ -945,9 +973,31 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         return;
       }
 
-      // Cuota de video: bolsa mensual del plan medida en segundos.
+      // Modelo de video: MiniMax o uno de OpenRouter, según el plan.
       const entitlement = await entitlementFor(emailUser);
-      const consumed = await consumeMedia({ db, uid: emailUser.uid, entitlement, kind: "video", amount: VIDEO_DURATION_SECONDS });
+      const requestedModel = String(request.body?.videoModel || videoModels.MINIMAX_ID).slice(0, 120);
+      const catalog = await videoModels.allVideoModels(MINIMAX_MODEL);
+      const videoModel = catalog.find((m) => m.id === requestedModel);
+      if (!videoModel) {
+        sendJson(response, 400, { error: "Ese modelo de video no está disponible.", code: "VIDEO_MODEL_UNKNOWN" });
+        return;
+      }
+      const access = videoModels.videoModelAccess(videoModel, entitlement);
+      if (!access.allowed && access.reason !== "not_in_plan") {
+        sendJson(response, 403, {
+          error: access.requiredPlan
+            ? "Este modelo de video requiere un plan superior. Elige otro modelo o mejora tu plan."
+            : "Este modelo de video no está incluido en los planes.",
+          code: "VIDEO_MODEL_PLAN",
+          requiredPlan: access.requiredPlan || null,
+          plan: entitlement.planId
+        });
+        return;
+      }
+      const videoSeconds = videoModel.provider === "openrouter" ? videoModels.pickDuration(videoModel) : VIDEO_DURATION_SECONDS;
+
+      // Cuota de video: bolsa mensual del plan medida en segundos.
+      const consumed = await consumeMedia({ db, uid: emailUser.uid, entitlement, kind: "video", amount: videoSeconds });
       if (!consumed.ok) {
         const upgrade = consumed.reason === "not_in_plan" || consumed.reason === "no_cycle";
         sendJson(response, upgrade ? 403 : 429, {
@@ -962,13 +1012,22 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       try {
-        const taskId = await submitVideoTask(prompt);
+        let providerJobId;
+        if (videoModel.provider === "openrouter") {
+          ({ jobId: providerJobId } = await videoModels.submitOpenRouterVideo(videoModel, prompt));
+        } else {
+          providerJobId = await submitVideoTask(prompt);
+        }
+        const taskId = crypto.randomUUID();
         await db.collection("videoJobs").doc(taskId).set({
           uid: emailUser.uid,
           email: emailUser.email,
           status: "processing",
-          model: MINIMAX_MODEL,
-          durationSeconds: VIDEO_DURATION_SECONDS,
+          provider: videoModel.provider,
+          providerJobId,
+          model: videoModel.provider === "openrouter" ? videoModel.id : MINIMAX_MODEL,
+          modelName: videoModel.name,
+          durationSeconds: videoSeconds,
           mediaPath: consumed.ref ? consumed.ref.path : null,
           mediaField: consumed.field || null,
           amount: consumed.amount || 0,
@@ -977,7 +1036,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         sendJson(response, 202, {
           taskId,
           status: "processing",
-          model: MINIMAX_MODEL,
+          model: videoModel.name,
           media: { video: { limit: consumed.limit, used: consumed.used, remaining: consumed.remaining } }
         });
       } catch (error) {

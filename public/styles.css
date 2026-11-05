@@ -2757,19 +2757,9 @@ img {
   opacity: 0.9;
 }
 
-/* Modelo fijo de video (MiniMax) mostrado en lugar del selector de texto */
-.media-model-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  margin: 6px 0 2px;
-  border-radius: 8px;
-  border: 1px solid var(--border, rgba(255,255,255,.14));
-  background: var(--surface-2, rgba(255,255,255,.04));
-  font-size: .85rem;
-  white-space: nowrap;
-}
-.media-model-badge[hidden] { display: none; }
+/* Selector de modelo de video (MiniMax y OpenRouter) */
+.media-model-select { margin: 6px 0 2px; }
+.media-model-select[hidden] { display: none; }
 
 /* Selector de modelo de OpenRouter (modo una sola consulta) */
 .openrouter-model-row {

@@ -402,70 +402,91 @@ const MINIMAX_QUERY_URL  = "https://api.minimaxi.chat/v1/query/video_generation"
 const MINIMAX_FILE_URL   = "https://api.minimaxi.chat/v1/files/retrieve";
 const MINIMAX_MODEL      = process.env.MINIMAX_VIDEO_MODEL || "T2V-01-Director";
 // Duración fija por generación (segundos). MiniMax cobra por segundo de video.
-const VIDEO_DURATION_SECONDS = 5;
-// Tiempo máximo de espera para polling (ms) y intervalo entre intentos.
-const VIDEO_POLL_TIMEOUT_MS  = 180_000; // 3 min
-const VIDEO_POLL_INTERVAL_MS = 4_000;
+// MiniMax acepta duraciones de 6 o 10 segundos.
+const VIDEO_DURATION_SECONDS = 6;
+// Una tarea que no termina en este tiempo se da por fallida y se reembolsa.
+const VIDEO_JOB_MAX_AGE_MS = 15 * 60 * 1000;
 
-async function generateVideo(prompt, holder) {
-  const apiKey = String(process.env.MINIMAX_API_KEY || "").replace(/^﻿/, "").trim();
+function minimaxKey() {
+  const apiKey = String(process.env.MINIMAX_API_KEY || "").replace(/^\uFEFF/, "").trim();
   if (!apiKey) throw new Error("Falta configurar MINIMAX_API_KEY.");
+  return apiKey;
+}
 
-  // 1. Enviar tarea de generación
-  const submitResp = await fetch(MINIMAX_SUBMIT_URL, {
+// El video tarda minutos y Firebase Hosting corta las peticiones a los 60 s, así
+// que la generación es asíncrona: se crea la tarea, el navegador consulta su estado
+// con GET /video/status y, cuando MiniMax termina, el video se copia a Storage.
+async function submitVideoTask(prompt) {
+  const apiKey = minimaxKey();
+  const resp = await fetch(MINIMAX_SUBMIT_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MINIMAX_MODEL, prompt: String(prompt).slice(0, 2000), duration: VIDEO_DURATION_SECONDS })
+    body: JSON.stringify({ model: MINIMAX_MODEL, prompt: String(prompt).slice(0, 2000), duration: VIDEO_DURATION_SECONDS }),
+    signal: AbortSignal.timeout(30_000)
   });
-  if (!submitResp.ok) {
-    const text = await submitResp.text();
-    throw new Error(`MiniMax submit ${submitResp.status}: ${text.slice(0, 300)}`);
-  }
-  const submitData = await submitResp.json();
-  const taskId = submitData?.task_id;
-  if (!taskId) throw new Error(`MiniMax no devolvió task_id: ${JSON.stringify(submitData).slice(0, 200)}`);
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`MiniMax submit ${resp.status}: ${text.slice(0, 300)}`);
+  let data = {};
+  try { data = JSON.parse(text); } catch { /* respuesta no JSON */ }
+  const taskId = data?.task_id;
+  if (!taskId) throw new Error(`MiniMax no devolvió task_id: ${text.slice(0, 300)}`);
+  return String(taskId);
+}
 
-  // 2. Polling hasta que el video esté listo
-  const deadline = Date.now() + VIDEO_POLL_TIMEOUT_MS;
-  let fileId = null;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS));
-    const qResp = await fetch(`${MINIMAX_QUERY_URL}?task_id=${encodeURIComponent(taskId)}`, {
-      headers: { Authorization: `Bearer ${apiKey}` }
-    });
-    if (!qResp.ok) continue;
-    const qData = await qResp.json();
-    const status = qData?.status;
-    if (status === "Success") { fileId = qData?.file_id; break; }
-    if (status === "Fail") throw new Error(`MiniMax generación fallida: ${JSON.stringify(qData).slice(0, 200)}`);
-    // "Processing" — seguir esperando
+// Estado de la tarea en MiniMax: processing | success | failed.
+async function queryVideoTask(taskId) {
+  const apiKey = minimaxKey();
+  const resp = await fetch(`${MINIMAX_QUERY_URL}?task_id=${encodeURIComponent(taskId)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(20_000)
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`MiniMax query ${resp.status}: ${text.slice(0, 300)}`);
+  let data = {};
+  try { data = JSON.parse(text); } catch { /* */ }
+  const status = String(data?.status || "");
+  if (status === "Success") return { state: "success", fileId: data.file_id, raw: status };
+  if (status === "Fail") return { state: "failed", raw: text.slice(0, 300) };
+  if (data?.base_resp && Number(data.base_resp.status_code) !== 0) {
+    return { state: "failed", raw: text.slice(0, 300) };
   }
-  if (!fileId) throw new Error("Tiempo de espera agotado para la generación de video.");
+  return { state: "processing", raw: status || "unknown" };
+}
 
-  // 3. Obtener URL de descarga
+// Descarga el video terminado y lo guarda en Firebase Storage (URL durable).
+async function storeVideoFile(fileId, holder) {
+  const apiKey = minimaxKey();
   const fileResp = await fetch(`${MINIMAX_FILE_URL}?file_id=${encodeURIComponent(fileId)}`, {
-    headers: { Authorization: `Bearer ${apiKey}` }
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(20_000)
   });
   if (!fileResp.ok) throw new Error(`MiniMax retrieve file ${fileResp.status}`);
   const fileData = await fileResp.json();
   const downloadUrl = fileData?.file?.download_url;
   if (!downloadUrl) throw new Error("MiniMax no devolvió download_url.");
 
-  // 4. Descargar el video y subirlo a Firebase Storage
-  const videoResp = await fetch(downloadUrl);
+  const videoResp = await fetch(downloadUrl, { signal: AbortSignal.timeout(45_000) });
   if (!videoResp.ok) throw new Error(`Error descargando video de MiniMax: ${videoResp.status}`);
   const buffer = Buffer.from(await videoResp.arrayBuffer());
   const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
   const safeHolder = String(holder || "anon").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
   const token = crypto.randomUUID();
   const objectPath = `videos/${safeHolder}/${Date.now()}-${token.slice(0, 8)}.mp4`;
-  const file = bucket.file(objectPath);
-  await file.save(buffer, {
+  await bucket.file(objectPath).save(buffer, {
     resumable: false,
     metadata: { contentType: "video/mp4", metadata: { firebaseStorageDownloadTokens: token } }
   });
-  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-  return { url, model: MINIMAX_MODEL, durationSeconds: VIDEO_DURATION_SECONDS };
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+}
+
+// Devuelve los segundos consumidos de una tarea que no llegó a entregarse.
+async function refundVideoJob(job) {
+  if (!job?.mediaPath || !job.mediaField || !job.amount) return;
+  try {
+    await db.doc(job.mediaPath).set({ [job.mediaField]: FieldValue.increment(-job.amount) }, { merge: true });
+  } catch (error) {
+    console.warn("AllAIs video refund failed", error?.message);
+  }
 }
 
 // ---------- Generación de imágenes ----------
@@ -836,6 +857,74 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       return;
     }
 
+    if (path === "/video/status" && request.method === "GET") {
+      const emailUser = await verifyEmailUser(request);
+      if (!emailUser) {
+        sendJson(response, 401, { error: "Inicia sesión para ver tu video.", code: "UNAUTHORIZED" });
+        return;
+      }
+      const taskId = String(request.query?.taskId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+      const ref = taskId ? db.collection("videoJobs").doc(taskId) : null;
+      const snap = ref ? await ref.get() : null;
+      if (!snap || !snap.exists || snap.get("uid") !== emailUser.uid) {
+        sendJson(response, 404, { error: "No encontramos ese video." });
+        return;
+      }
+      const job = snap.data();
+      if (job.status === "done") {
+        sendJson(response, 200, { status: "done", url: job.url, model: job.model, durationSeconds: job.durationSeconds });
+        return;
+      }
+      if (job.status === "failed") {
+        sendJson(response, 200, { status: "failed", error: "No se pudo generar el video. Intenta de nuevo." });
+        return;
+      }
+      if (job.status === "finalizing") {
+        sendJson(response, 200, { status: "processing" });
+        return;
+      }
+
+      const fail = async (detail) => {
+        await ref.set({ status: "failed", detail: cleanText(detail, 300), updatedAt: new Date().toISOString() }, { merge: true });
+        await refundVideoJob(job);
+        console.error("AllAIs video error", { message: detail, taskId });
+        await logToSheet("video", { email: emailUser.email, resultado: "error", detalle: cleanText(detail, 200) });
+        sendJson(response, 200, { status: "failed", error: "No se pudo generar el video. Intenta de nuevo." });
+      };
+
+      try {
+        const result = await queryVideoTask(taskId);
+        if (result.state === "failed") { await fail(`MiniMax falló: ${result.raw}`); return; }
+        if (result.state === "processing") {
+          const age = Date.now() - new Date(job.createdAt).getTime();
+          if (age > VIDEO_JOB_MAX_AGE_MS) { await fail(`Tiempo agotado; último estado MiniMax: ${result.raw}`); return; }
+          sendJson(response, 200, { status: "processing", stage: result.raw });
+          return;
+        }
+        // success: solo una consulta copia el archivo a Storage.
+        const claimed = await db.runTransaction(async (tx) => {
+          const fresh = await tx.get(ref);
+          if (fresh.get("status") !== "processing") return false;
+          tx.set(ref, { status: "finalizing", updatedAt: new Date().toISOString() }, { merge: true });
+          return true;
+        });
+        if (!claimed) { sendJson(response, 200, { status: "processing" }); return; }
+        const url = await storeVideoFile(result.fileId, emailUser.uid);
+        await ref.set({ status: "done", url, updatedAt: new Date().toISOString() }, { merge: true });
+        await logToSheet("video", { email: emailUser.email, modelo: job.model, resultado: "ok", segundos: job.durationSeconds });
+        sendJson(response, 200, { status: "done", url, model: job.model, durationSeconds: job.durationSeconds });
+      } catch (error) {
+        // Error de red al consultar: se reintenta en la siguiente consulta, salvo
+        // que el archivo ya se estuviera copiando, en cuyo caso se libera.
+        console.error("AllAIs video status error", { message: error?.message, taskId });
+        const age = Date.now() - new Date(job.createdAt).getTime();
+        if (age > VIDEO_JOB_MAX_AGE_MS) { await fail(`Tiempo agotado: ${error?.message}`); return; }
+        await ref.set({ status: "processing" }, { merge: true }).catch(() => {});
+        sendJson(response, 200, { status: "processing" });
+      }
+      return;
+    }
+
     if (path === "/video" && request.method === "POST") {
       if (!(await appCheckOk(request))) {
         sendJson(response, 401, { error: "App verification failed.", code: "APP_CHECK" });
@@ -873,17 +962,28 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       }
 
       try {
-        const { url, model, durationSeconds } = await generateVideo(prompt, emailUser.uid);
-        sendJson(response, 200, {
-          url, model, durationSeconds,
+        const taskId = await submitVideoTask(prompt);
+        await db.collection("videoJobs").doc(taskId).set({
+          uid: emailUser.uid,
+          email: emailUser.email,
+          status: "processing",
+          model: MINIMAX_MODEL,
+          durationSeconds: VIDEO_DURATION_SECONDS,
+          mediaPath: consumed.ref ? consumed.ref.path : null,
+          mediaField: consumed.field || null,
+          amount: consumed.amount || 0,
+          createdAt: new Date().toISOString()
+        });
+        sendJson(response, 202, {
+          taskId,
+          status: "processing",
+          model: MINIMAX_MODEL,
           media: { video: { limit: consumed.limit, used: consumed.used, remaining: consumed.remaining } }
         });
-        await logToSheet("video", { email: emailUser.email, modelo: model, resultado: "ok", segundos: durationSeconds, restantes: consumed.remaining });
       } catch (error) {
-        // Reembolsa los segundos consumidos.
         if (consumed.ref) await consumed.ref.set({ [consumed.field]: FieldValue.increment(-consumed.amount) }, { merge: true });
         console.error("AllAIs video error", { message: error?.message });
-        sendJson(response, 502, { error: "No se pudo generar el video. Intenta de nuevo." });
+        sendJson(response, 502, { error: "No se pudo iniciar el video. Intenta de nuevo." });
         await logToSheet("video", { email: emailUser.email, resultado: "error", detalle: cleanText(error?.message, 200) });
       }
       return;

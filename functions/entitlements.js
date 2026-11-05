@@ -53,6 +53,24 @@ function freeEntitlement(freeDaily, reason) {
   };
 }
 
+// Derecho de administrador: todos los modelos (nivel premium), sin cupo diario ni
+// mensual y con bolsas de media ilimitadas. No depende de Mercado Pago ni de Firestore:
+// quien llega aquí ya fue verificado como administrador por el servidor (ADMIN_EMAILS).
+function adminEntitlement(now = new Date()) {
+  return {
+    source: "admin",
+    reason: null,
+    planId: "profesional_3",
+    planName: "Administrador",
+    status: "active",
+    monthly: null,
+    daily: null,
+    images: 9999,
+    videoSeconds: 9999,
+    cycle: cycleFor(now.toISOString(), now)
+  };
+}
+
 function isStale(lastVerifiedAt, now, maxAgeMs) {
   const iso = toIso(lastVerifiedAt);
   if (!iso) return true;
@@ -133,6 +151,7 @@ module.exports = {
   REVALIDATE_AFTER_MS,
   GRANTS_PLAN,
   resolveEntitlement,
+  adminEntitlement,
   freeEntitlement,
   mapStatus,
   isMock,

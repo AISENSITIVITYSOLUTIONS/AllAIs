@@ -8,6 +8,7 @@ const crypto = require("node:crypto");
 const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement, adminEntitlement } = require("./entitlements");
+const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
 
 initializeApp();
@@ -230,8 +231,7 @@ async function appCheckOk(request) {
 
 // ---------- Panel de administración ----------
 function adminEmails() {
-  return String(process.env.ADMIN_EMAILS || "fdealbam@nni.ai,fdealbam@gmail.com")
-    .split(/[\s,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+  return adminEmailList();
 }
 
 async function requireAdmin(request) {
@@ -512,7 +512,7 @@ async function verifyPreapproval(preapprovalId) {
 
 // Derecho de uso de una cuenta: plan resuelto en el servidor a partir del uid.
 async function entitlementFor(user) {
-  if (user?.email && adminEmails().includes(user.email)) return adminEntitlement();
+  if (isAdminEmail(user?.email)) return adminEntitlement();
   return resolveEntitlement({
     db,
     uid: user.uid,

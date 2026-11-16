@@ -2768,21 +2768,23 @@ img {
 }
 
 /* Selector de modelo de video (MiniMax y OpenRouter) */
-.media-model-select { margin: 6px 0 2px; }
+.media-model-select { margin: 0; }
 .media-model-select[hidden] { display: none; }
 
 /* Selector de modelo de OpenRouter (modo una sola consulta) */
 .openrouter-model-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 6px 0 2px;
-  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
+.openrouter-model-row[hidden] { display: none; }
 .openrouter-model-select {
-  flex: 1 1 240px;
-  min-width: 180px;
-  max-width: 420px;
+  flex: 1 1 220px;
+  min-width: 140px;
+  max-width: 320px;
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--border, rgba(255,255,255,.14));

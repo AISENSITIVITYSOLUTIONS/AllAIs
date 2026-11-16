@@ -15,7 +15,7 @@
   "use strict";
 
   // ── Configuración ──────────────────────────────────────────────────────────
-  const META_PIXEL_ID = ""; // ← pegar aquí el ID del píxel (solo dígitos)
+  const META_PIXEL_ID = "1193970816623468"; // Conjunto de datos "AllAIs" · portafolio AI Sensitivity Solutions
   const PROMO_ENDS_AT = Date.UTC(2026, 11, 1, 6, 0, 0);
   const ON_PRICING = /precios/.test(location.pathname);
   const PRICING_URL = ON_PRICING ? "/?plan=lanzamiento" : "/precios.html";

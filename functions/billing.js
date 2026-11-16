@@ -156,7 +156,7 @@ async function createMercadoPagoSubscription(request) {
   assertAvailable(plan.id);
 
   // Tarea #4b — trial-with-card: cuando el frontend pide `launchFreeTrial: true`,
-  // creamos un preapproval con cobro diferido al cierre de la promoción (11-nov),
+  // creamos un preapproval con cobro diferido al cierre de la promoción (1-dic),
   // no al +3 días habitual. Así capturamos la tarjeta hoy pero no cobramos nada
   // hasta que la promo expire. La decisión (validación + fechas) vive en la
   // función pura resolveTrialSchedule, probada aparte.
@@ -197,7 +197,7 @@ async function createMercadoPagoSubscription(request) {
   // que firmó realmente — una prueba gratis con cobro diferido o un plan con 3
   // días de prueba —, no un título genérico que después se confunda.
   const reason = launchFreeTrial
-    ? `${plan.label} — Prueba gratis hasta el 10 de noviembre de 2026`
+    ? `${plan.label} — Prueba gratis hasta el 30 de noviembre de 2026`
     : plan.label;
   const preapproval = await mercadoPago("/preapproval", {
     method: "POST",

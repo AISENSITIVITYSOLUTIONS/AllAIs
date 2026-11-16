@@ -39,20 +39,20 @@ test("un plan inexistente no se resuelve", () => {
   assert.deepEqual(canSubscribeTo("gratis_total"), { ok: false, reason: "invalid" });
 });
 
-test("la promoción cubre todo el 10 de noviembre de 2026 y cierra a medianoche", () => {
-  assert.equal(promoEndsAtIso(), "2026-11-11T06:00:00.000Z");
+test("la promoción cubre todo noviembre de 2026 (hasta el 30) y cierra a medianoche", () => {
+  assert.equal(promoEndsAtIso(), "2026-12-01T06:00:00.000Z");
 
   const abierta = [
     "2026-10-17T12:00:00Z",          // hoy
-    "2026-11-10T06:00:01Z",          // 10 nov, 00:00 CDMX
-    "2026-11-11T05:59:59Z"           // 10 nov, 23:59 CDMX
+    "2026-11-30T06:00:01Z",          // 30 nov, 00:00 CDMX
+    "2026-12-01T05:59:59Z"           // 30 nov, 23:59 CDMX
   ];
   for (const iso of abierta) {
     assert.equal(isPromoOpen(new Date(iso)), true, `debería estar abierta en ${iso}`);
     assert.equal(canSubscribeTo("lanzamiento", new Date(iso)).ok, true, `debería poder contratarse en ${iso}`);
   }
 
-  const cerrada = ["2026-11-11T06:00:00Z", "2026-11-11T06:00:01Z", "2027-01-01T00:00:00Z"];
+  const cerrada = ["2026-12-01T06:00:00Z", "2026-12-01T06:00:01Z", "2027-01-01T00:00:00Z"];
   for (const iso of cerrada) {
     assert.equal(isPromoOpen(new Date(iso)), false, `debería estar cerrada en ${iso}`);
     assert.deepEqual(

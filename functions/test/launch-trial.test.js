@@ -2,7 +2,7 @@
 // cobro y tipo de prueba para una nueva suscripción (Tarea #4b, trial-with-card).
 //
 // Es lógica pura: no toca Firestore ni Mercado Pago. Verifica que:
-//   - la prueba de lanzamiento difiere el cobro al cierre de la promo (11-nov),
+//   - la prueba de lanzamiento difiere el cobro al cierre de la promo (1-dic),
 //   - solo aplica al plan Lanzamiento,
 //   - se rechaza si la promo ya cerró,
 //   - el flujo normal mantiene los 3 días de prueba.
@@ -12,12 +12,12 @@ const assert = require("node:assert/strict");
 
 const { resolveTrialSchedule } = require("../trial-schedule");
 
-// Fechas de referencia relativas al cierre de la promo: 2026-11-11T06:00:00Z.
+// Fechas de referencia relativas al cierre de la promo: 2026-12-01T06:00:00Z.
 const ANTES_DE_PROMO = new Date("2026-10-19T12:00:00Z"); // promo abierta
-const DESPUES_DE_PROMO = new Date("2026-11-12T00:00:00Z"); // promo cerrada
-const PROMO_END_ISO = "2026-11-11T06:00:00.000Z";
+const DESPUES_DE_PROMO = new Date("2026-12-02T00:00:00Z"); // promo cerrada
+const PROMO_END_ISO = "2026-12-01T06:00:00.000Z";
 
-test("launch trial: difiere el primer cobro al cierre de la promo (11-nov)", () => {
+test("launch trial: difiere el primer cobro al cierre de la promo (1-dic)", () => {
   const r = resolveTrialSchedule({
     launchFreeTrial: true,
     planId: "lanzamiento",
@@ -72,7 +72,7 @@ test("flujo normal: respeta un BILLING_TRIAL_DAYS distinto", () => {
   assert.equal(r.startDate, new Date("2026-10-26T12:00:00Z").toISOString());
 });
 
-test("launch trial sin flag: un plan Lanzamiento normal usa los 3 días, no el 11-nov", () => {
+test("launch trial sin flag: un plan Lanzamiento normal usa los 3 días, no el 1-dic", () => {
   const now = new Date("2026-10-19T12:00:00Z");
   const r = resolveTrialSchedule({
     launchFreeTrial: false,

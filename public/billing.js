@@ -58,12 +58,12 @@ const PLANS = [
 
 // Lanzamiento ofrece el mismo cupo que Esencial a precio promocional, no es un nivel aparte.
 // Por eso lleva fecha límite: sin ella, el plan más barato sería el de mejor relación.
-// Cierre de la promoción: cubre todo el 10 de noviembre de 2026 y termina a la
+// Cierre de la promoción: cubre todo noviembre de 2026 (hasta el 30) y termina a la
 // medianoche siguiente, hora de la Ciudad de México (UTC-6 todo el año).
 // Esta fecha solo decide lo que se muestra; quien autoriza la contratación es el
 // backend (functions/plans.js), con la misma fecha. Si alguien edita esta línea
 // en su navegador, el servidor rechaza el plan igual.
-const PROMO_ENDS_AT = Date.UTC(2026, 10, 11, 6, 0, 0);
+const PROMO_ENDS_AT = Date.UTC(2026, 11, 1, 6, 0, 0);
 const promoOpen = () => Date.now() < PROMO_ENDS_AT;
 
 const LAUNCH = {
@@ -71,7 +71,7 @@ const LAUNCH = {
   name: "Lanzamiento",
   price: 99,
   note: "300 consultas al mes, 10 al día · 10 imágenes al mes.",
-  deadline: "Precio válido si contratas antes del 10 de noviembre de 2026."
+  deadline: "Precio de lanzamiento: mitad de precio si contratas a más tardar el 30 de noviembre de 2026."
 };
 
 const ALL_PLANS = [...PLANS, LAUNCH];
@@ -763,7 +763,7 @@ function launchCard() {
   });
 
   const deadline = node("p", { class: "billing-launch-deadline" });
-  deadline.innerHTML = `Registras tu tarjeta ahora y <b>no se cobra nada hasta el 11 de noviembre de 2026</b>. Cancela antes sin ningún cargo.`;
+  deadline.innerHTML = `Registras tu tarjeta ahora y <b>no se cobra nada hasta el 1 de diciembre de 2026</b>. Cancela antes sin ningún cargo.`;
 
   const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, `Elegir ${LAUNCH.name}`);
   choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose, { launchFreeTrial: true }));
@@ -1063,7 +1063,7 @@ function confirmPlanChange(plan) {
 
 // Un clic contrata si no hay suscripción, o cambia de plan si ya la hay.
 // opts.launchFreeTrial activa el flujo trial-with-card (Tarea #4b): se registra
-// la tarjeta hoy pero el primer cobro se difiere al cierre de la promo (11-nov).
+// la tarjeta hoy pero el primer cobro se difiere al cierre de la promo (1-dic).
 async function choosePlan(planId, button, opts = {}) {
   setMessage("");
   // GA4 — `pricing_click` (Tarea #2): intención comercial en el diálogo de
@@ -1126,7 +1126,7 @@ async function choosePlan(planId, button, opts = {}) {
     }
 
     // Tarea #4b — trial-with-card: el banner de Lanzamiento pasa
-    // launchFreeTrial para que el backend difiera el primer cobro al 11-nov.
+    // launchFreeTrial para que el backend difiera el primer cobro al 1-dic.
     const body = { plan: planId, gateway };
     if (opts.launchFreeTrial) body.launchFreeTrial = true;
     const data = await billingRequest(changing ? "/change" : "/subscribe", {

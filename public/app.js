@@ -2101,9 +2101,8 @@ function renderProviders() {
     copyBox.className = "provider-copy";
     const name = document.createElement("strong");
     name.textContent = display.name;
-    const description = document.createElement("span");
-    description.textContent = display.description;
-    copyBox.append(name, description);
+    copyBox.append(name);
+    if (display.description) card.title = display.description;
     card.append(monogram, copyBox);
     card.insertAdjacentHTML("beforeend", '<svg class="provider-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>');
     elements.providerList.append(card);

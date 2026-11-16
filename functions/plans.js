@@ -8,9 +8,9 @@
 const QUOTA_TIME_ZONE = "America/Mexico_City";
 const TZ_OFFSET_HOURS = 6;
 
-// La promoción de Lanzamiento cubre todo el 10 de noviembre de 2026 y cierra a la
+// La promoción de Lanzamiento cubre todo noviembre de 2026 (hasta el 30) y cierra a la
 // medianoche siguiente, hora de la Ciudad de México.
-const PROMO_ENDS_AT = Date.UTC(2026, 10, 11, TZ_OFFSET_HOURS, 0, 0);
+const PROMO_ENDS_AT = Date.UTC(2026, 11, 1, TZ_OFFSET_HOURS, 0, 0);
 
 // monthly: consultas por ciclo de facturación. daily: tope adicional por día (null si no tiene).
 const PLANS = {

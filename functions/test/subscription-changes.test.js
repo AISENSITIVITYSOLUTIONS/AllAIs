@@ -109,7 +109,7 @@ test("al pasar a Lanzamiento aparece el tope diario, y el techo real sigue siend
   // día, así que al bajar a Lanzamiento ese contador empieza en cero. El margen
   // que esto abre está acotado: el cupo del ciclo sigue contando las 8 anteriores
   // y es el que manda. En la práctica es un caso casi imposible, porque después
-  // del 10 de noviembre de 2026 ya no se puede cambiar a Lanzamiento.
+  // del 30 de noviembre de 2026 ya no se puede cambiar a Lanzamiento.
   assert.equal(estado.daily.used, 0, "el contador del día arranca al activarse el tope");
   assert.equal(estado.monthly.used, 8, "el consumo del ciclo sí se conserva íntegro");
   assert.equal(estado.monthly.limit, 300, "y con el límite del plan nuevo");
@@ -156,7 +156,7 @@ test("volver a suscribirse en el mismo ciclo no revive el consumo del plan anter
 
 test("terminada la promoción, Lanzamiento ya no se puede contratar ni cambiar", async () => {
   // Es la misma comprobación que usan /billing/subscribe y /billing/change.
-  const cerrada = new Date("2026-11-11T06:00:00Z");
+  const cerrada = new Date("2026-12-01T06:00:00Z");
   assert.deepEqual(canSubscribeTo("lanzamiento", cerrada), { ok: false, reason: "promo_closed" });
 
   // Quien ya lo tiene contratado lo conserva: la fecha limita la venta, no el servicio.

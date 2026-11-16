@@ -258,7 +258,7 @@ const translations = {
     subDemo: "Demo",
     subTrial: "En prueba",
     subLaunchTrial: "Prueba de lanzamiento",
-    subLaunchTrialNote: "Prueba gratis activa. No se te cobrará nada hasta el 11 de noviembre de 2026. Puedes cancelar antes sin ningún cargo.",
+    subLaunchTrialNote: "Prueba gratis activa. No se te cobrará nada hasta el 1 de diciembre de 2026. Puedes cancelar antes sin ningún cargo.",
     subActive: "Activo",
     subPending: "Pendiente",
     subPaused: "Pausada",
@@ -457,7 +457,7 @@ const translations = {
     subDemo: "Demo",
     subTrial: "Trial",
     subLaunchTrial: "Launch trial",
-    subLaunchTrialNote: "Free trial active. You won't be charged anything until November 11, 2026. You can cancel before then at no cost.",
+    subLaunchTrialNote: "Free trial active. You won't be charged anything until December 1, 2026. You can cancel before then at no cost.",
     subActive: "Active",
     subPending: "Pending",
     subPaused: "Paused",
@@ -656,7 +656,7 @@ const translations = {
     subDemo: "Démo",
     subTrial: "Essai",
     subLaunchTrial: "Essai de lancement",
-    subLaunchTrialNote: "Essai gratuit actif. Vous ne serez débité de rien jusqu'au 11 novembre 2026. Vous pouvez annuler avant sans aucuns frais.",
+    subLaunchTrialNote: "Essai gratuit actif. Vous ne serez débité de rien jusqu'au 1er décembre 2026. Vous pouvez annuler avant sans aucuns frais.",
     subActive: "Actif",
     subPending: "En attente",
     subPaused: "Suspendu",
@@ -1107,7 +1107,7 @@ function renderSubscriptionInfo(data) {
   const isTrial = data.status === "active" && data.trialEndsAt && new Date(data.trialEndsAt) > new Date();
   // Tarea #4b: la prueba de lanzamiento (trial-with-card) tiene su propio badge
   // y una nota explícita del cobro diferido, tanto en pending (tarjeta recién
-  // registrada) como en active (ya autorizada, esperando el 11-nov).
+  // registrada) como en active (ya autorizada, esperando el 1-dic).
   const isLaunchTrial = data.trialType === "launch_free_trial" &&
     ["pending", "active"].includes(data.status) &&
     data.firstChargeAt && new Date(data.firstChargeAt) > new Date();

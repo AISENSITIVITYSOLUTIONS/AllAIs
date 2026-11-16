@@ -4,7 +4,7 @@
  *
  * Se muestra después del registro, antes de usar la app. Destaca la "Prueba
  * de lanzamiento gratis" (trial-with-card: registra tarjeta hoy, primer cobro
- * el 11-nov) y ofrece los 4 planes de pago.
+ * el 1-dic) y ofrece los 4 planes de pago.
  *
  * MODO DEL GATE
  * -------------
@@ -54,11 +54,11 @@
       subtitle: "Prueba AllAIs sin pagar nada hoy. Registras tu tarjeta y decides cuándo empieza el cobro.",
       hero_badge: "La forma de empezar",
       hero_title: "🚀 Prueba de lanzamiento gratis",
-      hero_after_prefix: "Gratis hasta el 10 de noviembre. Después,",
+      hero_after_prefix: "Gratis hasta el 30 de noviembre. Después,",
       hero_after_amount: "$99 MXN/mes",
       hero_after_suffix: "(precio de lanzamiento, congelado para ti).",
       hero_cta: "Empezar prueba gratis",
-      hero_note: "Registras tu tarjeta con Mercado Pago. No se cobra nada hoy. Cancela antes del 11 de noviembre y no se te hará ningún cargo.",
+      hero_note: "Registras tu tarjeta con Mercado Pago. No se cobra nada hoy. Cancela antes del 1 de diciembre y no se te hará ningún cargo.",
       per_month: "MXN / mes",
       trial3: "3 días gratis, luego se cobra",
       recommended: "Recomendado",
@@ -74,11 +74,11 @@
       subtitle: "Try AllAIs without paying anything today. Add your card and decide when billing begins.",
       hero_badge: "The way to start",
       hero_title: "🚀 Free launch trial",
-      hero_after_prefix: "Free until November 10. After that,",
+      hero_after_prefix: "Free until November 30. After that,",
       hero_after_amount: "$99 MXN/mo",
       hero_after_suffix: "(launch price, locked in for you).",
       hero_cta: "Start free trial",
-      hero_note: "You add your card with Mercado Pago. Nothing is charged today. Cancel before November 11 and you won't be charged.",
+      hero_note: "You add your card with Mercado Pago. Nothing is charged today. Cancel before December 1 and you won't be charged.",
       per_month: "MXN / mo",
       trial3: "3 free days, then billed",
       recommended: "Recommended",
@@ -94,11 +94,11 @@
       subtitle: "Essayez AllAIs sans rien payer aujourd'hui. Enregistrez votre carte et choisissez quand le prélèvement commence.",
       hero_badge: "La façon de commencer",
       hero_title: "🚀 Essai de lancement gratuit",
-      hero_after_prefix: "Gratuit jusqu'au 10 novembre. Ensuite,",
+      hero_after_prefix: "Gratuit jusqu'au 30 novembre. Ensuite,",
       hero_after_amount: "99 MXN/mois",
       hero_after_suffix: "(prix de lancement, bloqué pour vous).",
       hero_cta: "Commencer l'essai gratuit",
-      hero_note: "Vous enregistrez votre carte avec Mercado Pago. Rien n'est prélevé aujourd'hui. Annulez avant le 11 novembre et vous ne serez pas débité.",
+      hero_note: "Vous enregistrez votre carte avec Mercado Pago. Rien n'est prélevé aujourd'hui. Annulez avant le 1er décembre et vous ne serez pas débité.",
       per_month: "MXN / mois",
       trial3: "3 jours gratuits, puis facturé",
       recommended: "Recommandé",

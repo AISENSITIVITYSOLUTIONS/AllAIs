@@ -5,7 +5,7 @@
 //
 //   - launchFreeTrial (Tarea #4b, trial-with-card): solo válido para el plan
 //     Lanzamiento y solo mientras la promo siga abierta. El primer cobro se
-//     difiere al cierre de la promo (11-nov) en vez de a los 3 días habituales.
+//     difiere al cierre de la promo (1-dic) en vez de a los 3 días habituales.
 //     Capturamos la tarjeta hoy pero no cobramos nada hasta esa fecha.
 //   - flujo normal: `trialDays` días de prueba desde ahora.
 //

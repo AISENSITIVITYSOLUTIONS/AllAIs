@@ -4,13 +4,13 @@
 //    Dentro de navegadores internos (WhatsApp, Instagram, Facebook) primero hay que abrir Safari.
 (function () {
   const COPY = {
-    es: { install: "Instalar", title: "Instala AllAIs", ok: "Entendido",
+    es: { app: "Instalar la app", phone: "Instalar en tu teléfono", title: "Instala AllAIs", ok: "Entendido",
       steps: ["Toca <strong>Compartir</strong> en la barra de Safari.", "Elige <strong>Agregar a inicio</strong>.", "Toca <strong>Agregar</strong>. AllAIs queda con su ícono en tu pantalla de inicio."],
       inApp: "Primero abre esta página en <strong>Safari</strong>: toca el menú de la app (⋯ o ↗) y elige <strong>Abrir en Safari</strong>." },
-    en: { install: "Install", title: "Install AllAIs", ok: "Got it",
+    en: { app: "Install the app", phone: "Install on your phone", title: "Install AllAIs", ok: "Got it",
       steps: ["Tap <strong>Share</strong> in Safari's toolbar.", "Choose <strong>Add to Home Screen</strong>.", "Tap <strong>Add</strong>. AllAIs appears on your home screen."],
       inApp: "First open this page in <strong>Safari</strong>: tap the app menu (⋯ or ↗) and choose <strong>Open in Safari</strong>." },
-    fr: { install: "Installer", title: "Installer AllAIs", ok: "Compris",
+    fr: { app: "Installer l'app", phone: "Installer sur votre téléphone", title: "Installer AllAIs", ok: "Compris",
       steps: ["Touchez <strong>Partager</strong> dans la barre de Safari.", "Choisissez <strong>Sur l'écran d'accueil</strong>.", "Touchez <strong>Ajouter</strong>. AllAIs apparaît sur votre écran d'accueil."],
       inApp: "Ouvrez d'abord cette page dans <strong>Safari</strong> : touchez le menu de l'app (⋯ ou ↗) et choisissez <strong>Ouvrir dans Safari</strong>." }
   };
@@ -33,17 +33,20 @@
   }
 
   const start = () => {
-    const button = document.getElementById("installButton");
+    // Hay dos botones: bajo el logo (barra lateral, escritorio) y sobre el título (celular).
+    const buttons = [...document.querySelectorAll("[data-install]")];
     const sheet = document.getElementById("installSheet");
-    if (!button || !sheet) return;
-    const label = button.querySelector(".topbar-install-label");
-    const show = (on) => { button.hidden = !on; };
+    if (!buttons.length || !sheet) return;
+    const show = (on) => buttons.forEach((button) => { button.hidden = !on; });
     let deferred = null;
 
     const refreshCopy = () => {
       const t = COPY[lang()];
-      if (label) label.textContent = t.install;
-      button.setAttribute("aria-label", t.title);
+      buttons.forEach((button) => {
+        const label = button.querySelector(".install-cta-label");
+        if (label) label.textContent = t[button.dataset.installVariant] || t.app;
+        button.setAttribute("aria-label", label ? label.textContent : t.title);
+      });
     };
     refreshCopy();
     new MutationObserver(refreshCopy).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
@@ -86,8 +89,8 @@
     sheet.addEventListener("click", (event) => { if (event.target === sheet) closeSheet(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !sheet.hidden) closeSheet(); });
 
-    button.addEventListener("click", async () => {
-      track("pwa_install_click", { prompt: Boolean(deferred) });
+    buttons.forEach((button) => button.addEventListener("click", async () => {
+      track("pwa_install_click", { prompt: Boolean(deferred), place: button.dataset.installVariant });
       if (deferred) {
         deferred.prompt();
         const { outcome } = await deferred.userChoice.catch(() => ({ outcome: "dismissed" }));
@@ -96,7 +99,7 @@
         return;
       }
       if (isIOS()) openSheet();
-    });
+    }));
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

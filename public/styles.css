@@ -2840,35 +2840,76 @@ img {
 
 
 /* App instalable (PWA): botón "Instalar" y pasos para iPhone */
-.topbar-install {
+.install-cta {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 12px 0 10px;
-  border: 1px solid var(--line-strong);
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
   border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 13.5px;
-  font-weight: 600;
+  background: #ffe600;
+  color: #111111;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(255, 230, 0, 0.28), 0 8px 24px rgba(255, 214, 0, 0.35);
+  animation: install-cta-pulse 2.4s ease-in-out infinite;
 }
 
-.topbar-install[hidden],
+.install-cta:hover {
+  background: #fff176;
+}
+
+.install-cta:focus-visible {
+  outline: 3px solid #111111;
+  outline-offset: 2px;
+}
+
+.install-cta svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.install-cta[hidden],
 .install-sheet[hidden] {
   display: none;
 }
 
-.topbar-install svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+/* Bajo el logo, en la barra lateral */
+.install-cta--sidebar {
+  width: 100%;
+  margin: 2px 0 14px;
+}
+
+/* En celular la barra lateral está oculta: el botón va sobre el título */
+.install-cta--hero {
+  display: none;
+  margin: 0 auto 14px;
+}
+
+@media (max-width: 960px) {
+  .install-cta--hero:not([hidden]) {
+    display: inline-flex;
+  }
+}
+
+@keyframes install-cta-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 230, 0, 0.28), 0 8px 24px rgba(255, 214, 0, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 230, 0, 0.16), 0 8px 28px rgba(255, 214, 0, 0.5); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-cta { animation: none; }
 }
 
 .install-sheet {
@@ -2963,14 +3004,3 @@ img {
   cursor: pointer;
 }
 
-@media (max-width: 640px) {
-  .topbar-install .topbar-install-label {
-    display: none;
-  }
-
-  .topbar-install {
-    width: 40px;
-    padding: 0;
-    justify-content: center;
-  }
-}

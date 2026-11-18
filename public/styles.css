@@ -2792,6 +2792,10 @@ img {
   color: inherit;
   font-size: .85rem;
 }
+.openrouter-allmodels[hidden] {
+  display: none;
+}
+
 .openrouter-allmodels {
   display: inline-flex;
   align-items: center;

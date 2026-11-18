@@ -22,6 +22,11 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="AllAIs" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -56,7 +61,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="/styles.css?v=59" />
+    <link rel="stylesheet" href="/styles.css?v=60" />
     <link rel="stylesheet" href="/tour.css?v=2" />
     <link rel="stylesheet" href="/compare.css?v=3" />
     <link rel="stylesheet" href="/plan-gate.css?v=1" />
@@ -136,6 +141,10 @@
             <button type="button" class="topbar-account" id="topbarAccount" aria-label="Iniciar sesión" aria-haspopup="dialog">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6" /><path d="M5 19.5c1.3-3.2 4-4.8 7-4.8s5.7 1.6 7 4.8" /></svg>
               <span class="topbar-account-label">Iniciar sesión</span>
+            </button>
+            <button type="button" class="topbar-install" id="installButton" aria-label="Instala AllAIs" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" /><path d="M5 19h14" /></svg>
+              <span class="topbar-install-label">Instalar</span>
             </button>
             <button type="button" class="icon-button theme-toggle" id="themeToggle" aria-label="Cambiar tema">
               <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1Z" /></svg>
@@ -269,6 +278,15 @@
       </div>
     </dialog>
 
+    <div class="install-sheet" id="installSheet" hidden>
+      <div class="install-card" role="dialog" aria-modal="true" aria-labelledby="installSheetTitle">
+        <img src="/icons/icon-192.png" alt="" width="52" height="52" />
+        <h2 id="installSheetTitle">Instala AllAIs</h2>
+        <ol class="install-steps"></ol>
+        <button type="button" class="install-close" id="installSheetClose">Entendido</button>
+      </div>
+    </div>
+
     <script type="module" src="/auth.js?v=42"></script>
     <script type="module" src="/billing.js?v=11"></script>
     <script defer src="/plan-gate.js?v=2"></script>
@@ -276,5 +294,6 @@
     <script defer src="/tour-demo-data.js?v=1"></script>
     <script defer src="/tour.js?v=4"></script>
     <script defer src="/compare.js?v=3"></script>
+    <script defer src="/pwa.js?v=1"></script>
   </body>
 </html>

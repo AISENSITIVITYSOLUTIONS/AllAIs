@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "AllAIs · NNI",
+  "short_name": "AllAIs",
+  "description": "ChatGPT, Claude, Gemini, DeepSeek y cientos de modelos más en una sola interfaz profesional.",
+  "lang": "es-MX",
+  "dir": "ltr",
+  "start_url": "/?origen=app",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0A1628",
+  "theme_color": "#0A1628",
+  "categories": ["productivity", "business", "education"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

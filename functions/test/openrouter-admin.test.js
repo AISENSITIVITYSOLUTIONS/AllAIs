@@ -7,7 +7,7 @@ const CATALOG = {
   data: [
     { id: "openai/gpt-6-luna", name: "GPT-6 Luna", pricing: { prompt: "0", completion: "0.0000005" } },
     { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", pricing: { prompt: "0", completion: "0.00005" } },
-    { id: "moonshotai/kimi-k3", name: "Kimi K3", pricing: { prompt: "0", completion: "0.0000025" } }
+    { id: "moonshotai/kimi-k2-0905", name: "Kimi K2 0905", pricing: { prompt: "0", completion: "0.0000025" } }
   ]
 };
 
@@ -27,13 +27,13 @@ test("los clientes solo reciben la lista curada", async () => {
 });
 
 test("un cliente no puede usar un modelo fuera de la lista curada, aun con el plan más alto", async () => {
-  const gate = await openRouterModelAllowed("moonshotai/kimi-k3", "profesional_3");
+  const gate = await openRouterModelAllowed("moonshotai/kimi-k2-0905", "profesional_3");
   assert.equal(gate.allowed, false);
   assert.equal(gate.adminOnly, true);
 });
 
 test("el administrador puede usar cualquier modelo, sin candado de plan", async () => {
-  assert.equal((await openRouterModelAllowed("moonshotai/kimi-k3", null, { admin: true })).allowed, true);
+  assert.equal((await openRouterModelAllowed("moonshotai/kimi-k2-0905", null, { admin: true })).allowed, true);
   assert.equal((await openRouterModelAllowed("anthropic/claude-opus-5.5", null, { admin: true })).allowed, true);
 });
 

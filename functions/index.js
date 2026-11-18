@@ -5,7 +5,7 @@ const { getAuth } = require("firebase-admin/auth");
 const { getAppCheck } = require("firebase-admin/app-check");
 const { getStorage } = require("firebase-admin/storage");
 const crypto = require("node:crypto");
-const { listProviders, callProvider, listOpenRouterModels, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
+const { listProviders, callProvider, openRouterCatalogFor, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement, adminEntitlement } = require("./entitlements");
 const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
@@ -629,12 +629,16 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 
     // Catálogo de modelos de OpenRouter para el selector del frontend. Devuelve
     // lista vacía si no hay clave o si OpenRouter no responde (no rompe la app).
+    // El administrador (token verificado, ADMIN_EMAILS/OWNER_EMAILS) recibe el
+    // catálogo completo; clientes e invitados, solo la lista curada.
     if (path === "/models/openrouter" && request.method === "GET") {
+      const viewer = await verifyEmailUser(request);
+      const admin = isAdminEmail(viewer?.email);
       try {
-        sendJson(response, 200, { models: await listOpenRouterModels(), plans: openRouterPlanMeta() });
+        sendJson(response, 200, { models: await openRouterCatalogFor({ admin }), plans: openRouterPlanMeta(), admin });
       } catch (error) {
         console.error("AllAIs openrouter models", { message: error?.message });
-        sendJson(response, 200, { models: [], plans: openRouterPlanMeta(), error: "No se pudo obtener el catálogo." });
+        sendJson(response, 200, { models: [], plans: openRouterPlanMeta(), admin, error: "No se pudo obtener el catálogo." });
       }
       return;
     }
@@ -1087,7 +1091,16 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       // Gate de modelo OpenRouter por plan: protege la cuota de los modelos premium.
       // Se bloquea antes de consumir cuota si el modelo excede el nivel del plan.
       if (provider === "openrouter" && model) {
-        const gate = await openRouterModelAllowed(model, entitlement?.planId || null);
+        const gate = await openRouterModelAllowed(model, entitlement?.planId || null, {
+          admin: entitlement?.source === "admin"
+        });
+        if (!gate.allowed && gate.adminOnly) {
+          sendJson(response, 403, {
+            error: "Este modelo no está disponible en AllAIs. Elige uno de la lista.",
+            code: "MODEL_NOT_AVAILABLE"
+          });
+          return;
+        }
         if (!gate.allowed) {
           sendJson(response, 403, {
             error: "Este modelo requiere un plan superior. Elige otro modelo o mejora tu plan.",

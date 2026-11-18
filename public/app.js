@@ -16,6 +16,7 @@ const state = {
   openrouterShowAll: false,
   openrouterLoaded: false,
   openrouterTierMeta: null,
+  openrouterAdmin: false,
   conversations: [],
   currentConversationId: null,
   conversationMessages: [],
@@ -1009,6 +1010,7 @@ function logout() {
   state.authMode = "";
   state.email = "";
   state.quota = null;
+  resetOpenRouterCatalog();
   state.conversations = [];
   state.currentConversationId = null;
   state.conversationMessages = [];
@@ -1344,6 +1346,8 @@ async function startEmailSession() {
   setSessionState(true, copy.signedInAs(state.email));
   trackEvent("email_session_started");
   loadConversations();
+  // El catálogo depende de la cuenta: el administrador recibe todos los modelos.
+  resetOpenRouterCatalog();
   closeAuthDialog();
   // Tarea #4b parte 2: tras iniciar sesión, si el usuario no tiene plan elegido
   // mostramos la pantalla "Elige tu plan". El gate consulta /billing/status y
@@ -2190,7 +2194,20 @@ function updateOpenRouterRow() {
   const showAllLabel = { es: "Ver todos", en: "Show all", fr: "Voir tout" };
   const label = document.getElementById("openrouterShowAllLabel");
   if (label) label.textContent = showAllLabel[state.language] || showAllLabel.es;
+  // "Ver todos" es exclusivo del administrador: los clientes solo tienen la lista curada.
+  const showAllControl = elements.openrouterShowAll?.closest("label");
+  if (showAllControl) showAllControl.hidden = !state.openrouterAdmin;
   if (isOpenRouter) ensureOpenRouterModels();
+}
+
+// Descarta el catálogo cargado para pedirlo de nuevo con la sesión actual.
+function resetOpenRouterCatalog() {
+  state.openrouterLoaded = false;
+  state.openrouterModels = [];
+  state.openrouterAdmin = false;
+  state.openrouterShowAll = false;
+  if (elements.openrouterShowAll) elements.openrouterShowAll.checked = false;
+  if (state.selectedProvider === "openrouter") updateOpenRouterRow();
 }
 
 // Carga el catálogo una sola vez y llena el selector.
@@ -2201,19 +2218,26 @@ async function ensureOpenRouterModels() {
   }
   state.openrouterLoaded = true;
   try {
-    const response = await fetch(`${API_BASE}/models/openrouter`);
+    // Con sesión, el servidor decide el catálogo: completo para el administrador,
+    // lista curada para los clientes.
+    const response = await fetch(`${API_BASE}/models/openrouter`, { headers: await authHeaders() });
     const data = await readApiJson(response);
     state.openrouterModels = Array.isArray(data.models) ? data.models : [];
     state.openrouterTierMeta = data.plans || null;
+    state.openrouterAdmin = data.admin === true;
   } catch (error) {
     console.warn("AllAIs no pudo cargar el catálogo de OpenRouter", error);
     state.openrouterModels = [];
+    state.openrouterAdmin = false;
   }
+  const showAllControl = elements.openrouterShowAll?.closest("label");
+  if (showAllControl) showAllControl.hidden = !state.openrouterAdmin;
   renderOpenRouterOptions();
 }
 
 // Devuelve true si el plan del usuario permite el modelo (según su nivel/tier).
 function openrouterModelLocked(model) {
+  if (state.openrouterAdmin) return false; // el administrador no tiene niveles
   const meta = state.openrouterTierMeta;
   if (!meta || !model?.tier) return false; // sin metadatos no se bloquea nada
   const planId = state.plan && meta.planMaxTier[state.plan] ? state.plan : "free";
@@ -2238,8 +2262,14 @@ function renderOpenRouterOptions() {
   const select = elements.openrouterModel;
   if (!select) return;
   const all = state.openrouterModels;
-  const list = state.openrouterShowAll ? all : all.filter((m) => m.curated);
+  const showAll = state.openrouterAdmin && state.openrouterShowAll;
+  const list = showAll ? all : all.filter((m) => m.curated);
   const source = list.length ? list : all; // si no hay curados, muestra todos
+  const label = document.getElementById("openrouterShowAllLabel");
+  if (label && state.openrouterAdmin) {
+    const base = { es: "Ver todos", en: "Show all", fr: "Voir tout" };
+    label.textContent = `${base[state.language] || base.es} (${all.length})`;
+  }
   select.innerHTML = "";
   const groups = {};
   for (const model of source) {

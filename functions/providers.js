@@ -817,7 +817,7 @@ const CURATED_OPENROUTER = new Set([
   "x-ai/grok-4.7",
   "deepseek/deepseek-v4-flash",
   "deepseek/deepseek-v4-pro",
-  "moonshotai/kimi-k3.1-pro",
+  "moonshotai/kimi-k3",
   "qwen/qwen3.8-flash",
   "meta-llama/llama-3.3-70b-instruct",
   "mistralai/mistral-large-4-0"

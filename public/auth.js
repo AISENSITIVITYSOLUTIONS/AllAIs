@@ -2,6 +2,8 @@
 // La configuración web se obtiene de Firebase Hosting (/__/firebase/init.json), así que no hay claves en el código.
 const SDK = "https://www.gstatic.com/firebasejs/10.14.1";
 const EMAIL_KEY = "allais_email_for_signin";
+// Dominios de Firebase Hosting de AllAIs que pueden atender el inicio de sesión.
+const OWN_AUTH_DOMAINS = new Set(["allais.nni.ai", "allais-nni.web.app"]);
 
 let authApi = null;
 let auth = null;
@@ -15,6 +17,12 @@ function ready() {
       const response = await fetch("/__/firebase/init.json");
       if (!response.ok) throw new Error("firebase-config-unavailable");
       const config = await response.json();
+      // El inicio con Google ocurre en el mismo dominio de la página. Si se usara
+      // allais-nni.firebaseapp.com, Safari y los navegadores internos (WhatsApp,
+      // Instagram) aíslan su almacenamiento y la redirección falla con
+      // "missing initial state". Firebase Hosting sirve /__/auth/handler en
+      // todos sus dominios, así que basta con apuntar authDomain a este.
+      if (OWN_AUTH_DOMAINS.has(window.location.hostname)) config.authDomain = window.location.hostname;
       const appModule = await import(`${SDK}/firebase-app.js`);
       authApi = await import(`${SDK}/firebase-auth.js`);
       const app = appModule.initializeApp(config);

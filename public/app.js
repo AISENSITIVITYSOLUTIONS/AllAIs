@@ -1426,6 +1426,16 @@ const MAX_ATTACHMENT_TEXT_CHARS = 200_000;
 const TEXT_FILE_EXTENSIONS = new Set(["txt", "md", "csv", "json", "html", "xml", "log", "yaml", "yml"]);
 
 function selectedCapabilities() {
+  // Modo video: solo se admite una imagen, y solo si el modelo parte de un primer cuadro.
+  if (state.videoMode) {
+    return { files: false, images: Boolean(selectedVideoModel()?.acceptsImage), pdf: false, videos: false };
+  }
+  // OpenRouter: depende del modelo elegido (lo que acepta según su catálogo).
+  if (state.selectedProvider === "openrouter") {
+    const model = state.openrouterModels.find((m) => m.id === state.openrouterModel);
+    const input = Array.isArray(model?.input) ? model.input : ["text"];
+    return { files: true, images: input.includes("image"), pdf: input.includes("file"), videos: input.includes("video") };
+  }
   const provider = state.providers.find((item) => item.id === state.selectedProvider);
   if (provider?.capabilities) return provider.capabilities;
   return {
@@ -2140,9 +2150,11 @@ function selectedVideoModel() {
 }
 
 function videoModelLabel(m) {
-  if (m.allowed) return m.included ? `${m.name} · incluido` : m.name;
-  if (m.requiredPlanName) return `🔒 ${m.name} — Plan ${m.requiredPlanName}`;
-  return `🔒 ${m.name}`;
+  const imageTag = { es: "acepta imagen", en: "image input", fr: "accepte une image" };
+  const name = m.acceptsImage ? `${m.name} · 🖼 ${imageTag[state.language] || imageTag.es}` : m.name;
+  if (m.allowed) return m.included ? `${name} · incluido` : name;
+  if (m.requiredPlanName) return `🔒 ${name} — Plan ${m.requiredPlanName}`;
+  return `🔒 ${name}`;
 }
 
 function renderVideoModelOptions() {
@@ -2161,6 +2173,7 @@ function renderVideoModelOptions() {
   const current = visible.find((m) => m.id === state.videoModel && m.allowed);
   state.videoModel = current ? current.id : (visible.find((m) => m.allowed)?.id || visible[0]?.id || "");
   select.value = state.videoModel;
+  syncAttachmentMenu();
 }
 
 async function loadVideoModels() {
@@ -2310,6 +2323,7 @@ function renderOpenRouterOptions() {
     state.openrouterModel = allowed[0]?.id || source[0]?.id || "";
   }
   select.value = state.openrouterModel;
+  syncAttachmentMenu();
 }
 
 function resizePromptInput() {
@@ -2461,9 +2475,18 @@ async function generateImageFlow(prompt) {
 
 async function generateVideoFlow(prompt) {
   const copy = translations[state.language];
-  if (!prompt) { window.alert(copy.videoNeedPrompt); return; }
-  addMessage("user", prompt, copy.videoTaskLabel);
-  appendHistory("user", prompt);
+  // Imagen de partida (primer cuadro), si el usuario adjuntó una.
+  const startImage = state.attachments.find((item) => item.kind === "image") || null;
+  if (startImage && !selectedVideoModel()?.acceptsImage) { window.alert(copy.unsupportedAttachment); return; }
+  if (!prompt && !startImage) { window.alert(copy.videoNeedPrompt); return; }
+  const imageNote = { es: "Video a partir de la imagen", en: "Video from image", fr: "Vidéo à partir de l'image" };
+  const shown = startImage ? `${prompt || imageNote[state.language] || imageNote.es} · 🖼 ${startImage.name}` : prompt;
+  addMessage("user", shown, copy.videoTaskLabel);
+  appendHistory("user", shown);
+  if (startImage) {
+    state.attachments = [];
+    renderAttachmentList();
+  }
   elements.promptInput.value = "";
   resizePromptInput();
   elements.sendButton.disabled = true;
@@ -2471,12 +2494,17 @@ async function generateVideoFlow(prompt) {
   const prevLabel = elements.sendLabel.textContent;
   elements.sendLabel.textContent = copy.processing;
   const pending = addPendingMessage(copy.videoGenerating);
-  trackEvent("video_requested", { language: state.language });
+  trackEvent("video_requested", { language: state.language, from_image: Boolean(startImage) });
   try {
     const response = await fetch(`${API_BASE}/video`, {
       method: "POST",
       headers: await authHeaders(),
-      body: JSON.stringify({ accessCode: cleanAccessCode(state.accessCode), prompt, videoModel: state.videoModel || undefined })
+      body: JSON.stringify({
+        accessCode: cleanAccessCode(state.accessCode),
+        prompt,
+        videoModel: state.videoModel || undefined,
+        image: startImage ? { name: startImage.name, mimeType: startImage.mimeType, data: startImage.data } : undefined
+      })
     });
     const data = await readApiJson(response);
     if (response.status === 403 && data.code === "VIDEO_MODEL_PLAN") {
@@ -2982,10 +3010,12 @@ function bindEvents() {
   elements.videoModelSelect?.addEventListener("change", (event) => {
     state.videoModel = event.target.value;
     applyVideoModelDisplay();
+    syncAttachmentMenu();
     trackEvent("video_model_selected", { model: state.videoModel });
   });
   elements.openrouterModel?.addEventListener("change", (event) => {
     state.openrouterModel = event.target.value;
+    syncAttachmentMenu();
     trackEvent("openrouter_model_selected", { model: state.openrouterModel });
   });
   elements.openrouterShowAll?.addEventListener("change", (event) => {
@@ -3008,6 +3038,7 @@ function bindEvents() {
       if (elements.imageModeToggle) elements.imageModeToggle.checked = false;
     }
     syncProviderCards();
+    syncAttachmentMenu();
     if (state.videoMode) loadVideoModels();
     trackEvent("video_mode_toggled", { on: state.videoMode });
   });

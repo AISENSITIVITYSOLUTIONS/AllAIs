@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 // y uno fuera de la lista curada.
 const CATALOG = {
   data: [
-    { id: "openai/gpt-6-luna", name: "GPT-6 Luna", pricing: { prompt: "0", completion: "0.0000005" } },
+    { id: "openai/gpt-6-luna", name: "GPT-6 Luna", pricing: { prompt: "0", completion: "0.0000005" }, architecture: { input_modalities: ["text", "image", "file"] } },
     { id: "anthropic/claude-opus-5.5", name: "Claude Opus 5.5", pricing: { prompt: "0", completion: "0.00005" } },
     { id: "moonshotai/kimi-k2-0905", name: "Kimi K2 0905", pricing: { prompt: "0", completion: "0.0000025" } }
   ]
@@ -14,7 +14,7 @@ const CATALOG = {
 process.env.OPENROUTER_API_KEY = "test-key";
 global.fetch = async () => ({ ok: true, json: async () => CATALOG });
 
-const { openRouterCatalogFor, openRouterModelAllowed } = require("../providers");
+const { openRouterCatalogFor, openRouterModelAllowed, callProvider } = require("../providers");
 
 test("el administrador recibe el catálogo completo", async () => {
   const models = await openRouterCatalogFor({ admin: true });
@@ -43,4 +43,15 @@ test("los modelos curados siguen limitados por plan para los clientes", async ()
   assert.equal(free.adminOnly, false);
   assert.equal((await openRouterModelAllowed("anthropic/claude-opus-5.5", "profesional_2")).allowed, true);
   assert.equal((await openRouterModelAllowed("openai/gpt-6-luna", null)).allowed, true);
+});
+
+test("OpenRouter: las capacidades salen del modelo elegido", async () => {
+  const models = await openRouterCatalogFor({ admin: true });
+  assert.deepEqual(models.find((m) => m.id === "openai/gpt-6-luna").input, ["text", "image", "file"]);
+  assert.deepEqual(models.find((m) => m.id === "moonshotai/kimi-k2-0905").input, ["text"]);
+  const image = { kind: "image", name: "a.png", mimeType: "image/png", data: "iVBORw0KGgo=" };
+  await assert.rejects(
+    callProvider("openrouter", { prompt: "describe", model: "moonshotai/kimi-k2-0905", attachments: [image] }),
+    /no admite este tipo de archivo/
+  );
 });

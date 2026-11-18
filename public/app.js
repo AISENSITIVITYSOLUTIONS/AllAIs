@@ -2229,6 +2229,12 @@ async function ensureOpenRouterModels() {
     state.openrouterModels = Array.isArray(data.models) ? data.models : [];
     state.openrouterTierMeta = data.plans || null;
     state.openrouterAdmin = data.admin === true;
+    // El administrador ve el catálogo completo de entrada; puede desmarcar
+    // "Ver todos" para volver a la lista curada.
+    if (state.openrouterAdmin) {
+      state.openrouterShowAll = true;
+      if (elements.openrouterShowAll) elements.openrouterShowAll.checked = true;
+    }
   } catch (error) {
     if (requestId !== state.openrouterRequestId) return;
     console.warn("AllAIs no pudo cargar el catálogo de OpenRouter", error);

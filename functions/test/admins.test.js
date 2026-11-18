@@ -4,6 +4,7 @@ const { isAdminEmail, adminEmails } = require("../admins");
 
 test("el dueño es administrador aunque ADMIN_EMAILS no exista", () => {
   assert.equal(isAdminEmail("fdealbam@nni.ai", {}), true);
+  assert.equal(isAdminEmail("AeelenMirandaGtz@gmail.com", {}), true);
 });
 
 test("el dueño es administrador aunque ADMIN_EMAILS tenga otro valor", () => {

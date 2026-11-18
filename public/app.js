@@ -2217,15 +2217,26 @@ async function ensureOpenRouterModels() {
     return;
   }
   state.openrouterLoaded = true;
+  // Cada carga lleva un número: si una petición vieja (sin sesión) responde después
+  // de otra más nueva (con sesión), se descarta y no pisa el catálogo del administrador.
+  const requestId = (state.openrouterRequestId = (state.openrouterRequestId || 0) + 1);
   try {
     // Con sesión, el servidor decide el catálogo: completo para el administrador,
     // lista curada para los clientes.
     const response = await fetch(`${API_BASE}/models/openrouter`, { headers: await authHeaders() });
     const data = await readApiJson(response);
+    if (requestId !== state.openrouterRequestId) return;
     state.openrouterModels = Array.isArray(data.models) ? data.models : [];
     state.openrouterTierMeta = data.plans || null;
     state.openrouterAdmin = data.admin === true;
+    // El administrador ve el catálogo completo de entrada; puede desmarcar
+    // "Ver todos" para volver a la lista curada.
+    if (state.openrouterAdmin) {
+      state.openrouterShowAll = true;
+      if (elements.openrouterShowAll) elements.openrouterShowAll.checked = true;
+    }
   } catch (error) {
+    if (requestId !== state.openrouterRequestId) return;
     console.warn("AllAIs no pudo cargar el catálogo de OpenRouter", error);
     state.openrouterModels = [];
     state.openrouterAdmin = false;

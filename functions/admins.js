@@ -4,7 +4,7 @@
 // configuración del entorno: así un .env mal guardado o una variable sobrescrita
 // en Cloud Run no deja al dueño sin acceso. ADMIN_EMAILS solo agrega correos.
 
-const OWNER_EMAILS = ["fdealbam@nni.ai", "fdealbam@gmail.com"];
+const OWNER_EMAILS = ["fdealbam@nni.ai", "fdealbam@gmail.com", "aeelenmirandagtz@gmail.com"];
 
 function adminEmails(env = process.env) {
   const extra = String(env.ADMIN_EMAILS || "")

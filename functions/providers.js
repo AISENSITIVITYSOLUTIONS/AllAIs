@@ -778,12 +778,16 @@ async function openRouterModelTier(modelId) {
   return tierFromPricing(found?.pricing?.completion);
 }
 
-// ¿El plan del usuario permite este modelo? planId null => free.
-async function openRouterModelAllowed(modelId, planId) {
+// ¿El usuario puede usar este modelo? planId null => free.
+// El administrador tiene el catálogo completo de OpenRouter, sin niveles ni
+// candados. Los clientes solo pueden usar la lista curada, limitada por su plan.
+async function openRouterModelAllowed(modelId, planId, { admin = false } = {}) {
+  if (admin) return { allowed: true, tier: await openRouterModelTier(modelId), requiredPlan: null, adminOnly: false };
+  if (!CURATED_OPENROUTER.has(modelId)) return { allowed: false, tier: null, requiredPlan: null, adminOnly: true };
   const tier = await openRouterModelTier(modelId);
   const key = planId && PLAN_MAX_TIER[planId] ? planId : "free";
   const allowed = TIER_RANK[tier] <= TIER_RANK[PLAN_MAX_TIER[key]];
-  return { allowed, tier, requiredPlan: allowed ? null : minPlanForTier(tier) };
+  return { allowed, tier, requiredPlan: allowed ? null : minPlanForTier(tier), adminOnly: false };
 }
 
 // Metadatos para que el frontend bloquee modelos según el plan del usuario.
@@ -853,12 +857,20 @@ async function listOpenRouterModels() {
   return models;
 }
 
+// Catálogo según quién lo pide: completo para el administrador, solo la lista
+// curada para los clientes (el resto del catálogo es exclusivo del administrador).
+async function openRouterCatalogFor({ admin = false } = {}) {
+  const models = await listOpenRouterModels();
+  return admin ? models : models.filter((m) => m.curated);
+}
+
 module.exports = {
   listProviders,
   callProvider,
   getProvider,
   buildChatEndpoint,
   listOpenRouterModels,
+  openRouterCatalogFor,
   openRouterModelAllowed,
   openRouterPlanMeta
 };

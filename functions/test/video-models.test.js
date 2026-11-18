@@ -56,3 +56,14 @@ test("duración y formato se ajustan a lo que acepta el modelo", () => {
   assert.equal(vm.pickDuration({ durations: [] }), 5);
   assert.equal(vm.pickAspectRatio(barato), "16:9");
 });
+
+test("acceptsImage: solo modelos con primer cuadro aceptan imagen de partida", () => {
+  const vm = require("../video-models");
+  const withFrame = vm.normalizeOpenRouterVideoModel({ id: "google/veo-3.1", supported_frame_images: ["first_frame", "last_frame"] });
+  const textOnly = vm.normalizeOpenRouterVideoModel({ id: "x/text-video" });
+  assert.equal(vm.acceptsImage(withFrame), true);
+  assert.equal(vm.acceptsImage(textOnly), false);
+  assert.equal(vm.acceptsImage(vm.minimaxModel()), false);
+  const [entry] = vm.catalogFor([withFrame], { source: "admin" });
+  assert.equal(entry.acceptsImage, true);
+});

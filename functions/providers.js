@@ -95,7 +95,21 @@ function normalizeAttachments(input) {
   });
 }
 
-function providerCapabilities(providerId) {
+// Capacidades de un modelo de OpenRouter según su catálogo (architecture.input_modalities).
+// Usa el catálogo en memoria; si aún no se ha cargado, el modelo se trata como solo texto.
+function openRouterModelCapabilities(modelId) {
+  const found = openRouterModelsCache.data.find((m) => m.id === modelId);
+  const input = found?.input || [];
+  return {
+    files: true,
+    images: input.includes("image"),
+    pdf: input.includes("file"),
+    videos: input.includes("video")
+  };
+}
+
+function providerCapabilities(providerId, model = "") {
+  if (providerId === "openrouter" && model) return openRouterModelCapabilities(model);
   const openaiModel = cleanModel(process.env.OPENAI_MODEL, "gpt-6-luna");
   const claudeModel = cleanModel(process.env.ANTHROPIC_MODEL, "claude-sonnet-5-5");
   const geminiModel = cleanModel(process.env.GEMINI_MODEL, "gemini-3.8-flash");
@@ -699,7 +713,11 @@ function getProvider(providerId) {
 async function callProvider(providerId, payload) {
   const provider = getProvider(providerId);
   const attachments = normalizeAttachments(payload.attachments);
-  const capabilities = providerCapabilities(providerId);
+  // En OpenRouter las capacidades dependen del modelo elegido: se lee su catálogo.
+  if (providerId === "openrouter" && payload.model && attachments.some((item) => item.kind !== "text")) {
+    await listOpenRouterModels().catch(() => []);
+  }
+  const capabilities = providerCapabilities(providerId, providerId === "openrouter" ? payload.model : "");
   for (const attachment of attachments) {
     const supported = attachment.kind === "text" ||
       (attachment.kind === "image" && capabilities.images) ||
@@ -850,6 +868,8 @@ async function listOpenRouterModels() {
         ? { prompt: m.pricing.prompt, completion: m.pricing.completion }
         : null,
       curated: CURATED_OPENROUTER.has(m.id),
+      // Qué acepta como entrada: text, image, file (PDF), audio, video.
+      input: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.map(String) : ["text"],
       tier: tierFromPricing(m.pricing?.completion)
     }))
     .filter((m) => m.id);

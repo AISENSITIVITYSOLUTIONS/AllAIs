@@ -57,8 +57,15 @@ function normalizeOpenRouterVideoModel(m) {
     pricePerSecond: pricePerSecond(m.pricing_skus),
     durations,
     aspectRatios: Array.isArray(m.supported_aspect_ratios) ? m.supported_aspect_ratios.map(String) : [],
-    resolutions: Array.isArray(m.supported_resolutions) ? m.supported_resolutions.map(String) : []
+    resolutions: Array.isArray(m.supported_resolutions) ? m.supported_resolutions.map(String) : [],
+    // Imágenes que acepta como cuadro: "first_frame" y/o "last_frame".
+    frameImages: Array.isArray(m.supported_frame_images) ? m.supported_frame_images.map(String) : []
   };
+}
+
+// ¿El modelo puede partir de una imagen (primer cuadro)?
+function acceptsImage(model) {
+  return Boolean(model?.frameImages?.includes("first_frame"));
 }
 
 function minimaxModel(modelName = "T2V-01-Director") {
@@ -70,7 +77,8 @@ function minimaxModel(modelName = "T2V-01-Director") {
     included: true,
     durations: [6],
     aspectRatios: [],
-    resolutions: []
+    resolutions: [],
+    frameImages: []
   };
 }
 
@@ -119,6 +127,7 @@ function catalogFor(models, entitlement, caps = priceCaps()) {
       provider: m.provider,
       pricePerSecond: m.pricePerSecond,
       included: Boolean(m.included),
+      acceptsImage: acceptsImage(m),
       allowed: access.allowed,
       requiredPlan: access.requiredPlan || null,
       requiredPlanName: access.requiredPlan ? PLAN_NAMES[access.requiredPlan] || null : null,
@@ -174,13 +183,17 @@ async function allVideoModels(minimaxModelName) {
   return [...minimax, ...openrouter];
 }
 
-async function submitOpenRouterVideo(model, prompt) {
+// imageUrl (opcional): URL https de la imagen que será el primer cuadro del video.
+async function submitOpenRouterVideo(model, prompt, imageUrl = null) {
   const apiKey = openRouterKey();
   if (!apiKey) throw new Error("Falta configurar OPENROUTER_API_KEY.");
   const duration = pickDuration(model);
   const body = { model: model.id, prompt: String(prompt).slice(0, 2000), duration };
   const aspect = pickAspectRatio(model);
   if (aspect) body.aspect_ratio = aspect;
+  if (imageUrl) {
+    body.frame_images = [{ type: "image_url", image_url: { url: imageUrl }, frame_type: "first_frame" }];
+  }
   const resp = await fetch(OPENROUTER_VIDEOS_ENDPOINT, {
     method: "POST",
     headers: openRouterHeaders(apiKey),
@@ -237,6 +250,7 @@ module.exports = {
   minimaxModel,
   pickDuration,
   pickAspectRatio,
+  acceptsImage,
   videoModelAccess,
   catalogFor,
   allVideoModels,

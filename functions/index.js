@@ -467,6 +467,34 @@ async function saveVideoBuffer(buffer, holder, contentType = "video/mp4") {
   return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
 }
 
+// Imagen de partida para un video: se guarda en Storage para darle al modelo una
+// URL https (OpenRouter recibe los cuadros por URL). Devuelve null si no hay imagen.
+const VIDEO_IMAGE_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+const MAX_VIDEO_IMAGE_BYTES = 8 * 1024 * 1024;
+
+function parseVideoImage(input) {
+  if (!input) return null;
+  const mimeType = String(input.mimeType || "");
+  const data = String(input.data || "");
+  if (!VIDEO_IMAGE_TYPES[mimeType]) throw Object.assign(new Error("Usa una imagen PNG, JPG o WEBP."), { status: 400 });
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw Object.assign(new Error("La imagen no es válida."), { status: 400 });
+  const buffer = Buffer.from(data, "base64");
+  if (!buffer.length || buffer.length > MAX_VIDEO_IMAGE_BYTES) throw Object.assign(new Error("La imagen debe pesar menos de 8 MB."), { status: 400 });
+  return { mimeType, buffer };
+}
+
+async function saveVideoInputImage(image, holder) {
+  const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
+  const safeHolder = String(holder || "anon").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+  const token = crypto.randomUUID();
+  const objectPath = `video-inputs/${safeHolder}/${Date.now()}-${token.slice(0, 8)}.${VIDEO_IMAGE_TYPES[image.mimeType]}`;
+  await bucket.file(objectPath).save(image.buffer, {
+    resumable: false,
+    metadata: { contentType: image.mimeType, metadata: { firebaseStorageDownloadTokens: token } }
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+}
+
 // Descarga el video terminado de MiniMax y lo guarda en Firebase Storage.
 async function storeVideoFile(fileId, holder) {
   const apiKey = minimaxKey();
@@ -971,7 +999,16 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         sendJson(response, 401, { error: "Inicia sesión para generar videos.", code: "UNAUTHORIZED" });
         return;
       }
-      const prompt = String(request.body?.prompt || "").trim();
+      let image;
+      try {
+        image = parseVideoImage(request.body?.image);
+      } catch (error) {
+        sendJson(response, error.status || 400, { error: error.message, code: "VIDEO_IMAGE_INVALID" });
+        return;
+      }
+      // Con imagen, el texto es opcional: por defecto se anima la imagen tal cual.
+      const prompt = String(request.body?.prompt || "").trim()
+        || (image ? "Anima esta imagen con un movimiento natural y cinematográfico, conservando su composición." : "");
       if (!prompt) {
         sendJson(response, 400, { error: "Describe el video que quieres generar." });
         return;
@@ -984,6 +1021,13 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       const videoModel = catalog.find((m) => m.id === requestedModel);
       if (!videoModel) {
         sendJson(response, 400, { error: "Ese modelo de video no está disponible.", code: "VIDEO_MODEL_UNKNOWN" });
+        return;
+      }
+      if (image && !videoModels.acceptsImage(videoModel)) {
+        sendJson(response, 400, {
+          error: "Este modelo de video no parte de una imagen. Elige uno marcado con «acepta imagen».",
+          code: "VIDEO_IMAGE_UNSUPPORTED"
+        });
         return;
       }
       const access = videoModels.videoModelAccess(videoModel, entitlement);
@@ -1018,7 +1062,8 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
       try {
         let providerJobId;
         if (videoModel.provider === "openrouter") {
-          ({ jobId: providerJobId } = await videoModels.submitOpenRouterVideo(videoModel, prompt));
+          const imageUrl = image ? await saveVideoInputImage(image, emailUser.uid) : null;
+          ({ jobId: providerJobId } = await videoModels.submitOpenRouterVideo(videoModel, prompt, imageUrl));
         } else {
           providerJobId = await submitVideoTask(prompt);
         }
@@ -1032,6 +1077,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
           model: videoModel.provider === "openrouter" ? videoModel.id : MINIMAX_MODEL,
           modelName: videoModel.name,
           durationSeconds: videoSeconds,
+          fromImage: Boolean(image),
           mediaPath: consumed.ref ? consumed.ref.path : null,
           mediaField: consumed.field || null,
           amount: consumed.amount || 0,

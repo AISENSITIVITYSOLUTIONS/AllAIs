@@ -2186,6 +2186,8 @@ async function loadVideoModels() {
   }
   renderVideoModelOptions();
   applyVideoModelDisplay();
+  // La lista de OpenRouter también muestra los modelos de video.
+  if (state.openrouterLoaded) renderOpenRouterOptions();
 }
 
 function applyVideoModelDisplay() {
@@ -2257,6 +2259,9 @@ async function ensureOpenRouterModels() {
   const showAllControl = elements.openrouterShowAll?.closest("label");
   if (showAllControl) showAllControl.hidden = !state.openrouterAdmin;
   renderOpenRouterOptions();
+  // Los modelos de video (Kling, Veo, Wan…) no vienen en el catálogo de texto:
+  // se cargan aparte para listarlos en el mismo selector.
+  if (!state.videoModels.length) loadVideoModels();
 }
 
 // Devuelve true si el plan del usuario permite el modelo (según su nivel/tier).
@@ -2314,6 +2319,21 @@ function renderOpenRouterOptions() {
       optgroup.append(option);
     }
     select.append(optgroup);
+  }
+  // Modelos de video al inicio de la lista: al elegir uno se enciende el modo Video.
+  const videoList = state.videoModels.filter((m) => m.allowed || !m.adminOnly);
+  if (videoList.length) {
+    const videoGroup = document.createElement("optgroup");
+    const videoTitle = { es: "🎬 Video — genera un video", en: "🎬 Video — generates a video", fr: "🎬 Vidéo — génère une vidéo" };
+    videoGroup.label = videoTitle[state.language] || videoTitle.es;
+    for (const m of videoList) {
+      const option = document.createElement("option");
+      option.value = `video:${m.id}`;
+      option.textContent = videoModelLabel(m);
+      option.disabled = !m.allowed;
+      videoGroup.append(option);
+    }
+    select.prepend(videoGroup);
   }
   // Conserva la selección previa si sigue disponible y permitida; si no, toma el
   // primer modelo no bloqueado.
@@ -3083,7 +3103,23 @@ function bindEvents() {
     trackEvent("video_model_selected", { model: state.videoModel });
   });
   elements.openrouterModel?.addEventListener("change", (event) => {
-    state.openrouterModel = event.target.value;
+    const value = event.target.value;
+    if (value.startsWith("video:")) {
+      // Modelo de video elegido desde la lista de OpenRouter: se pasa al modo Video.
+      state.videoModel = value.slice("video:".length);
+      event.target.value = state.openrouterModel;
+      if (elements.videoModelSelect) elements.videoModelSelect.value = state.videoModel;
+      if (elements.videoModeToggle && !elements.videoModeToggle.checked) {
+        elements.videoModeToggle.checked = true;
+        elements.videoModeToggle.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        renderVideoModelOptions();
+        applyVideoModelDisplay();
+      }
+      trackEvent("video_model_selected", { model: state.videoModel, from: "openrouter_list" });
+      return;
+    }
+    state.openrouterModel = value;
     syncAttachmentMenu();
     trackEvent("openrouter_model_selected", { model: state.openrouterModel });
   });

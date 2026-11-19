@@ -1551,13 +1551,91 @@ async function extractDocxText(file) {
   throw new Error("DOCX document body was not found.");
 }
 
+// Lee archivos XML de un .zip (pptx/docx) sin librerías: name → texto.
+async function readZipXmlEntries(file, wanted) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const decoder = new TextDecoder();
+  let endRecord = -1;
+  for (let offset = Math.max(0, bytes.length - 65_557); offset <= bytes.length - 22; offset += 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) endRecord = offset;
+  }
+  if (endRecord < 0) throw new Error("Invalid Office archive.");
+  const directorySize = view.getUint32(endRecord + 12, true);
+  let cursor = view.getUint32(endRecord + 16, true);
+  const directoryEnd = cursor + directorySize;
+  const entries = new Map();
+  let totalOut = 0;
+  while (cursor < directoryEnd && view.getUint32(cursor, true) === 0x02014b50) {
+    const method = view.getUint16(cursor + 10, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const localOffset = view.getUint32(cursor + 42, true);
+    const name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
+    cursor += 46 + nameLength + extraLength + commentLength;
+    if (!wanted(name)) continue;
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+    let xmlBytes;
+    if (method === 0) xmlBytes = compressed;
+    else if (method === 8 && typeof DecompressionStream !== "undefined") {
+      xmlBytes = new Uint8Array(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+    } else throw new Error("Unsupported Office compression.");
+    totalOut += xmlBytes.length;
+    if (totalOut > 20_000_000) throw new Error("Office content exceeds the safe extraction limit.");
+    entries.set(name, decoder.decode(xmlBytes));
+  }
+  return entries;
+}
+
+// Texto de una presentación .pptx: cada diapositiva con su número, más las notas del orador.
+async function extractPptxText(file) {
+  const slideNumber = (name) => Number((name.match(/(\d+)\.xml$/) || [])[1] || 0);
+  const entries = await readZipXmlEntries(file, (name) =>
+    /^ppt\/slides\/slide\d+\.xml$/.test(name) || /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name));
+  const paragraphsOf = (xmlText) => {
+    const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+    return [...xml.getElementsByTagNameNS("*", "p")]
+      .map((p) => [...p.getElementsByTagNameNS("*", "t")].map((t) => t.textContent || "").join("").trim())
+      .filter(Boolean);
+  };
+  const notes = new Map();
+  for (const [name, xml] of entries) {
+    if (name.startsWith("ppt/notesSlides/")) notes.set(slideNumber(name), paragraphsOf(xml).filter((line) => !/^\d+$/.test(line)));
+  }
+  const slides = [...entries.keys()].filter((name) => name.startsWith("ppt/slides/")).sort((a, b) => slideNumber(a) - slideNumber(b));
+  return slides.map((name, index) => {
+    const lines = paragraphsOf(entries.get(name));
+    const speaker = notes.get(slideNumber(name)) || [];
+    return [`--- Diapositiva ${index + 1} ---`, ...lines, ...(speaker.length ? ["Notas del orador:", ...speaker] : [])].join("\n");
+  }).join("\n\n");
+}
+
+// Office (pptx/docx) se convierte a texto en el navegador: el archivo original puede
+// pesar más (imágenes incrustadas), pero lo que viaja al modelo es solo el texto.
+const MAX_OFFICE_BYTES = 60 * 1024 * 1024;
+
 async function prepareAttachment(file, kind) {
   const copy = translations[state.language];
   const capabilities = selectedCapabilities();
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (kind === "file" && (extension === "pptx" || extension === "docx")) {
+    if (file.size > MAX_OFFICE_BYTES) throw new Error(copy.attachmentTooLarge);
+    if (state.attachments.length >= 5) throw new Error(copy.attachmentTooLarge);
+    const text = extension === "pptx" ? await extractPptxText(file) : await extractDocxText(file);
+    if (!text.trim()) throw new Error(copy.attachmentReadError);
+    if (text.length > MAX_ATTACHMENT_TEXT_CHARS) throw new Error(copy.attachmentTextTooLong);
+    const size = new TextEncoder().encode(text).length;
+    const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return { id, name: file.name, kind: "text", mimeType: "text/plain", size, text };
+  }
   if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(copy.attachmentTooLarge);
   const totalAttachmentBytes = state.attachments.reduce((sum, item) => sum + item.size, 0) + file.size;
   if (state.attachments.length >= 5 || totalAttachmentBytes > MAX_ATTACHMENT_TOTAL_BYTES) throw new Error(copy.attachmentTooLarge);
-  const extension = file.name.split(".").pop().toLowerCase();
   const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   if (kind === "image" && capabilities.images && /^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
     return { id, name: file.name, kind, mimeType: file.type, size: file.size, data: bytesToBase64(await file.arrayBuffer()) };
@@ -1587,7 +1665,7 @@ function openAttachmentPicker(kind) {
   const capabilities = selectedCapabilities();
   state.pendingAttachmentKind = kind;
   const accepts = {
-    file: [".txt", ".md", ".csv", ".json", ".html", ".xml", ".log", ".yaml", ".yml", ".docx", ...(capabilities.pdf ? [".pdf"] : [])].join(","),
+    file: [".txt", ".md", ".csv", ".json", ".html", ".xml", ".log", ".yaml", ".yml", ".docx", ".pptx", ...(capabilities.pdf ? [".pdf"] : [])].join(","),
     image: "image/png,image/jpeg,image/webp,image/gif",
     video: "video/mp4,video/webm"
   };

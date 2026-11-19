@@ -11,6 +11,7 @@ const { resolveEntitlement, adminEntitlement } = require("./entitlements");
 const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
 const videoModels = require("./video-models");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
+const { parseOwnStorageUrl } = require("./media-download");
 
 initializeApp();
 const db = getFirestore();
@@ -495,6 +496,53 @@ async function saveVideoInputImage(image, holder) {
   return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
 }
 
+// ---------- Descarga de videos e imágenes generados ----------
+// Los archivos viven en Firebase Storage con URL de token (otro dominio), así que el
+// navegador no los descarga con <a download> ni los comparte. Este endpoint los sirve
+// desde allais.nni.ai como adjunto. Solo acepta archivos de AllAIs (videos/ o images/)
+// y exige el token de descarga del propio archivo, igual que la URL original.
+async function streamDownload(request, response) {
+  const bucket = getStorage().bucket(process.env.STORAGE_BUCKET || undefined);
+  const parsed = parseOwnStorageUrl(request.query?.url, bucket.name);
+  if (!parsed) {
+    sendJson(response, 400, { error: "Archivo no válido." });
+    return;
+  }
+  const file = bucket.file(parsed.objectPath);
+  let metadata;
+  try {
+    [metadata] = await file.getMetadata();
+  } catch {
+    sendJson(response, 404, { error: "No encontramos ese archivo." });
+    return;
+  }
+  const tokens = String(metadata?.metadata?.firebaseStorageDownloadTokens || "").split(",");
+  if (!tokens.includes(parsed.token)) {
+    sendJson(response, 404, { error: "No encontramos ese archivo." });
+    return;
+  }
+  const isVideo = parsed.objectPath.startsWith("videos/");
+  const extension = parsed.objectPath.split(".").pop();
+  const filename = `AllAIs-${isVideo ? "video" : "imagen"}-${Date.now()}.${extension}`;
+  response.status(200).set({
+    "content-type": metadata.contentType || (isVideo ? "video/mp4" : "image/png"),
+    "content-disposition": `attachment; filename="${filename}"`,
+    "cache-control": "private, max-age=3600",
+    ...(metadata.size ? { "content-length": String(metadata.size) } : {})
+  });
+  await new Promise((resolve) => {
+    file.createReadStream()
+      .on("error", (error) => {
+        console.error("AllAIs download stream", { message: error?.message });
+        if (!response.headersSent) sendJson(response, 500, { error: "No se pudo descargar." });
+        else response.end();
+        resolve();
+      })
+      .on("end", resolve)
+      .pipe(response);
+  });
+}
+
 // Descarga el video terminado de MiniMax y lo guarda en Firebase Storage.
 async function storeVideoFile(fileId, holder) {
   const apiKey = minimaxKey();
@@ -713,6 +761,7 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
           .map((m) => {
             const out = { role: m.role, content: String(m.content).slice(0, 20000), meta: cleanText(m.meta, 120) };
             if (typeof m.image === "string" && /^https:\/\//.test(m.image)) out.image = m.image.slice(0, 1000);
+            if (typeof m.video === "string" && /^https:\/\//.test(m.video)) out.video = m.video.slice(0, 1000);
             return out;
           });
         if (!messages.length) {
@@ -786,6 +835,11 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         }
         return;
       }
+    }
+
+    if (path === "/media/download" && request.method === "GET") {
+      await streamDownload(request, response);
+      return;
     }
 
     if (path === "/health" && request.method === "GET") {

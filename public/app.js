@@ -1827,12 +1827,71 @@ function addPromptNavigationControls(role, content, responseContent, bubble) {
   bubble.append(returnButton);
 }
 
+// Botones para guardar un video o imagen generados. La descarga pasa por
+// /media/download (mismo dominio), así funciona en iPhone, Android y escritorio.
+// En celulares con hoja de compartir, "Guardar en el teléfono" permite mandarlo
+// a Fotos/Galería, WhatsApp, etc.
+function mediaActions(url, kind) {
+  const t = {
+    es: { download: "Descargar", share: "Guardar en el teléfono", working: "Preparando…", failed: "No se pudo preparar el archivo. Usa «Descargar»." },
+    en: { download: "Download", share: "Save to phone", working: "Preparing…", failed: "Couldn't prepare the file. Use “Download”." },
+    fr: { download: "Télécharger", share: "Enregistrer sur le téléphone", working: "Préparation…", failed: "Impossible de préparer le fichier. Utilisez « Télécharger »." }
+  }[state.language] || null;
+  const copy = t || { download: "Descargar", share: "Guardar en el teléfono", working: "Preparando…", failed: "No se pudo preparar el archivo." };
+  const href = `${API_BASE}/media/download?url=${encodeURIComponent(url)}`;
+  const extension = kind === "video" ? "mp4" : "png";
+  const filename = `AllAIs-${kind === "video" ? "video" : "imagen"}.${extension}`;
+  const bar = document.createElement("div");
+  bar.className = "media-actions";
+
+  const download = document.createElement("a");
+  download.className = "media-action is-primary";
+  download.href = href;
+  download.download = filename;
+  download.rel = "noopener";
+  download.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" /><path d="M5 19h14" /></svg>';
+  download.append(document.createTextNode(copy.download));
+  download.addEventListener("click", () => trackEvent("media_download", { kind }));
+  bar.append(download);
+
+  const canShareFiles = typeof navigator.share === "function" && typeof navigator.canShare === "function"
+    && (() => { try { return navigator.canShare({ files: [new File([""], filename, { type: kind === "video" ? "video/mp4" : "image/png" })] }); } catch { return false; } })();
+  if (canShareFiles) {
+    const share = document.createElement("button");
+    share.type = "button";
+    share.className = "media-action";
+    share.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4" /><path d="M5 11v9h14v-9" /></svg>';
+    const label = document.createTextNode(copy.share);
+    share.append(label);
+    share.addEventListener("click", async () => {
+      share.disabled = true;
+      label.textContent = copy.working;
+      try {
+        const response = await fetch(href);
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        const file = new File([blob], filename, { type: blob.type || (kind === "video" ? "video/mp4" : "image/png") });
+        await navigator.share({ files: [file] });
+        trackEvent("media_share", { kind });
+      } catch (error) {
+        if (error?.name !== "AbortError") window.alert(copy.failed);
+      } finally {
+        share.disabled = false;
+        label.textContent = copy.share;
+      }
+    });
+    bar.append(share);
+  }
+  return bar;
+}
+
 function addMessage(role, content, meta = "", sources = [], persist = true, imageUrl = "") {
   // Acumula el mensaje para guardar la conversación. Los mensajes de error o de
   // cuota pasan persist=false y no se guardan.
   if (persist && (role === "user" || role === "assistant")) {
     const entry = { role, content: String(content || ""), meta: String(meta || "") };
     if (imageUrl) entry.image = imageUrl;
+    if (arguments[6]) entry.video = arguments[6];
     state.conversationMessages.push(entry);
   }
   const article = document.createElement("article");
@@ -1883,6 +1942,7 @@ function addMessage(role, content, meta = "", sources = [], persist = true, imag
     img.loading = "lazy";
     img.className = "generated-image";
     responseContent.append(img);
+    responseContent.append(mediaActions(imageUrl, "image"));
   }
 
   if (arguments[6]) {
@@ -1896,6 +1956,7 @@ function addMessage(role, content, meta = "", sources = [], persist = true, imag
     videoEl.style.borderRadius = "8px";
     videoEl.style.marginTop = "8px";
     responseContent.append(videoEl);
+    responseContent.append(mediaActions(videoUrl, "video"));
   }
 
   const copyButton = document.createElement("button");
@@ -2895,7 +2956,7 @@ async function openConversation(id) {
     state.currentConversationId = id;
     elements.conversation.innerHTML = "";
     for (const message of data.messages || []) {
-      addMessage(message.role, message.content, message.meta || "", [], true, message.image || "");
+      addMessage(message.role, message.content, message.meta || "", [], true, message.image || "", message.video || "");
       appendHistory(message.role, message.content);
     }
     setConversationState();

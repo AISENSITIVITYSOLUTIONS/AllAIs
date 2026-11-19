@@ -2186,6 +2186,8 @@ async function loadVideoModels() {
   }
   renderVideoModelOptions();
   applyVideoModelDisplay();
+  // La lista de OpenRouter también muestra los modelos de video.
+  if (state.openrouterLoaded) renderOpenRouterOptions();
 }
 
 function applyVideoModelDisplay() {
@@ -2257,6 +2259,9 @@ async function ensureOpenRouterModels() {
   const showAllControl = elements.openrouterShowAll?.closest("label");
   if (showAllControl) showAllControl.hidden = !state.openrouterAdmin;
   renderOpenRouterOptions();
+  // Los modelos de video (Kling, Veo, Wan…) no vienen en el catálogo de texto:
+  // se cargan aparte para listarlos en el mismo selector.
+  if (!state.videoModels.length) loadVideoModels();
 }
 
 // Devuelve true si el plan del usuario permite el modelo (según su nivel/tier).
@@ -2314,6 +2319,21 @@ function renderOpenRouterOptions() {
       optgroup.append(option);
     }
     select.append(optgroup);
+  }
+  // Modelos de video al inicio de la lista: al elegir uno se enciende el modo Video.
+  const videoList = state.videoModels.filter((m) => m.allowed || !m.adminOnly);
+  if (videoList.length) {
+    const videoGroup = document.createElement("optgroup");
+    const videoTitle = { es: "🎬 Video — genera un video", en: "🎬 Video — generates a video", fr: "🎬 Vidéo — génère une vidéo" };
+    videoGroup.label = videoTitle[state.language] || videoTitle.es;
+    for (const m of videoList) {
+      const option = document.createElement("option");
+      option.value = `video:${m.id}`;
+      option.textContent = videoModelLabel(m);
+      option.disabled = !m.allowed;
+      videoGroup.append(option);
+    }
+    select.prepend(videoGroup);
   }
   // Conserva la selección previa si sigue disponible y permitida; si no, toma el
   // primer modelo no bloqueado.
@@ -2473,6 +2493,64 @@ async function generateImageFlow(prompt) {
   }
 }
 
+// ---------- Detección de "crea un video / una imagen" con el modo apagado ----------
+const MEDIA_VERBS = "(?:gener\\w*|cre[ae]\\w*|haz|hazme|h[aá]game|produc\\w*|realiz\\w*|anim[ae]\\w*|make|create|generate|render|fais|faire|cr[ée]e\\w*|g[ée]n[èe]re\\w*)";
+const MEDIA_TEXT_ONLY = /\b(gui[oó]n|script|escaleta|storyboard|prompt|descripci[oó]n|description|ideas?)\b/i;
+
+function detectMediaIntent(prompt, attachments = []) {
+  const text = String(prompt || "");
+  if (!text || MEDIA_TEXT_ONLY.test(text)) return null;
+  const video = new RegExp(`\\b${MEDIA_VERBS}\\b[^.?!\\n]{0,40}\\b(?:v[ií]deos?|clips?|animaci[oó]n|animation)\\b`, "i");
+  if (video.test(text) || /^\s*v[ií]deo\b/i.test(text)) return "video";
+  const hasImageAttached = attachments.some((item) => item.kind === "image");
+  const image = new RegExp(`\\b${MEDIA_VERBS}\\b[^.?!\\n]{0,25}\\b(?:im[aá]gen(?:es)?|fotos?|ilustraci[oó]n|image|picture|photo|illustration)\\b`, "i");
+  if (!hasImageAttached && image.test(text)) return "image";
+  return null;
+}
+
+function offerMediaMode(kind) {
+  const copy = {
+    es: { video: "Para crear el video activa el modo Video.", image: "Para crear la imagen activa el modo Imagen.", onVideo: "Activar Video y generar", onImage: "Activar Imagen y generar", asText: "Enviar como texto" },
+    en: { video: "To create the video, turn on Video mode.", image: "To create the image, turn on Image mode.", onVideo: "Turn on Video and generate", onImage: "Turn on Image and generate", asText: "Send as text" },
+    fr: { video: "Pour créer la vidéo, activez le mode Vidéo.", image: "Pour créer l'image, activez le mode Image.", onVideo: "Activer Vidéo et générer", onImage: "Activer Image et générer", asText: "Envoyer en texte" }
+  }[state.language] || null;
+  const t = copy || { video: "Para crear el video activa el modo Video.", image: "Para crear la imagen activa el modo Imagen.", onVideo: "Activar Video y generar", onImage: "Activar Imagen y generar", asText: "Enviar como texto" };
+  const rendered = addMessage("assistant", kind === "video" ? t.video : t.image, "AllAIs", [], false);
+  const host = rendered?.responseContent;
+  if (!host) return;
+  const wrap = document.createElement("div");
+  wrap.className = "media-intent-offer";
+  const primary = document.createElement("button");
+  primary.type = "button";
+  primary.className = "media-intent-btn is-primary";
+  primary.textContent = kind === "video" ? t.onVideo : t.onImage;
+  const secondary = document.createElement("button");
+  secondary.type = "button";
+  secondary.className = "media-intent-btn";
+  secondary.textContent = t.asText;
+  const done = () => { primary.disabled = true; secondary.disabled = true; };
+  primary.addEventListener("click", async () => {
+    done();
+    const toggle = kind === "video" ? elements.videoModeToggle : elements.imageModeToggle;
+    if (toggle && !toggle.checked) {
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    if (kind === "video") await loadVideoModels();
+    trackEvent("media_intent_accepted", { kind });
+    elements.promptForm.requestSubmit();
+  });
+  secondary.addEventListener("click", () => {
+    done();
+    state.skipMediaIntentOnce = true;
+    trackEvent("media_intent_declined", { kind });
+    elements.promptForm.requestSubmit();
+  });
+  wrap.append(primary, secondary);
+  host.append(wrap);
+  trackEvent("media_intent_offered", { kind });
+}
+
 async function generateVideoFlow(prompt) {
   const copy = translations[state.language];
   // Imagen de partida (primer cuadro), si el usuario adjuntó una.
@@ -2603,6 +2681,17 @@ async function sendPrompt(event) {
     await generateVideoFlow(prompt);
     return;
   }
+
+  // Si el texto pide crear un video o una imagen con ese modo apagado, se ofrece
+  // activarlo en vez de mandarlo a un modelo de texto (que solo devolvería un guion).
+  if (!state.skipMediaIntentOnce) {
+    const intent = detectMediaIntent(prompt, attachmentsAtSend);
+    if (intent) {
+      offerMediaMode(intent);
+      return;
+    }
+  }
+  state.skipMediaIntentOnce = false;
 
   const capabilities = selectedCapabilities();
   if (attachmentsAtSend.some((item) => (item.kind === "image" && !capabilities.images) || (item.kind === "pdf" && !capabilities.pdf) || (item.kind === "video" && !capabilities.videos))) {
@@ -3014,7 +3103,23 @@ function bindEvents() {
     trackEvent("video_model_selected", { model: state.videoModel });
   });
   elements.openrouterModel?.addEventListener("change", (event) => {
-    state.openrouterModel = event.target.value;
+    const value = event.target.value;
+    if (value.startsWith("video:")) {
+      // Modelo de video elegido desde la lista de OpenRouter: se pasa al modo Video.
+      state.videoModel = value.slice("video:".length);
+      event.target.value = state.openrouterModel;
+      if (elements.videoModelSelect) elements.videoModelSelect.value = state.videoModel;
+      if (elements.videoModeToggle && !elements.videoModeToggle.checked) {
+        elements.videoModeToggle.checked = true;
+        elements.videoModeToggle.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        renderVideoModelOptions();
+        applyVideoModelDisplay();
+      }
+      trackEvent("video_model_selected", { model: state.videoModel, from: "openrouter_list" });
+      return;
+    }
+    state.openrouterModel = value;
     syncAttachmentMenu();
     trackEvent("openrouter_model_selected", { model: state.openrouterModel });
   });

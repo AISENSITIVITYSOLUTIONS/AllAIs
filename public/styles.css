@@ -3004,3 +3004,46 @@ img {
   cursor: pointer;
 }
 
+
+
+/* Oferta de activar Video/Imagen cuando el texto lo pide */
+.media-intent-offer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.media-intent-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.media-intent-btn.is-primary {
+  border-color: transparent;
+  background: #ffe600;
+  color: #111111;
+  font-weight: 800;
+}
+
+.media-intent-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* En celular la fila de herramientas se acomoda en dos renglones: Video siempre visible */
+@media (max-width: 640px) {
+  .composer-tools {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+  }
+}

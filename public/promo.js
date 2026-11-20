@@ -26,8 +26,10 @@
     pricing_page_view: "ViewContent",
     signup_intent: "Lead",
     email_link_sent: "Lead",
-    google_sign_in: "CompleteRegistration",
+    // google_sign_in no se replica: siempre va seguido de email_session_started
+    // y contaba doble. CompleteRegistration se envía una vez por navegador.
     email_session_started: "CompleteRegistration",
+    pricing_click: "AddToCart",
     subscription_started: "InitiateCheckout",
     subscription_completed: "Subscribe"
   };
@@ -53,6 +55,12 @@
         if (arguments[0] !== "event" || typeof window.fbq !== "function") return;
         const metaEvent = GA_TO_META[arguments[1]];
         if (!metaEvent) return;
+        if (metaEvent === "CompleteRegistration") {
+          try {
+            if (localStorage.getItem("allais_meta_reg") === "1") return;
+            localStorage.setItem("allais_meta_reg", "1");
+          } catch (_) { /* sin almacenamiento, se envía igual */ }
+        }
         const p = arguments[2] || {};
         const data = { content_name: p.plan_name || p.plan || "AllAIs" };
         if (typeof p.value === "number" && p.value > 0) { data.value = p.value; data.currency = p.currency || "MXN"; }

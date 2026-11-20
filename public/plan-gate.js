@@ -25,6 +25,11 @@
 (function () {
   const GATE_MODE = "soft"; // "soft" | "hard" — ver cabecera
   const STORAGE_KEY_CHOSEN = "allais_plan_chosen";
+  // Frecuencia: la pantalla de planes tras el login aparece como máximo una vez
+  // cada 72 h por navegador. Antes se abría en cada visita y la gente la cerraba
+  // sin leerla (197 vistas → 8 clics, 16–20 nov 2026).
+  const STORAGE_KEY_LAST = "allais_plan_gate_last";
+  const MIN_INTERVAL_MS = 72 * 60 * 60 * 1000;
 
   const safeLS = {
     get(k) { try { return localStorage.getItem(k); } catch (_e) { return null; } },
@@ -321,6 +326,8 @@
   // Decide si mostrar: solo si el usuario no eligió antes y no tiene plan vivo.
   const maybeShow = async () => {
     if (safeLS.get(STORAGE_KEY_CHOSEN) === "1") return;
+    const last = Number(safeLS.get(STORAGE_KEY_LAST) || 0);
+    if (last && Date.now() - last < MIN_INTERVAL_MS) return;
     // No competir con el diálogo de billing (deep-link ?plan= de /precios) ni
     // con el retorno del checkout de Mercado Pago (?pago=retorno).
     if (document.querySelector("#billingDialog[open]")) return;
@@ -342,6 +349,7 @@
     // completa propia del gate, abrimos el mismo diálogo de "Suscríbete aquí"
     // (window.AllAIsBilling.openDialog). Si billing.js aún no cargó, caemos a
     // la pantalla del gate como respaldo.
+    safeLS.set(STORAGE_KEY_LAST, String(Date.now()));
     if (window.AllAIsBilling?.openDialog) {
       window.AllAIsBilling.openDialog();
     } else {

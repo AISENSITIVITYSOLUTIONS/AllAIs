@@ -942,11 +942,13 @@ function showPayerEmailNoticeBeforeRedirect(email, initPoint) {
       try { overlay.remove(); } catch { /* ya removido */ }
     };
     const cleanupAndGo = () => {
+      trackEvent("checkout_redirect", { gateway: "mercado_pago" });
       dismiss();
       window.location.href = initPoint;
       resolve();
     };
     const cleanupAndCancel = () => {
+      trackEvent("checkout_notice_cancelled", { gateway: "mercado_pago" });
       dismiss();
       resolve();
     };
@@ -1006,6 +1008,8 @@ function selectPaymentGateway() {
 
     const close = (result) => {
       try { dlg.close(); dlg.remove(); } catch { /* ya removido */ }
+      // Paso del embudo de pago: qué pasarela elige la persona o si abandona aquí.
+      trackEvent(result ? "checkout_gateway_selected" : "checkout_gateway_cancelled", { gateway: result || "none" });
       resolve(result);
     };
 
@@ -1164,6 +1168,7 @@ async function choosePlan(planId, button, opts = {}) {
         gateway: "paypal"
       });
       restore();
+      trackEvent("checkout_redirect", { gateway: "paypal" });
       window.location.href = data.approvalUrl;
       return { ok: true, redirected: true };
     }
@@ -1189,6 +1194,7 @@ async function choosePlan(planId, button, opts = {}) {
     await showPayerEmailNoticeBeforeRedirect(user.email, data.initPoint);
     return { ok: true, redirected: true };
   } catch (error) {
+    trackEvent("billing_error", { plan: planId, error_message: String(error?.message || "").slice(0, 100) });
     setMessage(error.message);
     restore();
     return { ok: false, error: error.message };

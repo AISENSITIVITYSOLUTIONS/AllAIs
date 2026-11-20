@@ -1,4 +1,5 @@
 const state = {
+  pendingPrompt: false,
   accessCode: "",
   authMode: "",
   email: "",
@@ -201,9 +202,9 @@ const translations = {
     exit: "Salir",
     signedOut: "Sesión no iniciada",
     savedLocally: "Código eliminado al abrir. Inicia sesión para continuar.",
-    invalidCode: "Código inválido",
+    invalidCode: "Código no válido. Si no tienes código, escribe tu correo o entra con Google.",
     welcome: "Bienvenido. Sesión iniciada.",
-    needAccess: "Registra tu email (o tu código promocional) antes de enviar.",
+    needAccess: "Entra gratis con Google o con tu correo: tu mensaje se envía en cuanto inicies sesión.",
     providers: "Modelos conectables",
     platform: "Plataforma",
     platformDescription: "Un gateway profesional para operar modelos de IA sin exponer claves privadas ni perder control del uso.",
@@ -400,9 +401,9 @@ const translations = {
     exit: "Sign out",
     signedOut: "Session not started",
     savedLocally: "Access code cleared on open. Sign in to continue.",
-    invalidCode: "Invalid code",
+    invalidCode: "Invalid code. If you don't have one, type your email or sign in with Google.",
     welcome: "Welcome. Session started.",
-    needAccess: "Register your email (or promo code) before sending.",
+    needAccess: "Sign in free with Google or your email: your message is sent as soon as you sign in.",
     providers: "Connectable models",
     platform: "Platform",
     platformDescription: "A professional gateway to operate AI models without exposing private keys or losing usage control.",
@@ -599,9 +600,9 @@ const translations = {
     exit: "Sortir",
     signedOut: "Session non démarrée",
     savedLocally: "Code d'accès effacé à l'ouverture. Connectez-vous pour continuer.",
-    invalidCode: "Code invalide",
+    invalidCode: "Code invalide. Si vous n'en avez pas, saisissez votre email ou connectez-vous avec Google.",
     welcome: "Bienvenue. Session démarrée.",
-    needAccess: "Inscrivez votre email (ou code promotionnel) avant d'envoyer.",
+    needAccess: "Connectez-vous gratuitement avec Google ou votre email : votre message part dès la connexion.",
     providers: "Modèles connectables",
     platform: "Plateforme",
     platformDescription: "Une passerelle professionnelle pour utiliser des modèles d'IA sans exposer les clés privées ni perdre le contrôle de l'usage.",
@@ -1316,7 +1317,7 @@ async function authHeaders() {
   return headers;
 }
 
-async function startEmailSession() {
+async function startEmailSession({ restored = false } = {}) {
   const copy = translations[state.language];
   state.authMode = "email";
   const response = await fetch(`${API_BASE}/session`, {
@@ -1344,15 +1345,26 @@ async function startEmailSession() {
   renderQuota();
   renderAccount();
   setSessionState(true, copy.signedInAs(state.email));
-  trackEvent("email_session_started");
+  // Solo un inicio de sesión real cuenta como registro (Pixel: CompleteRegistration);
+  // la restauración al recargar la página se mide aparte para no inflar el embudo.
+  trackEvent(restored ? "session_restored" : "email_session_started");
   loadConversations();
   // El catálogo depende de la cuenta: el administrador recibe todos los modelos.
   resetOpenRouterCatalog();
   closeAuthDialog();
-  // Tarea #4b parte 2: tras iniciar sesión, si el usuario no tiene plan elegido
-  // mostramos la pantalla "Elige tu plan". El gate consulta /billing/status y
-  // decide por sí mismo; el delay deja que el diálogo de auth cierre antes.
-  window.setTimeout(() => { window.AllAIsPlanGate?.maybeShow(); }, 300);
+  // Si la persona escribió un mensaje antes de entrar, se envía ahora: primero
+  // el valor, después los planes (que aparecen al agotar el cupo).
+  if (state.pendingPrompt && (elements.promptInput.value.trim() || state.attachments.length)) {
+    state.pendingPrompt = false;
+    trackEvent("pending_prompt_sent");
+    window.setTimeout(() => elements.promptForm.requestSubmit(), 350);
+    return;
+  }
+  state.pendingPrompt = false;
+  // Tarea #4b parte 2: tras un inicio de sesión real, si el usuario no tiene plan
+  // mostramos "Elige tu plan". Al recargar la página (sesión restaurada) no se
+  // vuelve a abrir: el gate limita su propia frecuencia.
+  if (!restored) window.setTimeout(() => { window.AllAIsPlanGate?.maybeShow(); }, 300);
 }
 
 async function signInWithGoogle() {
@@ -1382,7 +1394,7 @@ async function restoreEmailSession() {
   try {
     const linkedUser = await window.AllAIsAuth.completeLinkIfPresent(() => window.prompt(copy.confirmEmailPrompt) || "");
     const user = linkedUser || (await window.AllAIsAuth.currentUser());
-    if (user) await startEmailSession();
+    if (user) await startEmailSession({ restored: !linkedUser });
   } catch (error) {
     console.warn("AllAIs email session", error);
     if (/expired|invalid-action-code|invalid-email/i.test(String(error?.code || error?.message))) {
@@ -2794,6 +2806,7 @@ async function sendPrompt(event) {
     trackEvent("access_code_required", {
       action: "prompt_submit"
     });
+    state.pendingPrompt = true;
     setSessionState(false, translations[state.language].needAccess);
     drawAttentionToAccess();
     return;
@@ -2944,7 +2957,8 @@ async function sendPrompt(event) {
     trackEvent("app_error", {
       provider,
       error_area: "chat_request",
-      status: "failed"
+      status: "failed",
+      error_message: String(error?.message || "").slice(0, 100)
     });
     addMessage("assistant", error.message, copy.error, [], false);
     state.history.pop();
@@ -3167,7 +3181,8 @@ function bindEvents() {
         trackEvent("app_error", {
           provider: state.selectedProvider,
           error_area: "file_upload",
-          file_type: file.type || "unknown"
+          file_type: file.type || "unknown",
+          error_message: String(error?.message || "").slice(0, 100)
         });
         window.alert(error.message || copy.attachmentReadError);
       }

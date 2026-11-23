@@ -6,6 +6,11 @@
 
 const OWNER_EMAILS = ["fdealbam@nni.ai", "fdealbam@gmail.com", "aeelenmirandagtz@gmail.com"];
 
+// Lectores del panel: solo consultan el reporte de visitas y consumo en
+// /admin.html. No son administradores: no reciben el modo administrador de la
+// app (modelos, cuota, cobros) ni pueden ver o crear códigos promocionales.
+const PANEL_VIEWER_EMAILS = ["gfriner@hotmail.com"];
+
 function adminEmails(env = process.env) {
   const extra = String(env.ADMIN_EMAILS || "")
     .split(/[\s,;]+/)
@@ -19,4 +24,17 @@ function isAdminEmail(email, env = process.env) {
   return adminEmails(env).includes(String(email).trim().toLowerCase());
 }
 
-module.exports = { OWNER_EMAILS, adminEmails, isAdminEmail };
+function isPanelViewerEmail(email) {
+  if (!email) return false;
+  return PANEL_VIEWER_EMAILS.includes(String(email).trim().toLowerCase());
+}
+
+// Rol en el panel: "admin", "viewer" o null (sin acceso). La lista es cerrada:
+// cualquier correo fuera de OWNER_EMAILS, ADMIN_EMAILS y PANEL_VIEWER_EMAILS queda fuera.
+function panelRole(email, env = process.env) {
+  if (isAdminEmail(email, env)) return "admin";
+  if (isPanelViewerEmail(email)) return "viewer";
+  return null;
+}
+
+module.exports = { OWNER_EMAILS, PANEL_VIEWER_EMAILS, adminEmails, isAdminEmail, isPanelViewerEmail, panelRole };

@@ -8,7 +8,7 @@ const crypto = require("node:crypto");
 const { listProviders, callProvider, openRouterCatalogFor, openRouterModelAllowed, openRouterPlanMeta } = require("./providers");
 const { dayKey, nextDailyResetIso } = require("./plans");
 const { resolveEntitlement, adminEntitlement } = require("./entitlements");
-const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
+const { adminEmails: adminEmailList, isAdminEmail, panelRole } = require("./admins");
 const videoModels = require("./video-models");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
 const { parseOwnStorageUrl } = require("./media-download");
@@ -240,6 +240,13 @@ async function requireAdmin(request) {
   const user = await verifyEmailUser(request);
   if (!user || !adminEmails().includes(user.email)) return null;
   return user;
+}
+
+// Acceso al panel: administradores (todo) o lectores (solo el reporte).
+async function requirePanelUser(request) {
+  const user = await verifyEmailUser(request);
+  const role = user ? panelRole(user.email) : null;
+  return role ? { ...user, role } : null;
 }
 
 function toIso(value) {
@@ -816,14 +823,22 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
     }
 
     if (path.startsWith("/admin/")) {
+      if (path === "/admin/stats" && request.method === "GET") {
+        const panelUser = await requirePanelUser(request);
+        if (!panelUser) {
+          sendJson(response, 403, { error: "Solo cuentas autorizadas." });
+          return;
+        }
+        const days = Math.min(Math.max(Number(request.query?.days || 30), 1), 180);
+        const stats = await adminStats(days);
+        // El lector no recibe los códigos promocionales.
+        if (panelUser.role !== "admin") stats.codes = [];
+        sendJson(response, 200, { ...stats, role: panelUser.role });
+        return;
+      }
       const adminUser = await requireAdmin(request);
       if (!adminUser) {
         sendJson(response, 403, { error: "Solo administradores." });
-        return;
-      }
-      if (path === "/admin/stats" && request.method === "GET") {
-        const days = Math.min(Math.max(Number(request.query?.days || 30), 1), 180);
-        sendJson(response, 200, await adminStats(days));
         return;
       }
       if (path === "/admin/codes" && request.method === "POST") {

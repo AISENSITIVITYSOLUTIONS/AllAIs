@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { isAdminEmail, adminEmails } = require("../admins");
+const { isAdminEmail, adminEmails, panelRole } = require("../admins");
 
 test("el dueño es administrador aunque ADMIN_EMAILS no exista", () => {
   assert.equal(isAdminEmail("fdealbam@nni.ai", {}), true);
@@ -20,4 +20,17 @@ test("ADMIN_EMAILS con basura de formato (RTF, BOM, CRLF) sigue funcionando", ()
 test("un correo cualquiera no es administrador", () => {
   assert.equal(isAdminEmail("alguien@gmail.com", {}), false);
   assert.equal(isAdminEmail(null, {}), false);
+});
+
+test("el lector del panel ve el reporte pero no es administrador", () => {
+  assert.equal(panelRole("GFriner@hotmail.com", {}), "viewer");
+  assert.equal(isAdminEmail("gfriner@hotmail.com", {}), false);
+});
+
+test("los administradores conservan el panel completo y nadie más entra", () => {
+  assert.equal(panelRole("fdealbam@nni.ai", {}), "admin");
+  assert.equal(panelRole("fdealbam@gmail.com", {}), "admin");
+  assert.equal(panelRole("aeelenmirandagtz@gmail.com", {}), "admin");
+  assert.equal(panelRole("alguien@hotmail.com", {}), null);
+  assert.equal(panelRole(null, {}), null);
 });

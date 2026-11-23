@@ -126,7 +126,10 @@ async function load() {
   renderBars($("#countries"), data.countries);
   renderBars($("#methods"), data.methods, (k) => METHOD_NAMES[k] || k);
   renderBars($("#topUsers"), data.topUsers, (k) => (k.startsWith("code:") ? `Código ${k.slice(5)}` : k));
-  renderCodes(data.codes);
+  const isAdmin = data.role === "admin";
+  $("#codesCard").hidden = !isAdmin;
+  $("#who").dataset.role = data.role || "";
+  if (isAdmin) renderCodes(data.codes);
   renderRecent(data.recent);
 }
 
@@ -152,7 +155,7 @@ async function enter() {
   }
   try {
     await load();
-    $("#who").textContent = `Sesión: ${user.email}`;
+    $("#who").textContent = `Sesión: ${user.email}${$("#who").dataset.role === "viewer" ? " · solo lectura" : ""}`;
     $("#gate").hidden = true;
     $("#panel").hidden = false;
     $("#period").hidden = false;

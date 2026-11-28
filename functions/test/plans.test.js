@@ -6,7 +6,8 @@ const assert = require("node:assert/strict");
 
 const {
   PLANS, getPlan, planIds, isPromoOpen, promoEndsAtIso, canSubscribeTo,
-  dayKey, addMonthsClamped, cycleFor, quotaView, exceeded
+  dayKey, addMonthsClamped, cycleFor, quotaView, exceeded,
+  founderStatus, FOUNDER_SEATS
 } = require("../plans");
 
 test("los cuatro planes tienen las cuotas acordadas", () => {
@@ -39,20 +40,20 @@ test("un plan inexistente no se resuelve", () => {
   assert.deepEqual(canSubscribeTo("gratis_total"), { ok: false, reason: "invalid" });
 });
 
-test("la promoción cubre todo noviembre de 2026 (hasta el 30) y cierra a medianoche", () => {
-  assert.equal(promoEndsAtIso(), "2026-12-01T06:00:00.000Z");
+test("el Precio fundador cierra por fecha el 31 de diciembre de 2026 a medianoche", () => {
+  assert.equal(promoEndsAtIso(), "2027-01-01T06:00:00.000Z");
 
   const abierta = [
-    "2026-10-17T12:00:00Z",          // hoy
     "2026-11-30T06:00:01Z",          // 30 nov, 00:00 CDMX
-    "2026-12-01T05:59:59Z"           // 30 nov, 23:59 CDMX
+    "2026-12-01T06:00:00Z",          // 1 dic, 00:00 CDMX: empieza el Precio fundador
+    "2027-01-01T05:59:59Z"           // 31 dic, 23:59 CDMX
   ];
   for (const iso of abierta) {
     assert.equal(isPromoOpen(new Date(iso)), true, `debería estar abierta en ${iso}`);
     assert.equal(canSubscribeTo("lanzamiento", new Date(iso)).ok, true, `debería poder contratarse en ${iso}`);
   }
 
-  const cerrada = ["2026-12-01T06:00:00Z", "2026-12-01T06:00:01Z", "2027-01-01T00:00:00Z"];
+  const cerrada = ["2027-01-01T06:00:00Z", "2027-01-01T06:00:01Z", "2027-02-01T00:00:00Z"];
   for (const iso of cerrada) {
     assert.equal(isPromoOpen(new Date(iso)), false, `debería estar cerrada en ${iso}`);
     assert.deepEqual(
@@ -63,11 +64,22 @@ test("la promoción cubre todo noviembre de 2026 (hasta el 30) y cierra a median
   }
 });
 
-test("el cierre de la promoción no afecta a los otros tres planes", () => {
-  const despues = new Date("2027-06-01T00:00:00Z");
-  for (const id of ["profesional_1", "profesional_2", "profesional_3"]) {
-    assert.equal(canSubscribeTo(id, despues).ok, true, `${id} debe seguir disponible`);
-  }
+test("el Precio fundador se agota a los 100 suscriptores activos", () => {
+  const dic = new Date("2026-12-10T18:00:00Z");
+  assert.equal(FOUNDER_SEATS, 100);
+  assert.deepEqual(
+    founderStatus(37, dic),
+    { seats: 100, taken: 37, left: 63, open: true, founderPhase: true, endsAt: "2027-01-01T06:00:00.000Z" }
+  );
+  assert.equal(founderStatus(0, new Date("2026-11-28T18:00:00Z")).founderPhase, false, "en noviembre sigue la prueba de lanzamiento");
+
+  assert.equal(canSubscribeTo("lanzamiento", dic, { founderTaken: 99 }).ok, true);
+  assert.deepEqual(canSubscribeTo("lanzamiento", dic, { founderTaken: 100 }), { ok: false, reason: "founder_full" });
+  assert.equal(founderStatus(140, dic).left, 0, "nunca queda en negativo");
+  // Los lugares solo limitan el plan promocional.
+  assert.equal(canSubscribeTo("profesional_2", dic, { founderTaken: 500 }).ok, true);
+  // Sin conteo (llamadas antiguas) decide solo la fecha.
+  assert.equal(canSubscribeTo("lanzamiento", dic).ok, true);
 });
 
 test("la clave del día usa la hora de la Ciudad de México, no UTC", () => {

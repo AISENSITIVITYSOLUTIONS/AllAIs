@@ -11,7 +11,7 @@ const { initializeApp, getApps } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { isAdminEmail } = require("./admins");
-const { canSubscribeTo, isPromoOpen, promoEndsAtIso } = require("./plans");
+const { canSubscribeTo, isPromoOpen, promoEndsAtIso, founderStatus } = require("./plans");
 const { verify: verifySignature } = require("./webhook-signature");
 const { handleWebhook: handleWebhookPure } = require("./webhook-handler");
 const { resolveTrialSchedule } = require("./trial-schedule");
@@ -63,11 +63,33 @@ function plans() {
 
 // La vigencia de la promoción se decide aquí, en el servidor. El navegador puede
 // ocultar o mostrar el precio de Lanzamiento, pero no puede contratarlo fuera de fecha.
-function assertAvailable(planId) {
-  const verdict = canSubscribeTo(planId);
+// Lugares de Precio fundador ya ocupados: suscripciones activas al plan promocional.
+// Las pendientes no cuentan (un checkout abandonado no debe apartar lugar). El conteo
+// se guarda 60 s en memoria para no consultar Firestore en cada visita.
+const FOUNDER_PLAN_ID = "lanzamiento";
+let founderCache = { at: 0, taken: 0 };
+async function founderTaken({ fresh = false } = {}) {
+  if (!fresh && Date.now() - founderCache.at < 60 * 1000) return founderCache.taken;
+  const snapshot = await db.collection("subscriptions")
+    .where("plan", "==", FOUNDER_PLAN_ID)
+    .where("status", "==", "active")
+    .count()
+    .get();
+  founderCache = { at: Date.now(), taken: Number(snapshot.data().count || 0) };
+  return founderCache.taken;
+}
+
+async function assertAvailable(planId) {
+  // Solo el plan promocional consulta los lugares, y lo hace sin caché: es la
+  // comprobación que autoriza la contratación.
+  const founder = planId === FOUNDER_PLAN_ID ? await founderTaken({ fresh: true }) : null;
+  const verdict = canSubscribeTo(planId, new Date(), { founderTaken: founder });
   if (verdict.ok) return;
   if (verdict.reason === "promo_closed") {
-    throw httpError(409, "El precio de lanzamiento ya terminó. Elige uno de los planes vigentes.");
+    throw httpError(409, "El Precio fundador ya terminó. Elige uno de los planes vigentes.");
+  }
+  if (verdict.reason === "founder_full") {
+    throw httpError(409, "Los lugares de Precio fundador se agotaron. Elige uno de los planes vigentes.");
   }
   throw httpError(400, "Plan no disponible.");
 }
@@ -153,7 +175,7 @@ async function createMercadoPagoSubscription(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
-  assertAvailable(plan.id);
+  await assertAvailable(plan.id);
 
   // Tarea #4b — trial-with-card: cuando el frontend pide `launchFreeTrial: true`,
   // creamos un preapproval con cobro diferido al cierre de la promoción (1-dic),
@@ -196,9 +218,11 @@ async function createMercadoPagoSubscription(request) {
   // Diferenciamos el "reason" para que el usuario vea en MP y en su correo lo
   // que firmó realmente — una prueba gratis con cobro diferido o un plan con 3
   // días de prueba —, no un título genérico que después se confunda.
-  const reason = launchFreeTrial
+  const reason = trialType === "launch_free_trial"
     ? `${plan.label} — Prueba gratis hasta el 30 de noviembre de 2026`
-    : plan.label;
+    : trialType === "founder"
+      ? `${plan.label} — Precio fundador`
+      : plan.label;
   const preapproval = await mercadoPago("/preapproval", {
     method: "POST",
     // payer_email (plano) y payer.email (objeto): algunas versiones del SDK y
@@ -345,7 +369,7 @@ async function changePlan(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
-  assertAvailable(plan.id);
+  await assertAvailable(plan.id);
 
   const { ref, data } = await liveSubscription(user);
   if (data.plan === plan.id) throw httpError(409, "Ya tienes ese plan.");
@@ -446,7 +470,7 @@ async function createPayPalSubscription(request) {
   const plan = plans()[planId];
   if (!plan) throw httpError(400, "Plan no válido.");
   if (!plan.amount || plan.amount <= 0) throw httpError(503, "Este plan aún no tiene precio configurado.");
-  assertAvailable(plan.id);
+  await assertAvailable(plan.id);
 
   // Validar que el plan existe en PayPal (su PAYPAL_PLAN_* está definida)
   const paypalPlanId = planIdFor(planId);
@@ -571,6 +595,12 @@ exports.billing = onRequest({
     }
     if (path === "/status" && request.method === "GET") {
       sendJson(response, 200, { ok: true, ...(await subscriptionStatus(request)) });
+      return;
+    }
+    if (path === "/founder" && request.method === "GET") {
+      // Público y sin datos personales: solo cuántos lugares de Precio fundador quedan.
+      response.set("Cache-Control", "public, max-age=60");
+      sendJson(response, 200, { ok: true, ...founderStatus(await founderTaken()) });
       return;
     }
     if (path === "/webhook" && request.method === "POST") {

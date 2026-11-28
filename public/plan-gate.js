@@ -157,6 +157,41 @@
     }
   ];
 
+  // Desde el 1-dic-2026 el plan de $99 se ofrece como "Precio fundador" (primeros
+  // 100 suscriptores, prueba estándar de 3 días) y ya no como prueba hasta el 30-nov.
+  const FOUNDER_COPY = {
+    es: {
+      hero_badge: "Primeros 100 suscriptores",
+      hero_title: "🚀 Precio fundador",
+      hero_after_prefix: "3 días gratis. Después,",
+      hero_after_amount: "$99 MXN/mes",
+      hero_after_suffix: "(en lugar de $199; precio congelado para ti).",
+      hero_cta: "Quiero mi Precio fundador",
+      hero_note: "Registras tu tarjeta con Mercado Pago. No se cobra nada hoy. Cancela dentro de los 3 días de prueba y no se te hará ningún cargo."
+    },
+    en: {
+      hero_badge: "First 100 subscribers",
+      hero_title: "🚀 Founder price",
+      hero_after_prefix: "3 free days. After that,",
+      hero_after_amount: "$99 MXN/mo",
+      hero_after_suffix: "(instead of $199; locked in for you).",
+      hero_cta: "Get my founder price",
+      hero_note: "You add your card with Mercado Pago. Nothing is charged today. Cancel within the 3-day trial and you won't be charged."
+    },
+    fr: {
+      hero_badge: "100 premiers abonnés",
+      hero_title: "🚀 Prix fondateur",
+      hero_after_prefix: "3 jours gratuits. Ensuite,",
+      hero_after_amount: "99 MXN/mois",
+      hero_after_suffix: "(au lieu de 199 ; prix bloqué pour vous).",
+      hero_cta: "Obtenir mon prix fondateur",
+      hero_note: "Vous enregistrez votre carte avec Mercado Pago. Rien n'est prélevé aujourd'hui. Annulez pendant les 3 jours d'essai et vous ne serez pas débité."
+    }
+  };
+  const promo = () => window.AllAIsPromo || null;
+  const founderPhase = () => Boolean(promo()?.founderPhase?.());
+  const promoClosed = () => Boolean(promo()) && Date.now() >= promo().PROMO_ENDS_AT;
+
   // --------------------------------------------------------------------------
   //  Construcción del DOM
   // --------------------------------------------------------------------------
@@ -185,7 +220,7 @@
   };
 
   const build = () => {
-    const t = COPY[lang];
+    const t = founderPhase() ? { ...COPY[lang], ...FOUNDER_COPY[lang] } : COPY[lang];
     overlay = el("div", { class: "plan-gate-overlay", role: "dialog", "aria-modal": "true", "aria-label": t.title, hidden: "" });
     const sheet = el("div", { class: "plan-gate-sheet" });
 
@@ -220,11 +255,22 @@
       heroBtn,
       el("p", { class: "hero-note" }, t.hero_note)
     );
-    const hero = el("div", { class: "plan-gate-hero" },
-      el("span", { class: "hero-badge" }, t.hero_badge),
-      heroLeft,
-      heroRight
-    );
+    const badge = el("span", { class: "hero-badge" }, t.hero_badge);
+    const hero = el("div", { class: "plan-gate-hero" }, badge, heroLeft, heroRight);
+    // El plan de $99 deja de ofrecerse al cerrar la fecha o al agotarse los lugares.
+    if (promoClosed()) hero.hidden = true;
+    if (founderPhase()) {
+      promo().founder().then((d) => {
+        if (!d) return;
+        if (!d.open) { hero.hidden = true; return; }
+        const SEATS = {
+          es: d.left === 1 ? `Queda 1 lugar de ${d.seats}` : `Quedan ${d.left} lugares de ${d.seats}`,
+          en: d.left === 1 ? `1 of ${d.seats} spots left` : `${d.left} of ${d.seats} spots left`,
+          fr: d.left === 1 ? `1 place restante sur ${d.seats}` : `${d.left} places restantes sur ${d.seats}`
+        };
+        badge.textContent = SEATS[lang] || SEATS.es;
+      });
+    }
 
     // Grid de planes de pago
     const grid = el("div", { class: "plan-gate-grid" });

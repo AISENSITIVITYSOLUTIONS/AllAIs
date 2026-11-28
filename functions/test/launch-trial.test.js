@@ -14,7 +14,8 @@ const { resolveTrialSchedule } = require("../trial-schedule");
 
 // Fechas de referencia relativas al cierre de la promo: 2026-12-01T06:00:00Z.
 const ANTES_DE_PROMO = new Date("2026-10-19T12:00:00Z"); // promo abierta
-const DESPUES_DE_PROMO = new Date("2026-12-02T00:00:00Z"); // promo cerrada
+const DESPUES_DE_PROMO = new Date("2027-01-02T00:00:00Z"); // promo cerrada
+const FASE_FUNDADOR = new Date("2026-12-05T18:00:00Z"); // Precio fundador abierto
 const PROMO_END_ISO = "2026-12-01T06:00:00.000Z";
 
 test("launch trial: difiere el primer cobro al cierre de la promo (1-dic)", () => {
@@ -46,6 +47,13 @@ test("launch trial: rechaza si la promoción ya cerró", () => {
   assert.ok(r.error);
   assert.equal(r.error.status, 409);
   assert.match(r.error.message, /cerró/);
+});
+
+test("Precio fundador: desde el 1-dic el plan de $99 usa la prueba estándar de 3 días", () => {
+  const r = resolveTrialSchedule({ launchFreeTrial: true, planId: "lanzamiento", now: FASE_FUNDADOR, trialDays: 3 });
+  assert.equal(r.error, undefined);
+  assert.equal(r.trialType, "founder");
+  assert.equal(r.startDate, "2026-12-08T18:00:00.000Z");
 });
 
 test("flujo normal: 3 días de prueba desde ahora, trialType standard", () => {

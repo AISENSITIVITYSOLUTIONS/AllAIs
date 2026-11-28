@@ -156,7 +156,7 @@ test("volver a suscribirse en el mismo ciclo no revive el consumo del plan anter
 
 test("terminada la promoción, Lanzamiento ya no se puede contratar ni cambiar", async () => {
   // Es la misma comprobación que usan /billing/subscribe y /billing/change.
-  const cerrada = new Date("2026-12-01T06:00:00Z");
+  const cerrada = new Date("2027-01-01T06:00:00Z");
   assert.deepEqual(canSubscribeTo("lanzamiento", cerrada), { ok: false, reason: "promo_closed" });
 
   // Quien ya lo tiene contratado lo conserva: la fecha limita la venta, no el servicio.

@@ -11,6 +11,7 @@ const { resolveEntitlement, adminEntitlement } = require("./entitlements");
 const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
 const videoModels = require("./video-models");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
+const { applyFreeTier } = require("./free-tier");
 const { parseOwnStorageUrl } = require("./media-download");
 
 initializeApp();
@@ -616,12 +617,14 @@ async function verifyPreapproval(preapprovalId) {
 // Derecho de uso de una cuenta: plan resuelto en el servidor a partir del uid.
 async function entitlementFor(user) {
   if (isAdminEmail(user?.email)) return adminEntitlement();
-  return resolveEntitlement({
+  const entitlement = await resolveEntitlement({
     db,
     uid: user.uid,
     freeDaily: DAILY_QUERY_LIMIT,
     verifyPreapproval
   });
+  // Sin suscripción: cortesía inicial y, agotada, tope diario reducido (free-tier.js).
+  return applyFreeTier({ db, entitlement, email: user.email });
 }
 
 // Estado de cuota para mostrar, sin consumir.
@@ -629,7 +632,7 @@ async function accountQuota(user) {
   const entitlement = await entitlementFor(user);
   const quota = await readUsage({ db, holder: user.email, uid: user.uid, entitlement });
   const media = await readMedia({ db, uid: user.uid, entitlement });
-  return { quota, plan: entitlement.planId, planName: entitlement.planName, media };
+  return { quota, plan: entitlement.planId, planName: entitlement.planName, media, courtesy: entitlement.courtesy || null };
 }
 
 // ---------- Lista de espera "Reservar mi lugar" (Tarea #6) ----------

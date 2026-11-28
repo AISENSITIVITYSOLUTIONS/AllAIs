@@ -62,6 +62,7 @@
 }
 
 /* ---- Hero: prueba de lanzamiento destacada ---- */
+.plan-gate-hero[hidden] { display: none !important; }
 .plan-gate-hero {
   position: relative;
   background: linear-gradient(135deg, rgba(143, 211, 255, 0.1) 0%, rgba(10, 22, 40, 0.6) 60%);

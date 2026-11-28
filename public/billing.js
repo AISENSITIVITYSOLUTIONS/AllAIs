@@ -63,15 +63,21 @@ const PLANS = [
 // Esta fecha solo decide lo que se muestra; quien autoriza la contratación es el
 // backend (functions/plans.js), con la misma fecha. Si alguien edita esta línea
 // en su navegador, el servidor rechaza el plan igual.
-const PROMO_ENDS_AT = Date.UTC(2026, 11, 1, 6, 0, 0);
-const promoOpen = () => Date.now() < PROMO_ENDS_AT;
+// Dos fases: prueba de lanzamiento (noviembre, cobro diferido al 1-dic) y Precio
+// fundador (del 1 al 31-dic: $99 al mes para los primeros 100 suscriptores).
+const LAUNCH_TRIAL_ENDS_AT = Date.UTC(2026, 11, 1, 6, 0, 0);
+const PROMO_ENDS_AT = Date.UTC(2027, 0, 1, 6, 0, 0);
+const founderPhase = () => Date.now() >= LAUNCH_TRIAL_ENDS_AT;
+// Se enciende cuando el servidor informa que ya no quedan lugares de Precio fundador.
+let founderSoldOut = false;
+const promoOpen = () => Date.now() < PROMO_ENDS_AT && !founderSoldOut;
 
 const LAUNCH = {
   id: "lanzamiento",
   name: "Lanzamiento",
   price: 99,
   note: "300 consultas al mes, 10 al día · 10 imágenes al mes.",
-  deadline: "Precio de lanzamiento: mitad de precio si contratas a más tardar el 30 de noviembre de 2026."
+  deadline: "Precio fundador: $99 al mes para los primeros 100 suscriptores, a más tardar el 31 de diciembre de 2026."
 };
 
 const ALL_PLANS = [...PLANS, LAUNCH];
@@ -739,12 +745,13 @@ function planCard(plan) {
 
 function launchCard() {
   const card = node("article", { class: "billing-card billing-card--launch", "data-plan": LAUNCH.id });
-  card.append(node("p", { class: "billing-ribbon billing-ribbon--launch" }, "🚀 Lanzamiento"));
+  const founder = founderPhase();
+  card.append(node("p", { class: "billing-ribbon billing-ribbon--launch" }, founder ? "🚀 Precio fundador" : "🚀 Lanzamiento"));
 
   const top = node("div", { class: "billing-card-top" });
   const heading = node("div", {});
   heading.append(node("h3", {}, LAUNCH.name));
-  heading.append(node("p", { class: "billing-tagline" }, "Precio promocional de arranque."));
+  heading.append(node("p", { class: "billing-tagline" }, founder ? "Para los primeros 100 suscriptores." : "Precio promocional de arranque."));
   top.append(heading);
 
   const price = node("div", { class: "billing-price" });
@@ -763,7 +770,22 @@ function launchCard() {
   });
 
   const deadline = node("p", { class: "billing-launch-deadline" });
-  deadline.innerHTML = `Registras tu tarjeta ahora y <b>no se cobra nada hasta el 1 de diciembre de 2026</b>. Cancela antes sin ningún cargo.`;
+  deadline.innerHTML = founder
+    ? `<b data-founder-seats>Primeros 100 suscriptores</b> o hasta el 31 de diciembre de 2026. 3 días gratis: registras tu tarjeta y cancelas antes sin ningún cargo.`
+    : `Registras tu tarjeta ahora y <b>no se cobra nada hasta el 1 de diciembre de 2026</b>. Cancela antes sin ningún cargo.`;
+  if (founder) {
+    // Lugares libres reales (GET /billing/founder, vía promo.js). Sin lugares, el plan se oculta.
+    window.AllAIsPromo?.founder?.().then((data) => {
+      if (!data) return;
+      if (!data.open) {
+        founderSoldOut = true;
+        if (!(hasLiveSubscription() && current.plan === LAUNCH.id)) card.hidden = true;
+        return;
+      }
+      const seats = deadline.querySelector("[data-founder-seats]");
+      if (seats) seats.textContent = data.left === 1 ? `Queda 1 lugar de ${data.seats}` : `Quedan ${data.left} lugares de ${data.seats}`;
+    });
+  }
 
   const choose = node("button", { type: "button", class: "billing-choose", "data-choose": LAUNCH.id }, `Elegir ${LAUNCH.name}`);
   choose.addEventListener("click", () => choosePlan(LAUNCH.id, choose, { launchFreeTrial: true }));

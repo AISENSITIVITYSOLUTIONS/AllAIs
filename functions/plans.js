@@ -8,9 +8,15 @@
 const QUOTA_TIME_ZONE = "America/Mexico_City";
 const TZ_OFFSET_HOURS = 6;
 
-// La promoción de Lanzamiento cubre todo noviembre de 2026 (hasta el 30) y cierra a la
-// medianoche siguiente, hora de la Ciudad de México.
-const PROMO_ENDS_AT = Date.UTC(2026, 11, 1, TZ_OFFSET_HOURS, 0, 0);
+// Fase 1 — Lanzamiento (noviembre de 2026): prueba gratis con tarjeta hasta el 30-nov;
+// el primer cobro se difiere al 1-dic. Termina a la medianoche, hora de la Ciudad de México.
+const LAUNCH_TRIAL_ENDS_AT = Date.UTC(2026, 11, 1, TZ_OFFSET_HOURS, 0, 0);
+
+// Fase 2 — Precio fundador (desde el 1-dic-2026): el mismo plan de $99 queda abierto
+// para los primeros FOUNDER_SEATS suscriptores o hasta el 31-dic-2026, lo que ocurra
+// primero. PROMO_ENDS_AT es ese cierre definitivo por fecha.
+const PROMO_ENDS_AT = Date.UTC(2027, 0, 1, TZ_OFFSET_HOURS, 0, 0);
+const FOUNDER_SEATS = Math.max(1, Math.floor(Number(process.env.FOUNDER_SEATS || 100)));
 
 // monthly: consultas por ciclo de facturación. daily: tope adicional por día (null si no tiene).
 const PLANS = {
@@ -85,12 +91,41 @@ function promoEndsAtIso() {
   return new Date(PROMO_ENDS_AT).toISOString();
 }
 
+// ¿Sigue vigente la prueba gratis de lanzamiento (cobro diferido al 1-dic)?
+function isLaunchTrialOpen(now = new Date()) {
+  return now.getTime() < LAUNCH_TRIAL_ENDS_AT;
+}
+
+function launchTrialEndsAtIso() {
+  return new Date(LAUNCH_TRIAL_ENDS_AT).toISOString();
+}
+
+// Lugares de Precio fundador. `taken` es el número de suscripciones activas al plan
+// promocional; lo cuenta el llamador (billing.js) porque este módulo no toca Firestore.
+function founderStatus(taken = 0, now = new Date(), seats = FOUNDER_SEATS) {
+  const used = Math.max(0, Math.floor(Number(taken) || 0));
+  const left = Math.max(0, seats - used);
+  return {
+    seats,
+    taken: Math.min(used, seats),
+    left,
+    open: isPromoOpen(now) && left > 0,
+    founderPhase: !isLaunchTrialOpen(now),
+    endsAt: promoEndsAtIso()
+  };
+}
+
 // Un plan promocional deja de poder contratarse cuando la promoción cierra.
 // Los planes ya contratados no se tocan: se respeta el precio al que se contrataron.
-function canSubscribeTo(planId, now = new Date()) {
+// founderTaken (opcional): suscripciones activas al plan promocional. Si se pasa y ya
+// no quedan lugares, el plan tampoco se puede contratar aunque la fecha siga abierta.
+function canSubscribeTo(planId, now = new Date(), { founderTaken = null } = {}) {
   const plan = getPlan(planId);
   if (!plan) return { ok: false, reason: "invalid" };
   if (plan.promo && !isPromoOpen(now)) return { ok: false, reason: "promo_closed" };
+  if (plan.promo && founderTaken !== null && !founderStatus(founderTaken, now).open) {
+    return { ok: false, reason: "founder_full" };
+  }
   return { ok: true, plan };
 }
 
@@ -198,6 +233,11 @@ module.exports = {
   QUOTA_TIME_ZONE,
   TZ_OFFSET_HOURS,
   PROMO_ENDS_AT,
+  LAUNCH_TRIAL_ENDS_AT,
+  FOUNDER_SEATS,
+  isLaunchTrialOpen,
+  launchTrialEndsAtIso,
+  founderStatus,
   getPlan,
   planIds,
   planAmount,

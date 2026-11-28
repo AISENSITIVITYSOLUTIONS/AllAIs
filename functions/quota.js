@@ -32,7 +32,10 @@ function usageRefs({ db, holder, uid, entitlement, now = new Date() }) {
   return {
     day,
     monthlyRef: usesMonthly ? db.collection("usage").doc(cycleDocId(uid, entitlement.cycle.key)) : null,
-    dailyRef: usesDaily ? db.collection("usage").doc(dailyDocId(holder, day)) : null
+    dailyRef: usesDaily ? db.collection("usage").doc(dailyDocId(holder, day)) : null,
+    // Total histórico del uso gratuito (free-tier.js). Solo cuenta; no limita aquí:
+    // el límite que produce ya viene aplicado en entitlement.daily.
+    lifetimeRef: usesDaily && entitlement.source === "free" ? (entitlement.lifetimeRef || null) : null
   };
 }
 
@@ -62,7 +65,7 @@ async function readUsage({ db, holder, uid, entitlement, now = new Date() }) {
 // (Tarea #9) consume una por proveedor, así que pasa units = n.º de modelos.
 // El valor por defecto 1 mantiene el comportamiento del chat de un solo modelo.
 async function consumeUsage({ db, holder, uid, entitlement, now = new Date(), units = 1 }) {
-  const { day, monthlyRef, dailyRef } = usageRefs({ db, holder, uid, entitlement, now });
+  const { day, monthlyRef, dailyRef, lifetimeRef } = usageRefs({ db, holder, uid, entitlement, now });
   const n = Math.max(1, Math.floor(units));
 
   // Sin límites aplicables (por ejemplo el código maestro) no se registra nada.
@@ -72,6 +75,7 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date(), un
     // Firestore exige todas las lecturas antes de cualquier escritura.
     const monthlySnap = monthlyRef ? await transaction.get(monthlyRef) : null;
     const dailySnap = dailyRef ? await transaction.get(dailyRef) : null;
+    const lifetimeSnap = lifetimeRef ? await transaction.get(lifetimeRef) : null;
 
     const monthlyUsed = countOf(monthlySnap);
     const dailyUsed = countOf(dailySnap);
@@ -124,6 +128,10 @@ async function consumeUsage({ db, holder, uid, entitlement, now = new Date(), un
         updatedAt: stamp
       }, { merge: true });
       refs.push(dailyRef);
+    }
+    if (lifetimeRef) {
+      transaction.set(lifetimeRef, { count: countOf(lifetimeSnap) + n, updatedAt: stamp }, { merge: true });
+      refs.push(lifetimeRef);
     }
 
     return {

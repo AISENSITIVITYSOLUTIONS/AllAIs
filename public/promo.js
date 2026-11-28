@@ -1,9 +1,13 @@
 /*
  * promo.js — Promoción de Lanzamiento y medición publicitaria (Meta Pixel).
  *
- * 1) Cuenta regresiva: barra compacta fija arriba hasta el cierre de la promo
- *    (30-nov-2026 23:59 CDMX = 2026-12-01T06:00Z, misma fecha que
- *    functions/plans.js). Al vencer desaparece sola. Se puede cerrar por sesión.
+ * 1) Cuenta regresiva: barra compacta fija arriba. Dos fases, con las mismas fechas
+ *    que functions/plans.js:
+ *      - Lanzamiento, hasta el 30-nov-2026 23:59 CDMX (2026-12-01T06:00Z).
+ *      - Precio fundador, del 1 al 31-dic-2026: $99 al mes para los primeros 100
+ *        suscriptores. Los lugares libres salen de GET /billing/founder; si se
+ *        agotan, la barra y la tarjeta del plan se ocultan.
+ *    Al vencer desaparece sola. Se puede cerrar por sesión.
  *
  * 2) Meta Pixel: inerte mientras META_PIXEL_ID esté vacío. Con un ID, carga el
  *    píxel, envía PageView y replica los eventos de GA4 (window.gtag) como
@@ -16,7 +20,21 @@
 
   // ── Configuración ──────────────────────────────────────────────────────────
   const META_PIXEL_ID = "1193970816623468"; // Conjunto de datos "AllAIs" · portafolio AI Sensitivity Solutions
-  const PROMO_ENDS_AT = Date.UTC(2026, 11, 1, 6, 0, 0);
+  const LAUNCH_TRIAL_ENDS_AT = Date.UTC(2026, 11, 1, 6, 0, 0);
+  const PROMO_ENDS_AT = Date.UTC(2027, 0, 1, 6, 0, 0);
+  const founderPhase = () => Date.now() >= LAUNCH_TRIAL_ENDS_AT;
+  // Lugares de Precio fundador: una sola consulta por página, compartida con billing.js.
+  let founderRequest = null;
+  function founder() {
+    if (!founderRequest) {
+      founderRequest = fetch("/billing/founder")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => (d && d.ok ? d : null))
+        .catch(() => null);
+    }
+    return founderRequest;
+  }
+  window.AllAIsPromo = { LAUNCH_TRIAL_ENDS_AT, PROMO_ENDS_AT, founderPhase, founder };
   const ON_PRICING = /precios/.test(location.pathname);
   const PRICING_URL = ON_PRICING ? "/?plan=lanzamiento" : "/precios.html";
 
@@ -77,17 +95,51 @@
     mirrorGtag();
   }
 
+  // ── Página de precios: tarjeta del plan en fase de Precio fundador ─────────
+  const lang = (document.documentElement.lang || navigator.language || "es").slice(0, 2);
+  const SEATS = {
+    es: (n) => (n === 1 ? "queda 1 lugar" : `quedan ${n} lugares`),
+    en: (n) => (n === 1 ? "1 spot left" : `${n} spots left`),
+    fr: (n) => (n === 1 ? "1 place restante" : `${n} places restantes`)
+  };
+  const seatsText = SEATS[lang] || SEATS.es;
+
+  function patchPricingCard() {
+    const card = document.querySelector("[data-founder-card]");
+    if (!card) return;
+    if (Date.now() >= PROMO_ENDS_AT) { card.hidden = true; return; }
+    if (!founderPhase()) return;
+    const set = (sel, html) => { const n = card.querySelector(sel); if (n) n.innerHTML = html; };
+    set("[data-founder-badge]", "Precio fundador");
+    set("[data-founder-tagline]", "El precio más bajo de AllAIs, reservado a los primeros 100 suscriptores.");
+    set("[data-founder-note]", "<strong>Precio fundador</strong> (Esencial: $199) · primeros 100 suscriptores o hasta el 31 de diciembre de 2026 · 3 días gratis · se renueva automáticamente");
+    founder().then((d) => {
+      if (!d) return;
+      if (!d.open) { card.hidden = true; return; }
+      set("[data-founder-note]", `<strong>Precio fundador</strong> (Esencial: $199) · <strong>${seatsText(d.left)} de ${d.seats}</strong> · hasta el 31 de diciembre de 2026 · 3 días gratis · se renueva automáticamente`);
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", patchPricingCard);
+  else patchPricingCard();
+
   // ── Cuenta regresiva ───────────────────────────────────────────────────────
   if (Date.now() >= PROMO_ENDS_AT) return;
   try { if (sessionStorage.getItem("allais_promo_bar") === "closed") return; } catch (_) {}
 
-  const lang = (document.documentElement.lang || navigator.language || "es").slice(0, 2);
-  const T = {
+  const FOUNDER = founderPhase();
+  const DEADLINE = FOUNDER ? PROMO_ENDS_AT : LAUNCH_TRIAL_ENDS_AT;
+  const LAUNCH_T = {
     es: { short: "<b>Mitad de precio</b>", msg: "<b>Precio de lanzamiento</b> · mitad de precio: $99 en lugar de $199", ends: "termina en", cta: ON_PRICING ? "Elegir Lanzamiento" : "Ver planes", close: "Cerrar aviso" },
     en: { short: "<b>Half price</b>", msg: "<b>Launch price</b> · half price: $99 instead of $199 MXN", ends: "ends in", cta: "See plans", close: "Close" },
     fr: { short: "<b>Moitié prix</b>", msg: "<b>Prix de lancement</b> · moitié prix : 99 $ au lieu de 199 $ MXN", ends: "se termine dans", cta: "Voir les offres", close: "Fermer" }
-  }[lang] || null;
-  const t = T || { short: "<b>Mitad de precio</b>", msg: "<b>Precio de lanzamiento</b> · mitad de precio: $99 en lugar de $199", ends: "termina en", cta: ON_PRICING ? "Elegir Lanzamiento" : "Ver planes", close: "Cerrar aviso" };
+  };
+  const FOUNDER_T = {
+    es: { short: "<b>Precio fundador $99</b>", msg: "<b>Precio fundador</b> · $99 al mes para los primeros 100 suscriptores", ends: "termina en", cta: ON_PRICING ? "Quiero mi lugar" : "Ver planes", close: "Cerrar aviso" },
+    en: { short: "<b>Founder price $99</b>", msg: "<b>Founder price</b> · $99 MXN a month for the first 100 subscribers", ends: "ends in", cta: "See plans", close: "Close" },
+    fr: { short: "<b>Prix fondateur 99 $</b>", msg: "<b>Prix fondateur</b> · 99 $ MXN par mois pour les 100 premiers abonnés", ends: "se termine dans", cta: "Voir les offres", close: "Fermer" }
+  };
+  const T = FOUNDER ? FOUNDER_T : LAUNCH_T;
+  const t = T[lang] || T.es;
 
   const css = `
 .promo-bar{position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:center;gap:10px;
@@ -96,6 +148,7 @@
   box-shadow:0 2px 10px rgba(0,0,0,.25);flex-wrap:wrap}
 .promo-bar__short{display:none}
 .promo-bar b{color:#93C5FD;font-weight:700}
+.promo-bar__seats{white-space:nowrap;font-weight:700;color:#FDE68A}
 .promo-bar__clock{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700;color:#FDE68A;letter-spacing:.02em}
 .promo-bar__cta{color:#0A1628;background:#93C5FD;border-radius:999px;padding:3px 10px;font-weight:700;text-decoration:none;white-space:nowrap}
 .promo-bar__cta:hover{background:#BFDBFE}
@@ -119,9 +172,9 @@ body.has-promo .app-shell{height:calc(100vh - var(--promo-h,0px));height:calc(10
     const bar = document.createElement("div");
     bar.className = "promo-bar";
     bar.setAttribute("role", "region");
-    bar.setAttribute("aria-label", "Promoción de lanzamiento");
+    bar.setAttribute("aria-label", FOUNDER ? "Precio fundador" : "Promoción de lanzamiento");
     bar.innerHTML =
-      `<span>🚀 <span class="promo-bar__long">${t.msg}</span><span class="promo-bar__short">${t.short}</span></span><span class="promo-bar__sep" aria-hidden="true">·</span>` +
+      `<span>🚀 <span class="promo-bar__long">${t.msg}</span><span class="promo-bar__short">${t.short}</span></span><span class="promo-bar__seats" hidden></span><span class="promo-bar__sep" aria-hidden="true">·</span>` +
       `<span>${t.ends} <span class="promo-bar__clock" aria-live="off"></span></span>` +
       `<a class="promo-bar__cta" href="${PRICING_URL}" data-track-cta="primary" data-cta-source="promo_bar" data-cta-location="countdown">${t.cta}</a>` +
       `<button type="button" class="promo-bar__x" aria-label="${t.close}">×</button>`;
@@ -134,12 +187,23 @@ body.has-promo .app-shell{height:calc(100vh - var(--promo-h,0px));height:calc(10
 
     const clock = bar.querySelector(".promo-bar__clock");
     const tick = () => {
-      const left = PROMO_ENDS_AT - Date.now();
+      const left = DEADLINE - Date.now();
       if (left <= 0) { unmount(); clearInterval(timer); return; }
       clock.textContent = fmt(left);
     };
     const timer = setInterval(tick, 1000);
     tick();
+
+    // Precio fundador: lugares libres reales; sin lugares, la barra se retira.
+    if (FOUNDER) {
+      founder().then((d) => {
+        if (!d) return;
+        if (!d.open) { unmount(); clearInterval(timer); return; }
+        const seats = bar.querySelector(".promo-bar__seats");
+        seats.textContent = "· " + seatsText(d.left);
+        seats.hidden = false;
+      });
+    }
 
     bar.querySelector(".promo-bar__x").addEventListener("click", () => {
       unmount(); clearInterval(timer);

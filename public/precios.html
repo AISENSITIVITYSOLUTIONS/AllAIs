@@ -9,7 +9,7 @@
       gtag('js', new Date());
       gtag('config', 'G-N00TZN76TS');
     </script>
-    <script src="/promo.js?v=3"></script>
+    <script src="/promo.js?v=4"></script>
 
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -162,6 +162,7 @@
       @media (max-width: 1024px) { .grid { grid-template-columns: repeat(2, 1fr); } }
       @media (max-width: 600px)  { .grid { grid-template-columns: 1fr; } }
 
+      .plan[hidden] { display: none !important; }
       .plan {
         position: relative;
         background: var(--surface);
@@ -421,12 +422,12 @@
       </section>
 
       <section class="grid" aria-label="Planes disponibles">
-        <article class="plan">
-          <span class="badge promo">Lanzamiento</span>
+        <article class="plan" data-founder-card>
+          <span class="badge promo" data-founder-badge>Lanzamiento</span>
           <h2>Lanzamiento</h2>
-          <p class="tagline">Precio promocional de arranque, con cuota amplia para quien explora todas las posibilidades.</p>
+          <p class="tagline" data-founder-tagline>Precio promocional de arranque, con cuota amplia para quien explora todas las posibilidades.</p>
           <div class="price"><span class="amount">$99</span><span class="currency">MXN / mes</span></div>
-          <div class="price-note"><strong>Mitad de precio</strong> (Esencial: $199) · solo hasta el 30 de noviembre de 2026 · se renueva automáticamente</div>
+          <div class="price-note" data-founder-note><strong>Mitad de precio</strong> (Esencial: $199) · solo hasta el 30 de noviembre de 2026 · se renueva automáticamente</div>
           <ul>
             <li>300 consultas al mes</li>
             <li>10 consultas al día</li>

@@ -78,7 +78,7 @@ function render(templateId, { unsubscribeUrl, left = null } = {}) {
   if (!template) throw Object.assign(new Error("Plantilla no válida."), { status: 400 });
   const paragraphs = template.paragraphs({ left });
   const url = link(templateId);
-  const footer = "Recibes este mensaje porque te registraste en AllAIs (allais.nni.ai), de AI Sensitivity Solutions, S.A.S. de C.V.";
+  const footer = "Recibes este mensaje porque te registraste en AllAIs (allais.nni.ai), de AI Sensitivity Solutions, S.A.S. de C.V. Actualizamos nuestro aviso de privacidad el 28 de noviembre de 2026: allais.nni.ai/privacidad.html";
   const text = [
     "Hola:", "", ...paragraphs.flatMap((p) => [p, ""]),
     `${template.cta}: ${url}`, "",

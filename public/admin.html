@@ -132,6 +132,22 @@
           <div class="card"><h2>Mayor consumo</h2><div class="bars" id="topUsers"></div></div>
 
           <div class="card wide">
+            <h2>Correos a cuentas registradas</h2>
+            <form class="codes" id="mailForm">
+              <label class="f">Plantilla<select name="template">
+                <option value="aviso_limite">1 · Cambio en el acceso gratuito (hasta el 30-nov)</option>
+                <option value="fundador_abre">2 · Abre Precio fundador (desde el 1-dic)</option>
+                <option value="fundador_quedan">3 · Quedan N lugares (desde el 1-dic)</option>
+              </select></label>
+              <label class="f">Correos por lote<input name="limit" type="number" min="1" max="100" value="50" /></label>
+              <button type="button" class="btn" data-mail="preview">Simular</button>
+              <button type="button" class="btn" data-mail="test">Enviarme una prueba</button>
+              <button type="button" class="btn primary" data-mail="send">Enviar lote</button>
+            </form>
+            <p class="msg" id="mailMsg" role="status"></p>
+            <pre id="mailPreview" hidden style="white-space:pre-wrap;font:13px/1.5 inherit;margin:8px 0 0;padding:10px 12px;border:1px solid rgba(148,163,184,.25);border-radius:8px;max-height:260px;overflow:auto"></pre>
+          </div>
+          <div class="card wide">
             <h2>Códigos promocionales</h2>
             <form class="codes" id="codeForm">
               <label class="f">Código<input name="code" required maxlength="40" placeholder="PROMO-2026" /></label>
@@ -166,6 +182,6 @@
     </div>
 
     <script type="module" src="/auth.js?v=51"></script>
-    <script type="module" src="/admin.js?v=50"></script>
+    <script type="module" src="/admin.js?v=51"></script>
   </body>
 </html>

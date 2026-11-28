@@ -12,6 +12,8 @@ const { adminEmails: adminEmailList, isAdminEmail } = require("./admins");
 const videoModels = require("./video-models");
 const { consumeUsage, readUsage, refundUsage, consumeMedia, readMedia } = require("./quota");
 const { applyFreeTier } = require("./free-tier");
+const campaign = require("./campaign");
+const { founderStatus } = require("./plans");
 const { parseOwnStorageUrl } = require("./media-download");
 
 initializeApp();
@@ -829,6 +831,28 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
         sendJson(response, 200, await adminStats(days));
         return;
       }
+      if (path === "/admin/campaign" && request.method === "POST") {
+        // Correos de campaña a cuentas registradas. Por defecto es simulación (dryRun).
+        try {
+          const body = request.body || {};
+          const taken = await db.collection("subscriptions")
+            .where("plan", "==", "lanzamiento").where("status", "==", "active").count().get();
+          const result = await campaign.runCampaign({
+            db,
+            templateId: String(body.template || ""),
+            dryRun: body.dryRun !== false,
+            limit: body.limit,
+            testTo: body.test === true ? adminUser.email : null,
+            left: founderStatus(Number(taken.data().count || 0)).left,
+            admins: adminEmails()
+          });
+          console.log("AllAIs campaign", { by: adminUser.email, template: result.template, dryRun: result.dryRun, sent: result.sent || 0, test: Boolean(result.test) });
+          sendJson(response, 200, result);
+        } catch (error) {
+          sendJson(response, error.status || 500, { error: error.status ? error.message : "No se pudo ejecutar la campaña." });
+        }
+        return;
+      }
       if (path === "/admin/codes" && request.method === "POST") {
         try {
           const code = await saveCode(request.body || {}, adminUser);
@@ -842,6 +866,13 @@ exports.api = onRequest(runtimeOptions, async (request, response) => {
 
     if (path === "/media/download" && request.method === "GET") {
       await streamDownload(request, response);
+      return;
+    }
+
+    if (path === "/baja" && (request.method === "GET" || request.method === "POST")) {
+      // Baja de correos de un clic (enlace al pie de cada correo y cabecera List-Unsubscribe).
+      const done = await campaign.unsubscribe({ db, token: request.query?.u });
+      response.status(200).set("Content-Type", "text/html; charset=utf-8").send(campaign.unsubscribePage(done));
       return;
     }
 

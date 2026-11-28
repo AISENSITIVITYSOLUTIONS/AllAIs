@@ -168,7 +168,40 @@ $("#signIn").addEventListener("click", async () => {
   $("#gateMsg").textContent = "";
   try {
     await window.AllAIsAuth.signInWithGoogle("es");
-    await enter();
+    await // ---------- Correos de campaña ----------
+// "Simular" no envía nada: cuenta destinatarios y muestra el texto. "Enviar lote"
+// manda como máximo los correos indicados; se repite hasta que no queden pendientes.
+$("#mailForm").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-mail]");
+  if (!button) return;
+  const form = event.currentTarget;
+  const mode = button.dataset.mail;
+  const msg = $("#mailMsg");
+  const body = { template: form.template.value, limit: Number(form.limit.value) || 50, dryRun: mode !== "send", test: mode === "test" };
+  button.disabled = true;
+  msg.textContent = "Un momento…";
+  try {
+    const r = await api("/admin/campaign", { method: "POST", body: JSON.stringify(body) });
+    if (r.test) {
+      msg.textContent = `Prueba enviada a ${r.to}.`;
+    } else if (r.dryRun) {
+      const s = r.skipped;
+      msg.textContent = `Simulación: ${r.pending} pendientes de ${r.total} registrados (este lote: ${r.wouldSend}). Excluidos: ${s.subscriber} suscriptores, ${s.optOut} bajas, ${s.alreadySent} ya enviados, ${s.admin} internos.`
+        + (r.configured ? "" : " Falta configurar el correo saliente.")
+        + (r.inWindow ? "" : " Esta plantilla está fuera de su fecha de envío.");
+      $("#mailPreview").textContent = `Asunto: ${r.preview.subject}\n\n${r.preview.text}`;
+      $("#mailPreview").hidden = false;
+    } else {
+      msg.textContent = `Enviados: ${r.sent}. Pendientes: ${r.remaining}.` + (r.failed.length ? ` Fallaron ${r.failed.length}: ${r.failed[0].error}` : "");
+    }
+  } catch (error) {
+    msg.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+enter();
   } catch {
     $("#gateMsg").textContent = "No se pudo iniciar sesión con Google.";
   }
@@ -177,7 +210,40 @@ $("#signIn").addEventListener("click", async () => {
 $("#signOut").addEventListener("click", async () => {
   await window.AllAIsAuth.signOut();
   $("#gateMsg").textContent = "";
-  await enter();
+  await // ---------- Correos de campaña ----------
+// "Simular" no envía nada: cuenta destinatarios y muestra el texto. "Enviar lote"
+// manda como máximo los correos indicados; se repite hasta que no queden pendientes.
+$("#mailForm").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-mail]");
+  if (!button) return;
+  const form = event.currentTarget;
+  const mode = button.dataset.mail;
+  const msg = $("#mailMsg");
+  const body = { template: form.template.value, limit: Number(form.limit.value) || 50, dryRun: mode !== "send", test: mode === "test" };
+  button.disabled = true;
+  msg.textContent = "Un momento…";
+  try {
+    const r = await api("/admin/campaign", { method: "POST", body: JSON.stringify(body) });
+    if (r.test) {
+      msg.textContent = `Prueba enviada a ${r.to}.`;
+    } else if (r.dryRun) {
+      const s = r.skipped;
+      msg.textContent = `Simulación: ${r.pending} pendientes de ${r.total} registrados (este lote: ${r.wouldSend}). Excluidos: ${s.subscriber} suscriptores, ${s.optOut} bajas, ${s.alreadySent} ya enviados, ${s.admin} internos.`
+        + (r.configured ? "" : " Falta configurar el correo saliente.")
+        + (r.inWindow ? "" : " Esta plantilla está fuera de su fecha de envío.");
+      $("#mailPreview").textContent = `Asunto: ${r.preview.subject}\n\n${r.preview.text}`;
+      $("#mailPreview").hidden = false;
+    } else {
+      msg.textContent = `Enviados: ${r.sent}. Pendientes: ${r.remaining}.` + (r.failed.length ? ` Fallaron ${r.failed.length}: ${r.failed[0].error}` : "");
+    }
+  } catch (error) {
+    msg.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+enter();
 });
 
 $("#period").addEventListener("click", async (event) => {
@@ -208,6 +274,39 @@ $("#codeForm").addEventListener("submit", async (event) => {
   });
   form.reset();
   form.dailyLimit.value = 50;
+});
+
+// ---------- Correos de campaña ----------
+// "Simular" no envía nada: cuenta destinatarios y muestra el texto. "Enviar lote"
+// manda como máximo los correos indicados; se repite hasta que no queden pendientes.
+$("#mailForm").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-mail]");
+  if (!button) return;
+  const form = event.currentTarget;
+  const mode = button.dataset.mail;
+  const msg = $("#mailMsg");
+  const body = { template: form.template.value, limit: Number(form.limit.value) || 50, dryRun: mode !== "send", test: mode === "test" };
+  button.disabled = true;
+  msg.textContent = "Un momento…";
+  try {
+    const r = await api("/admin/campaign", { method: "POST", body: JSON.stringify(body) });
+    if (r.test) {
+      msg.textContent = `Prueba enviada a ${r.to}.`;
+    } else if (r.dryRun) {
+      const s = r.skipped;
+      msg.textContent = `Simulación: ${r.pending} pendientes de ${r.total} registrados (este lote: ${r.wouldSend}). Excluidos: ${s.subscriber} suscriptores, ${s.optOut} bajas, ${s.alreadySent} ya enviados, ${s.admin} internos.`
+        + (r.configured ? "" : " Falta configurar el correo saliente.")
+        + (r.inWindow ? "" : " Esta plantilla está fuera de su fecha de envío.");
+      $("#mailPreview").textContent = `Asunto: ${r.preview.subject}\n\n${r.preview.text}`;
+      $("#mailPreview").hidden = false;
+    } else {
+      msg.textContent = `Enviados: ${r.sent}. Pendientes: ${r.remaining}.` + (r.failed.length ? ` Fallaron ${r.failed.length}: ${r.failed[0].error}` : "");
+    }
+  } catch (error) {
+    msg.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 });
 
 enter();
